@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Create axios instance
-const defaultUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:5000' : 'https://school-ta8j.onrender.com';
+const defaultUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:5000' : '';
 
 const api = axios.create({
     baseURL: (process.env.NEXT_PUBLIC_API_URL || defaultUrl) + '/api',
