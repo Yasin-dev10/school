@@ -1,0 +1,48 @@
+
+// @desc    Bulk update timetable for a class
+// @route   POST /api/timetable/bulk
+exports.bulkUpdateClassTimetable = async (req, res) => {
+    try {
+        const { classId, slots } = req.body;
+        const tenantId = req.user.tenantId;
+
+        if (!classId || !Array.isArray(slots)) {
+            return res.status(400).json({ message: 'Invalid data provided' });
+        }
+
+        // 1. Clear existing timetable for this class
+        // Note: This is a destructive operation for the class's schedule. 
+        // We assume the frontend sends the *complete* schedule state.
+        await Timetable.deleteMany({ class: classId, tenantId });
+
+        // 2. Prepare new slots
+        const newSlots = slots.map(slot => ({
+            class: classId,
+            subject: slot.subjectId,
+            teacher: slot.teacherId,
+            day: slot.day,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+            room: slot.room, // Optional
+            tenantId
+        }));
+
+        // 3. Insert new slots
+        if (newSlots.length > 0) {
+            await Timetable.insertMany(newSlots);
+        }
+
+        await logAction({
+            action: 'UPDATE',
+            module: 'TIMETABLE',
+            details: `Bulk updated timetable for class ${classId} (${newSlots.length} slots)`,
+            userId: req.user._id,
+            tenantId
+        });
+
+        res.status(200).json({ success: true, message: 'Timetable updated successfully', count: newSlots.length });
+    } catch (error) {
+        console.error("Bulk update error:", error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};

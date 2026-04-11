@@ -1,0 +1,45 @@
+{
+  "name": "school-management-backend",
+  "version": "1.0.0",
+  "description": "Multi-Tenant School Management System API",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio",
+    "db:seed": "node prisma/seed.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
+  },
+  "dependencies": {
+    "@prisma/client": "^7.7.0",
+    "@prisma/config": "^7.7.0",
+    "@prisma/extension-accelerate": "^3.0.1",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "exceljs": "^4.4.0",
+    "express": "^4.18.2",
+    "helmet": "^7.1.0",
+    "joi": "^17.11.0",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "multer": "^2.0.2",
+    "nodemailer": "^7.0.12",
+    "pdfmake": "^0.2.21",
+    "socket.io": "^4.8.3",
+    "stripe": "^20.3.0",
+    "twilio": "^5.11.1"
+  },
+  "devDependencies": {
+    "fast-check": "^4.5.3",
+    "jest": "^30.2.0",
+    "nodemon": "^3.0.2",
+    "prisma": "^7.7.0",
+    "supertest": "^7.2.2"
+  }
+}
