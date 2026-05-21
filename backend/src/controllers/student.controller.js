@@ -11,6 +11,12 @@ const userSelect = {
     designation: true, admissionNo: true, studentId: true,
     rollNo: true, profileClass: true, profileSection: true,
     gender: true, dob: true, parentRelationship: true,
+    motherName: true, birthPlace: true, disabilityStatus: true,
+    orphanStatus: true, refugeeStatus: true, nationality: true,
+    studentState: true, studentRegion: true, studentDistrict: true,
+    studentVillage: true, guardianName: true, guardianTelephone: true,
+    emergencyContactNo: true, schoolComments: true, absenteeismStatus: true,
+    regDate: true, editDate: true,
     qualification: true, salary: true, stripeCustomerId: true,
     createdAt: true, updatedAt: true
 };
@@ -24,11 +30,22 @@ const formatUser = (u) => u ? ({
         studentId: u.studentId, rollNo: u.rollNo,
         class: u.profileClass, section: u.profileSection,
         gender: u.gender, dob: u.dob,
+        motherName: u.motherName, birthPlace: u.birthPlace,
+        disabilityStatus: u.disabilityStatus, orphanStatus: u.orphanStatus,
+        refugeeStatus: u.refugeeStatus, nationality: u.nationality,
+        state: u.studentState, region: u.studentRegion,
+        district: u.studentDistrict, village: u.studentVillage,
+        guardianName: u.guardianName, guardianTelephone: u.guardianTelephone,
+        emergencyContactNo: u.emergencyContactNo,
+        schoolComments: u.schoolComments, absenteeismStatus: u.absenteeismStatus,
+        regDate: u.regDate, editDate: u.editDate,
         parentRelationship: u.parentRelationship,
         qualification: u.qualification, salary: u.salary,
         stripeCustomerId: u.stripeCustomerId
     }
 }) : null;
+
+const optionalDate = (value) => value ? new Date(value) : null;
 
 // @desc    Register a new student
 exports.createStudent = async (req, res) => {
@@ -110,6 +127,23 @@ exports.createStudent = async (req, res) => {
                 profileSection: profile?.section || null,
                 gender: profile?.gender || null,
                 dob: profile?.dob ? new Date(profile.dob) : null,
+                motherName: profile?.motherName || null,
+                birthPlace: profile?.birthPlace || null,
+                disabilityStatus: profile?.disabilityStatus || null,
+                orphanStatus: profile?.orphanStatus || null,
+                refugeeStatus: profile?.refugeeStatus || null,
+                nationality: profile?.nationality || null,
+                studentState: profile?.state || null,
+                studentRegion: profile?.region || null,
+                studentDistrict: profile?.district || null,
+                studentVillage: profile?.village || null,
+                guardianName: profile?.guardianName || parentDetails?.firstName || null,
+                guardianTelephone: profile?.guardianTelephone || parentDetails?.phone || null,
+                emergencyContactNo: profile?.emergencyContactNo || null,
+                schoolComments: profile?.schoolComments || null,
+                absenteeismStatus: profile?.absenteeismStatus || null,
+                regDate: optionalDate(profile?.regDate),
+                editDate: optionalDate(profile?.editDate),
                 parentRelationship: parentRelationship || parentDetails?.relationship || 'Guardian'
             }
         });
@@ -232,6 +266,23 @@ exports.updateStudent = async (req, res) => {
                 ...(profile?.section !== undefined && { profileSection: profile.section }),
                 ...(profile?.gender !== undefined && { gender: profile.gender }),
                 ...(profile?.dob !== undefined && { dob: profile.dob ? new Date(profile.dob) : null }),
+                ...(profile?.motherName !== undefined && { motherName: profile.motherName }),
+                ...(profile?.birthPlace !== undefined && { birthPlace: profile.birthPlace }),
+                ...(profile?.disabilityStatus !== undefined && { disabilityStatus: profile.disabilityStatus }),
+                ...(profile?.orphanStatus !== undefined && { orphanStatus: profile.orphanStatus }),
+                ...(profile?.refugeeStatus !== undefined && { refugeeStatus: profile.refugeeStatus }),
+                ...(profile?.nationality !== undefined && { nationality: profile.nationality }),
+                ...(profile?.state !== undefined && { studentState: profile.state }),
+                ...(profile?.region !== undefined && { studentRegion: profile.region }),
+                ...(profile?.district !== undefined && { studentDistrict: profile.district }),
+                ...(profile?.village !== undefined && { studentVillage: profile.village }),
+                ...(profile?.guardianName !== undefined && { guardianName: profile.guardianName }),
+                ...(profile?.guardianTelephone !== undefined && { guardianTelephone: profile.guardianTelephone }),
+                ...(profile?.emergencyContactNo !== undefined && { emergencyContactNo: profile.emergencyContactNo }),
+                ...(profile?.schoolComments !== undefined && { schoolComments: profile.schoolComments }),
+                ...(profile?.absenteeismStatus !== undefined && { absenteeismStatus: profile.absenteeismStatus }),
+                ...(profile?.regDate !== undefined && { regDate: optionalDate(profile.regDate) }),
+                ...(profile?.editDate !== undefined && { editDate: optionalDate(profile.editDate) }),
                 ...(profile?.rollNo !== undefined && { rollNo: profile.rollNo }),
                 ...(profile?.admissionNo !== undefined && { admissionNo: profile.admissionNo }),
                 ...(profile?.studentId !== undefined && { studentId: profile.studentId }),

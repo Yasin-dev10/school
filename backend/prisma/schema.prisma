@@ -368,6 +368,23 @@ model User {
   profileSection     String?
   gender             Gender?
   dob                DateTime?
+  motherName         String?
+  birthPlace         String?
+  disabilityStatus   String?
+  orphanStatus       String?
+  refugeeStatus      String?
+  nationality        String?
+  studentState       String?
+  studentRegion      String?
+  studentDistrict    String?
+  studentVillage     String?
+  guardianName       String?
+  guardianTelephone  String?
+  emergencyContactNo String?
+  schoolComments     String?
+  absenteeismStatus  String?
+  regDate            DateTime?
+  editDate           DateTime?
   parentRelationship ParentRelationship?
   qualification      String?
   salary             String?

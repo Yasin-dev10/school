@@ -135,8 +135,8 @@ export const validatePhone = (phone: string): ValidationResult => {
     return { isValid: false, message: 'Invalid phone number format' };
   }
 
-  if (digitsOnly.length < 10) {
-    return { isValid: false, message: 'Phone number must contain at least 10 digits' };
+  if (digitsOnly.length < 7) {
+    return { isValid: false, message: 'Phone number must contain at least 7 digits' };
   }
 
   return { isValid: true, message: '' };

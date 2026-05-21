@@ -23,8 +23,24 @@ export default function AddStudentPage() {
         section: 'A',
         gender: 'male',
         dob: '',
+        motherName: '',
+        birthPlace: '',
+        disabilityStatus: 'No Disability',
+        orphanStatus: 'Not orphan',
+        refugeeStatus: 'Not Refugee',
+        nationality: 'Somali',
+        state: '',
+        region: '',
+        district: '',
+        village: '',
+        avatarUrl: '',
         phone: '',
         address: '',
+        emergencyContactNo: '',
+        schoolComments: '',
+        absenteeismStatus: 'Active',
+        regDate: '',
+        editDate: '',
         parentFirstName: '',
         parentLastName: '',
         parentEmail: '',
@@ -83,8 +99,26 @@ export default function AddStudentPage() {
                     section: formData.section,
                     gender: formData.gender,
                     dob: formData.dob,
+                    motherName: formData.motherName,
+                    birthPlace: formData.birthPlace,
+                    disabilityStatus: formData.disabilityStatus,
+                    orphanStatus: formData.orphanStatus,
+                    refugeeStatus: formData.refugeeStatus,
+                    nationality: formData.nationality,
+                    state: formData.state,
+                    region: formData.region,
+                    district: formData.district,
+                    village: formData.village,
+                    avatarUrl: formData.avatarUrl,
                     phone: formData.phone,
-                    address: formData.address
+                    address: formData.address,
+                    guardianName: `${formData.parentFirstName} ${formData.parentLastName}`.trim(),
+                    guardianTelephone: formData.parentPhone,
+                    emergencyContactNo: formData.emergencyContactNo,
+                    schoolComments: formData.schoolComments,
+                    absenteeismStatus: formData.absenteeismStatus,
+                    regDate: formData.regDate,
+                    editDate: formData.editDate
                 },
                 parentDetails: formData.parentEmail ? {
                     firstName: formData.parentFirstName,
@@ -173,6 +207,37 @@ export default function AddStudentPage() {
                                 className="w-full px-5 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500/50 focus:outline-none transition shadow-inner"
                             />
                         </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Mother Name</label>
+                            <input
+                                name="motherName" value={formData.motherName} onChange={handleChange}
+                                placeholder="Mother full name"
+                                className="w-full px-5 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500/50 focus:outline-none transition shadow-inner"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Birth Date</label>
+                            <input
+                                type="date" name="dob" value={formData.dob} onChange={handleChange}
+                                className="w-full px-5 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500/50 focus:outline-none transition shadow-inner"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Birth Place</label>
+                            <input
+                                name="birthPlace" value={formData.birthPlace} onChange={handleChange}
+                                placeholder="Birth place"
+                                className="w-full px-5 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500/50 focus:outline-none transition shadow-inner"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Student Photo URL (Optional)</label>
+                            <input
+                                name="avatarUrl" value={formData.avatarUrl} onChange={handleChange}
+                                placeholder="Optional image link"
+                                className="w-full px-5 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500/50 focus:outline-none transition shadow-inner"
+                            />
+                        </div>
                     </div>
                 </section>
 
@@ -229,6 +294,88 @@ export default function AddStudentPage() {
                                 className="w-full px-5 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500/50 outline-none placeholder:text-slate-600"
                             />
                         </div>
+                        <div className="space-y-2 lg:col-span-2">
+                            <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Registration Date</label>
+                            <input
+                                type="datetime-local" name="regDate" value={formData.regDate} onChange={handleChange}
+                                className="w-full px-5 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500/50 outline-none"
+                            />
+                        </div>
+                    </div>
+                </section>
+
+                {/* EMIS Profile */}
+                <section className="glass-dark p-8 rounded-[2rem] border border-white/5 space-y-8 shadow-2xl relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-8 text-6xl opacity-5 pointer-events-none">#</div>
+                    <h2 className="text-xl font-bold text-white border-b border-white/5 pb-4">EMIS Profile</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                            <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Nationality</label>
+                            <input
+                                name="nationality" value={formData.nationality} onChange={handleChange}
+                                className="w-full px-5 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500/50 outline-none"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Disability Status</label>
+                            <input
+                                name="disabilityStatus" value={formData.disabilityStatus} onChange={handleChange}
+                                className="w-full px-5 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500/50 outline-none"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Orphan Status</label>
+                            <input
+                                name="orphanStatus" value={formData.orphanStatus} onChange={handleChange}
+                                className="w-full px-5 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500/50 outline-none"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Refugee Status</label>
+                            <input
+                                name="refugeeStatus" value={formData.refugeeStatus} onChange={handleChange}
+                                className="w-full px-5 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500/50 outline-none"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">State</label>
+                            <input
+                                name="state" value={formData.state} onChange={handleChange}
+                                placeholder="SouthWest"
+                                className="w-full px-5 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500/50 outline-none"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Region</label>
+                            <input
+                                name="region" value={formData.region} onChange={handleChange}
+                                placeholder="Lower Shabelle"
+                                className="w-full px-5 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500/50 outline-none"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">District</label>
+                            <input
+                                name="district" value={formData.district} onChange={handleChange}
+                                placeholder="Afgoye"
+                                className="w-full px-5 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500/50 outline-none"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Village</label>
+                            <input
+                                name="village" value={formData.village} onChange={handleChange}
+                                placeholder="Lafoole"
+                                className="w-full px-5 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500/50 outline-none"
+                            />
+                        </div>
+                        <div className="space-y-2 md:col-span-2">
+                            <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Address</label>
+                            <input
+                                name="address" value={formData.address} onChange={handleChange}
+                                className="w-full px-5 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500/50 outline-none"
+                            />
+                        </div>
                     </div>
                 </section>
 
@@ -267,6 +414,13 @@ export default function AddStudentPage() {
                             />
                         </div>
                         <div className="space-y-2">
+                            <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Emergency Contact No</label>
+                            <input
+                                name="emergencyContactNo" value={formData.emergencyContactNo} onChange={handleChange}
+                                className="w-full px-5 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500/50 outline-none"
+                            />
+                        </div>
+                        <div className="space-y-2">
                             <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Relationship</label>
                             <select
                                 name="parentRelationship" value={formData.parentRelationship} onChange={handleChange}
@@ -277,6 +431,21 @@ export default function AddStudentPage() {
                                 <option value="Guardian">Guardian</option>
                                 <option value="Other">Other</option>
                             </select>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Absenteeism Status</label>
+                            <input
+                                name="absenteeismStatus" value={formData.absenteeismStatus} onChange={handleChange}
+                                className="w-full px-5 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500/50 outline-none"
+                            />
+                        </div>
+                        <div className="space-y-2 md:col-span-2">
+                            <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">School Comments</label>
+                            <textarea
+                                name="schoolComments" value={formData.schoolComments} onChange={handleChange}
+                                rows={3}
+                                className="w-full px-5 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500/50 outline-none resize-none"
+                            />
                         </div>
                     </div>
                 </section>

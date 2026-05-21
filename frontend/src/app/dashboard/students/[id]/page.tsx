@@ -132,8 +132,12 @@ export default function StudentDetailPage() {
                         ←
                     </Link>
                     <div className="flex items-center gap-4">
-                        <div className="w-20 h-20 rounded-3xl bg-indigo-600 flex items-center justify-center text-3xl font-black text-white shadow-2xl shadow-indigo-500/30">
-                            {student.firstName.charAt(0)}
+                        <div className="w-20 h-20 rounded-3xl bg-indigo-600 flex items-center justify-center text-3xl font-black text-white shadow-2xl shadow-indigo-500/30 overflow-hidden">
+                            {student.profile?.avatarUrl ? (
+                                <img src={student.profile.avatarUrl} alt={student.firstName} className="w-full h-full object-cover" />
+                            ) : (
+                                student.firstName.charAt(0)
+                            )}
                         </div>
                         <div>
                             <h1 className="text-3xl font-black text-white tracking-tight">{student.firstName} {student.lastName}</h1>
@@ -306,12 +310,28 @@ export default function StudentDetailPage() {
                                     {[
                                         { label: 'Date of Birth', value: student.profile?.dob ? new Date(student.profile.dob).toLocaleDateString() : 'Not Set' },
                                         { label: 'Gender', value: student.profile?.gender || 'Not Set' },
+                                        { label: 'Mother Name', value: student.profile?.motherName || 'Not Set' },
+                                        { label: 'Birth Place', value: student.profile?.birthPlace || 'Not Set' },
                                         { label: 'Phone', value: student.profile?.phone || 'Not Set' },
                                         { label: 'Email', value: student.email },
                                         { label: 'Address', value: student.profile?.address || 'Not Set' },
                                         { label: 'Student ID', value: student.profile?.studentId || 'N/A' },
                                         { label: 'Admission No', value: student.profile?.admissionNo || 'N/A' },
                                         { label: 'Roll Number', value: student.profile?.rollNo || 'N/A' },
+                                        { label: 'Nationality', value: student.profile?.nationality || 'Not Set' },
+                                        { label: 'Disability Status', value: student.profile?.disabilityStatus || 'Not Set' },
+                                        { label: 'Orphan Status', value: student.profile?.orphanStatus || 'Not Set' },
+                                        { label: 'Refugee Status', value: student.profile?.refugeeStatus || 'Not Set' },
+                                        { label: 'State', value: student.profile?.state || 'Not Set' },
+                                        { label: 'Region', value: student.profile?.region || 'Not Set' },
+                                        { label: 'District', value: student.profile?.district || 'Not Set' },
+                                        { label: 'Village', value: student.profile?.village || 'Not Set' },
+                                        { label: 'Guardian Name', value: student.profile?.guardianName || 'Not Set' },
+                                        { label: 'Guardian Telephone', value: student.profile?.guardianTelephone || 'Not Set' },
+                                        { label: 'Emergency Contact No', value: student.profile?.emergencyContactNo || 'Not Set' },
+                                        { label: 'Absenteeism Status', value: student.profile?.absenteeismStatus || 'Not Set' },
+                                        { label: 'Registration Date', value: student.profile?.regDate ? new Date(student.profile.regDate).toLocaleString() : 'Not Set' },
+                                        { label: 'School Comments', value: student.profile?.schoolComments || 'Not Set' },
                                         { label: 'Password', value: student.password_plain || '••••••••' },
                                     ].map((item, i) => (
                                         <div key={i}>
@@ -455,8 +475,14 @@ export default function StudentDetailPage() {
 
                             <div className="z-10 mt-14 mb-8">
                                 <div className="w-32 h-32 rounded-[2.5rem] bg-[#0f172a] border-4 border-[#020617] flex items-center justify-center text-5xl font-black text-white shadow-2xl relative group overflow-hidden">
-                                    <div className="absolute inset-0 bg-[#4f46e5]/20 group-hover:bg-[#4f46e5]/30 transition-colors"></div>
-                                    <span className="relative z-10">{student.firstName.charAt(0)}</span>
+                                    {student.profile?.avatarUrl ? (
+                                        <img src={student.profile.avatarUrl} alt={student.firstName} className="absolute inset-0 w-full h-full object-cover" />
+                                    ) : (
+                                        <>
+                                            <div className="absolute inset-0 bg-[#4f46e5]/20 group-hover:bg-[#4f46e5]/30 transition-colors"></div>
+                                            <span className="relative z-10">{student.firstName.charAt(0)}</span>
+                                        </>
+                                    )}
                                 </div>
                             </div>
 
