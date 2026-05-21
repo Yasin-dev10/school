@@ -13,7 +13,23 @@ exports.login = async (req, res) => {
     }
 
     try {
-        const user = await prisma.user.findFirst({ where: { email: email.toLowerCase().trim() } });
+        const user = await prisma.user.findFirst({
+            where: { email: email.toLowerCase().trim() },
+            select: {
+                id: true,
+                tenantId: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                password: true,
+                role: true,
+                phone: true,
+                profileAddress: true,
+                avatarUrl: true,
+                profileClass: true,
+                profileSection: true
+            }
+        });
 
         if (!user) {
             return res.status(401).json({ message: 'Invalid credentials' });
