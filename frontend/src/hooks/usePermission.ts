@@ -34,6 +34,9 @@ export const ACTIONS = {
     DELETE: 'delete'
 };
 
+export const normalizeRole = (role?: string | null) =>
+    String(role || '').trim().toLowerCase().replace(/_/g, '-');
+
 const ROLE_PERMISSIONS = {
     [ROLES.STUDENT]: {
         [RESOURCES.PROFILE]: [ACTIONS.READ],
@@ -89,7 +92,7 @@ export const usePermission = () => {
         if (userStr) {
             try {
                 const user = JSON.parse(userStr);
-                setUserRole(user.role);
+                setUserRole(normalizeRole(user.role));
             } catch (e) {
                 console.error("Failed to parse user from local storage", e);
             }
@@ -97,14 +100,15 @@ export const usePermission = () => {
     }, []);
 
     const hasPermission = (resource: string, action: string): boolean => {
-        if (!userRole) return false;
+        const normalizedRole = normalizeRole(userRole);
+        if (!normalizedRole) return false;
 
         // Super Admin has full access
-        if (userRole === ROLES.SUPER_ADMIN) return true;
+        if (normalizedRole === ROLES.SUPER_ADMIN) return true;
         // School Admin has full access (effectively)
-        if (userRole === ROLES.SCHOOL_ADMIN) return true;
+        if (normalizedRole === ROLES.SCHOOL_ADMIN) return true;
 
-        const rolePerms = ROLE_PERMISSIONS[userRole];
+        const rolePerms = ROLE_PERMISSIONS[normalizedRole as keyof typeof ROLE_PERMISSIONS];
         if (!rolePerms) return false;
 
         const resourcePerms = rolePerms[resource];

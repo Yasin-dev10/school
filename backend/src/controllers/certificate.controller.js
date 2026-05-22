@@ -1,4 +1,5 @@
 const prisma = require('../config/prismaClient');
+const { getTeacherScope, canTeacherAccessStudent } = require('../utils/teacherScope');
 
 // Issue certificate
 exports.issueCertificate = async (req, res) => {
@@ -7,6 +8,10 @@ exports.issueCertificate = async (req, res) => {
 
         const student = await prisma.user.findUnique({ where: { id: studentId } });
         if (!student) return res.status(404).json({ message: 'Student not found' });
+        if (req.user.role === 'teacher') {
+            const allowed = await canTeacherAccessStudent(req.user.id, studentId, req.user.tenantId);
+            if (!allowed) return res.status(403).json({ success: false, message: 'You are not assigned to this student' });
+        }
 
         // Generate unique codes
         const certNumber = 'CERT-' + Math.random().toString(36).substring(2, 10).toUpperCase();
@@ -43,8 +48,16 @@ exports.issueCertificate = async (req, res) => {
 // Get all certificates for tenant
 exports.getAllCertificates = async (req, res) => {
     try {
+        let where = { tenantId: req.user.tenantId };
+        if (req.user.role === 'teacher') {
+            const scope = await getTeacherScope(req.user.id, req.user.tenantId);
+            if (scope.classFilters.length === 0)
+                return res.status(200).json({ status: 'success', results: 0, data: { certificates: [] } });
+            where.student = { OR: scope.classFilters };
+        }
+
         const certificates = await prisma.certificate.findMany({
-            where: { tenantId: req.user.tenantId },
+            where,
             include: {
                 student: { select: { id: true, firstName: true, lastName: true, admissionNo: true } },
                 issuer: { select: { id: true, firstName: true, lastName: true } }
@@ -77,6 +90,11 @@ exports.getMyCertificates = async (req, res) => {
 // Get student certificates by ID
 exports.getStudentCertificates = async (req, res) => {
     try {
+        if (req.user.role === 'teacher') {
+            const allowed = await canTeacherAccessStudent(req.user.id, req.params.studentId, req.user.tenantId);
+            if (!allowed) return res.status(403).json({ success: false, message: 'You are not assigned to this student' });
+        }
+
         const certificates = await prisma.certificate.findMany({
             where: { studentId: req.params.studentId, tenantId: req.user.tenantId },
             include: {
@@ -127,6 +145,8 @@ exports.revokeCertificate = async (req, res) => {
     try {
         const cert = await prisma.certificate.findFirst({ where: { id: req.params.id, tenantId: req.user.tenantId } });
         if (!cert) return res.status(404).json({ message: 'Certificate not found' });
+        if (req.user.role === 'teacher' && cert.issuerId !== req.user.id)
+            return res.status(403).json({ success: false, message: 'You can only update certificates you issued' });
 
         const updated = await prisma.certificate.update({ where: { id: req.params.id }, data: { status: 'revoked' } });
         res.status(200).json({ status: 'success', data: { certificate: updated } });

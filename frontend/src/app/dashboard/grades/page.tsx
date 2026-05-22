@@ -6,8 +6,8 @@ import { Save, Search, AlertCircle, FileText, CheckCircle2, TrendingUp, Download
 import html2canvas from 'html2canvas-pro';
 import jsPDF from 'jspdf';
 
-// Grade System Configuration
-const GRADE_SYSTEM = [
+// Fallback only; live grading is read from the active backend grade system.
+const DEFAULT_GRADE_SYSTEM = [
     {
         grade: "A+",
         minPercentage: 90,
@@ -59,14 +59,6 @@ const GRADE_SYSTEM = [
     }
 ];
 
-// Helper function to calculate grade from percentage
-const calculateGrade = (percentage: number) => {
-    const gradeInfo = GRADE_SYSTEM.find(
-        g => percentage >= g.minPercentage && percentage <= g.maxPercentage
-    );
-    return gradeInfo || { grade: "N/A", gpa: 0, remarks: "Not Available" };
-};
-
 interface Student {
     _id: string;
     firstName: string;
@@ -82,6 +74,10 @@ interface MarkInput {
     score: string | number;
     maxMarks: number;
     remarks: string;
+    grade?: string | null;
+    gpa?: number | null;
+    gradeRemarks?: string | null;
+    isDirty?: boolean;
 }
 
 export default function GradesPage() {
@@ -98,6 +94,7 @@ export default function GradesPage() {
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [maxMarksGlobal, setMaxMarksGlobal] = useState(100);
+    const [gradeScale, setGradeScale] = useState(DEFAULT_GRADE_SYSTEM);
 
     const [user, setUser] = useState<any>(null);
     const [studentGrades, setStudentGrades] = useState<any>(null);
@@ -144,14 +141,18 @@ export default function GradesPage() {
 
     const fetchInitialData = async () => {
         try {
-            const [examsRes, classesRes, subjectsRes] = await Promise.all([
+            const [examsRes, classesRes, subjectsRes, gradeRes] = await Promise.all([
                 api.get('/exams'),
                 api.get('/classes'),
-                api.get('/subjects')
+                api.get('/subjects'),
+                api.get('/grades/active').catch(() => null)
             ]);
             setExams(examsRes.data.data);
             setClasses(classesRes.data.data);
             setSubjects(subjectsRes.data.data);
+            if (gradeRes?.data?.data?.grades?.length) {
+                setGradeScale(gradeRes.data.data.grades);
+            }
         } catch (error) {
             console.error(error);
             toast.error('Failed to load initial data');
@@ -242,7 +243,11 @@ export default function GradesPage() {
                     studentId: s._id,
                     score: foundMark ? foundMark.marksObtained : '',
                     maxMarks: foundMark ? foundMark.maxMarks : maxMarksGlobal,
-                    remarks: foundMark ? foundMark.remarks : ''
+                    remarks: foundMark ? foundMark.remarks : '',
+                    grade: foundMark?.grade || null,
+                    gpa: foundMark?.gpa ?? null,
+                    gradeRemarks: foundMark?.gradeRemarks || null,
+                    isDirty: false
                 };
             });
 
@@ -262,7 +267,10 @@ export default function GradesPage() {
             ...prev,
             [studentId]: {
                 ...prev[studentId],
-                [field]: value
+                [field]: value,
+                ...(field === 'score' || field === 'maxMarks'
+                    ? { grade: null, gpa: null, gradeRemarks: null, isDirty: true }
+                    : {})
             }
         }));
     };
@@ -525,7 +533,7 @@ export default function GradesPage() {
                     </div>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-                    {GRADE_SYSTEM.map((grade) => (
+                    {gradeScale.map((grade) => (
                         <div
                             key={grade.grade}
                             className={`p-3 rounded-lg border-2 ${grade.grade === 'A+' ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-800' :
@@ -640,16 +648,18 @@ export default function GradesPage() {
                                     <th className="p-4 w-20">%</th>
                                     <th className="p-4 w-20">Grade</th>
                                     <th className="p-4 w-20">GPA</th>
-                                    <th className="p-4">Remarks</th>
+                                    <th className="p-4">Grade Remarks</th>
+                                    <th className="p-4">Teacher Remarks</th>
                                     <th className="p-4 w-16">State</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                                 {students.map((student, index) => {
                                     const score = marksData[student._id]?.score || '';
-                                    const percentage = score !== '' ? (Number(score) / Number(maxMarksGlobal)) * 100 : 0;
-                                    const gradeInfo = score !== '' ? calculateGrade(percentage) : null;
-                                    const isPass = Number(score) >= (Number(maxMarksGlobal) * 0.4); // Assuming 40% pass
+                                    const storedMark = marksData[student._id];
+                                    const percentage = score !== '' ? (Number(score) / Number(storedMark?.maxMarks || maxMarksGlobal)) * 100 : 0;
+                                    const hasStoredGrade = score !== '' && !storedMark?.isDirty && Boolean(storedMark?.grade);
+                                    const isPass = hasStoredGrade ? storedMark?.grade !== 'F' : false;
 
                                     return (
                                         <tr key={student._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30">
@@ -681,48 +691,51 @@ export default function GradesPage() {
                                                 )}
                                             </td>
                                             <td className="p-4">
-                                                {gradeInfo && (
-                                                    <span className={`px-3 py-1 rounded-lg font-bold text-sm ${gradeInfo.grade === 'A+' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
-                                                        gradeInfo.grade === 'A' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-                                                            gradeInfo.grade === 'B+' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
-                                                                gradeInfo.grade === 'B' ? 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400' :
-                                                                    gradeInfo.grade === 'C' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
-                                                                        gradeInfo.grade === 'D' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
-                                                                            'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                                                {score !== '' && (
+                                                    <span className={`px-3 py-1 rounded-lg font-bold text-sm ${storedMark?.isDirty ? 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400' :
+                                                        storedMark?.grade === 'A+' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
+                                                            storedMark?.grade === 'A' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                                                                storedMark?.grade === 'B+' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
+                                                                    storedMark?.grade === 'B' ? 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400' :
+                                                                        storedMark?.grade === 'C' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
+                                                                            storedMark?.grade === 'D' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' :
+                                                                                'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
                                                         }`}>
-                                                        {gradeInfo.grade}
+                                                        {storedMark?.isDirty ? 'Pending' : storedMark?.grade || 'N/A'}
                                                     </span>
-                                                )}
-                                            </td>
-                                            <td className="p-4">
-                                                {gradeInfo && (
-                                                    <span className="font-semibold text-slate-700 dark:text-slate-300">
-                                                        {gradeInfo.gpa.toFixed(1)}
-                                                    </span>
-                                                )}
-                                            </td>
-                                            <td className="p-4">
-                                                {gradeInfo ? (
-                                                    <span className={`text-sm font-medium ${gradeInfo.grade === 'F' ? 'text-red-600 dark:text-red-400' :
-                                                        gradeInfo.grade === 'D' ? 'text-orange-600 dark:text-orange-400' :
-                                                            gradeInfo.grade.startsWith('A') ? 'text-emerald-600 dark:text-emerald-400' :
-                                                                'text-slate-600 dark:text-slate-400'
-                                                        }`}>
-                                                        {gradeInfo.remarks}
-                                                    </span>
-                                                ) : (
-                                                    <input
-                                                        type="text"
-                                                        value={marksData[student._id]?.remarks || ''}
-                                                        onChange={(e) => handleMarkChange(student._id, 'remarks', e.target.value)}
-                                                        className="w-full p-2 rounded border border-slate-300 dark:border-slate-600 dark:bg-slate-800 focus:ring-2 focus:ring-indigo-500"
-                                                        placeholder="Optional..."
-                                                    />
                                                 )}
                                             </td>
                                             <td className="p-4">
                                                 {score !== '' && (
-                                                    <CheckCircle2 className={`w-5 h-5 ${isPass ? 'text-green-500' : 'text-red-500'}`} />
+                                                    <span className="font-semibold text-slate-700 dark:text-slate-300">
+                                                        {storedMark?.isDirty || storedMark?.gpa === null || storedMark?.gpa === undefined ? '-' : Number(storedMark.gpa).toFixed(1)}
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td className="p-4">
+                                                {score !== '' ? (
+                                                    <span className={`text-sm font-medium ${storedMark?.isDirty ? 'text-slate-400' :
+                                                        storedMark?.grade === 'F' ? 'text-red-600 dark:text-red-400' :
+                                                            storedMark?.grade === 'D' ? 'text-orange-600 dark:text-orange-400' :
+                                                                storedMark?.grade?.startsWith('A') ? 'text-emerald-600 dark:text-emerald-400' :
+                                                                    'text-slate-600 dark:text-slate-400'
+                                                        }`}>
+                                                        {storedMark?.isDirty ? 'Recalculated after save' : storedMark?.gradeRemarks || 'No stored remarks'}
+                                                    </span>
+                                                ) : null}
+                                            </td>
+                                            <td className="p-4">
+                                                <input
+                                                    type="text"
+                                                    value={marksData[student._id]?.remarks || ''}
+                                                    onChange={(e) => handleMarkChange(student._id, 'remarks', e.target.value)}
+                                                    className="w-full p-2 rounded border border-slate-300 dark:border-slate-600 dark:bg-slate-800 focus:ring-2 focus:ring-indigo-500"
+                                                    placeholder="Optional..."
+                                                />
+                                            </td>
+                                            <td className="p-4">
+                                                {score !== '' && (
+                                                    <CheckCircle2 className={`w-5 h-5 ${isPass ? 'text-green-500' : storedMark?.isDirty ? 'text-slate-400' : 'text-red-500'}`} />
                                                 )}
                                             </td>
                                         </tr>

@@ -4,6 +4,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import api from '../utils/api';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { normalizeRole } from '@/hooks/usePermission';
 import {
     LayoutDashboard,
     GraduationCap,
@@ -66,7 +67,9 @@ export default function DashboardLayout({
             return;
         }
 
-        const userData = JSON.parse(userStr);
+        const parsedUser = JSON.parse(userStr);
+        const userData = { ...parsedUser, role: normalizeRole(parsedUser.role) };
+        localStorage.setItem('user', JSON.stringify(userData));
         setUser(userData);
         setIsAuthorized(true);
 

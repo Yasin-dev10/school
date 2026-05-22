@@ -16,10 +16,16 @@ const connectDB = async () => {
     try {
         console.log('Attempting to connect to PostgreSQL via Prisma...');
         await prisma.$connect();
-        console.log(' PostgreSQL Connected via Prisma');
+        await prisma.$queryRaw`SELECT 1`;
+        console.log('PostgreSQL Connected via Prisma');
     } catch (error) {
-        console.error(` PostgreSQL Connection Error: ${error.message}`);
-        process.exit(1);
+        console.error(`PostgreSQL Connection Error: ${error.message}`);
+
+        if (error.code === 'ECONNREFUSED') {
+            console.error('PostgreSQL is not accepting connections. Check that the database server is running and DATABASE_URL points to the correct host and port.');
+        }
+
+        throw error;
     }
 };
 

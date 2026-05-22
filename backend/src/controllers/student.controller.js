@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const { logAction } = require('../utils/logger');
 const generatePassword = require('../utils/generatePassword');
 const { emitToTenant } = require('../config/socket');
+const { getTeacherScope, canTeacherAccessStudent } = require('../utils/teacherScope');
 
 const userSelect = {
     id: true, tenantId: true, firstName: true, lastName: true,
@@ -18,32 +19,41 @@ const userSelect = {
     emergencyContactNo: true, schoolComments: true, absenteeismStatus: true,
     regDate: true, editDate: true,
     qualification: true, salary: true, stripeCustomerId: true,
-    createdAt: true, updatedAt: true
+    passwordPlain: true, createdAt: true, updatedAt: true
 };
 
-const formatUser = (u) => u ? ({
-    ...u,
-    _id: u.id,
-    profile: {
-        phone: u.phone, address: u.profileAddress, avatarUrl: u.avatarUrl,
-        designation: u.designation, admissionNo: u.admissionNo,
-        studentId: u.studentId, rollNo: u.rollNo,
-        class: u.profileClass, section: u.profileSection,
-        gender: u.gender, dob: u.dob,
-        motherName: u.motherName, birthPlace: u.birthPlace,
-        disabilityStatus: u.disabilityStatus, orphanStatus: u.orphanStatus,
-        refugeeStatus: u.refugeeStatus, nationality: u.nationality,
-        state: u.studentState, region: u.studentRegion,
-        district: u.studentDistrict, village: u.studentVillage,
-        guardianName: u.guardianName, guardianTelephone: u.guardianTelephone,
-        emergencyContactNo: u.emergencyContactNo,
-        schoolComments: u.schoolComments, absenteeismStatus: u.absenteeismStatus,
-        regDate: u.regDate, editDate: u.editDate,
-        parentRelationship: u.parentRelationship,
-        qualification: u.qualification, salary: u.salary,
-        stripeCustomerId: u.stripeCustomerId
-    }
-}) : null;
+const canViewUserPasswords = (viewer) => ['school-admin', 'receptionist'].includes(viewer?.role);
+
+const formatUser = (u, viewer) => {
+    if (!u) return null;
+
+    const { passwordPlain, ...safeUser } = u;
+
+    return {
+        ...safeUser,
+        _id: u.id,
+        ...(canViewUserPasswords(viewer) && { password_plain: passwordPlain }),
+        profile: {
+            phone: u.phone, address: u.profileAddress, avatarUrl: u.avatarUrl,
+            designation: u.designation, admissionNo: u.admissionNo,
+            studentId: u.studentId, rollNo: u.rollNo,
+            class: u.profileClass, section: u.profileSection,
+            gender: u.gender, dob: u.dob,
+            motherName: u.motherName, birthPlace: u.birthPlace,
+            disabilityStatus: u.disabilityStatus, orphanStatus: u.orphanStatus,
+            refugeeStatus: u.refugeeStatus, nationality: u.nationality,
+            state: u.studentState, region: u.studentRegion,
+            district: u.studentDistrict, village: u.studentVillage,
+            guardianName: u.guardianName, guardianTelephone: u.guardianTelephone,
+            emergencyContactNo: u.emergencyContactNo,
+            schoolComments: u.schoolComments, absenteeismStatus: u.absenteeismStatus,
+            regDate: u.regDate, editDate: u.editDate,
+            parentRelationship: u.parentRelationship,
+            qualification: u.qualification, salary: u.salary,
+            stripeCustomerId: u.stripeCustomerId
+        }
+    };
+};
 
 const optionalDate = (value) => value ? new Date(value) : null;
 
@@ -154,11 +164,11 @@ exports.createStudent = async (req, res) => {
         }
 
         await logAction({ action: 'CREATE', module: 'USER', details: `Admitted student: ${firstName} ${lastName} (${admissionNo})`, userId: req.user._id, tenantId });
-        emitToTenant(tenantId, 'student:created', formatUser(student));
+        emitToTenant(tenantId, 'student:created', formatUser(student, req.user));
 
         res.status(201).json({
             success: true, message: 'Student registered successfully',
-            data: formatUser(student), tempPassword: generatedPassword
+            data: formatUser(student, req.user), tempPassword: generatedPassword
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -175,19 +185,9 @@ exports.getStudents = async (req, res) => {
         let where = { tenantId, role: 'student' };
 
         if (role === 'teacher') {
-            const timetables = await prisma.timetable.findMany({
-                where: { tenantId, teachers: { some: { teacherId: req.user.id } } },
-                include: { class: true }
-            });
-            const assignedClasses = await prisma.class.findMany({
-                where: { tenantId, OR: [{ classTeacherId: req.user.id }, { subjects: { some: { teachers: { some: { teacherId: req.user.id } } } } }] }
-            });
-            const classNames = new Set([
-                ...timetables.map(t => t.class?.name).filter(Boolean),
-                ...assignedClasses.map(c => c.name)
-            ]);
-            if (classNames.size > 0) {
-                where.profileClass = { in: Array.from(classNames) };
+            const scope = await getTeacherScope(req.user.id, tenantId);
+            if (scope.classFilters.length > 0) {
+                where.OR = scope.classFilters;
             } else {
                 return res.status(200).json({ success: true, count: 0, data: [] });
             }
@@ -208,7 +208,7 @@ exports.getStudents = async (req, res) => {
         else if (sortBy === 'class') orderBy = [{ profileClass: order }, { profileSection: order }];
 
         const students = await prisma.user.findMany({ where, select: userSelect, orderBy });
-        res.status(200).json({ success: true, count: students.length, data: students.map(formatUser) });
+        res.status(200).json({ success: true, count: students.length, data: students.map(student => formatUser(student, req.user)) });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -221,6 +221,11 @@ exports.getStudentById = async (req, res) => {
         if (!id || id === 'undefined' || id === 'null')
             return res.status(400).json({ success: false, message: 'Invalid Student ID' });
 
+        if (req.user.role === 'teacher') {
+            const allowed = await canTeacherAccessStudent(req.user.id, id, req.user.tenantId);
+            if (!allowed) return res.status(403).json({ success: false, message: 'You are not assigned to this student' });
+        }
+
         const student = await prisma.user.findFirst({
             where: { id, tenantId: req.user.tenantId, role: 'student' },
             select: {
@@ -231,8 +236,8 @@ exports.getStudentById = async (req, res) => {
 
         if (!student) return res.status(404).json({ success: false, message: 'Student not found in this school' });
 
-        const formatted = formatUser(student);
-        formatted.profile.parentIds = student.parentLinks?.map(l => l.parent) || [];
+        const formatted = formatUser(student, req.user);
+        formatted.profile.parentIds = student.parentLinks?.map(l => formatUser(l.parent, req.user)) || [];
         res.status(200).json({ success: true, data: formatted });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -292,8 +297,8 @@ exports.updateStudent = async (req, res) => {
         });
 
         await logAction({ action: 'UPDATE', module: 'USER', details: `Updated student: ${updated.firstName} ${updated.lastName}`, userId: req.user._id, tenantId: req.user.tenantId });
-        emitToTenant(req.user.tenantId, 'student:updated', formatUser(updated));
-        res.status(200).json({ success: true, data: formatUser(updated) });
+        emitToTenant(req.user.tenantId, 'student:updated', formatUser(updated, req.user));
+        res.status(200).json({ success: true, data: formatUser(updated, req.user) });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -391,7 +396,7 @@ exports.getChildren = async (req, res) => {
             },
             select: userSelect
         });
-        res.status(200).json({ success: true, data: children.map(formatUser) });
+        res.status(200).json({ success: true, data: children.map(child => formatUser(child, req.user)) });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }

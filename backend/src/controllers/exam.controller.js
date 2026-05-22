@@ -2,6 +2,7 @@ const prisma = require('../config/prismaClient');
 const { logAction } = require('../utils/logger');
 const { emitToTenant } = require('../config/socket');
 const { generateExcelMatrix, generateReportCardPDF } = require('../utils/reportGenerator');
+const { getTeacherScope, canTeacherAccessClassSubject, canTeacherAccessStudent } = require('../utils/teacherScope');
 
 const calculateGrade = (percentage, gradeConfigs) => {
     if (!gradeConfigs?.length) {
@@ -46,8 +47,15 @@ exports.createExam = async (req, res) => {
 // @desc    Get all exams
 exports.getExams = async (req, res) => {
     try {
+        let where = { tenantId: req.user.tenantId };
+        if (req.user.role === 'teacher') {
+            const scope = await getTeacherScope(req.user.id, req.user.tenantId);
+            if (scope.classIds.length === 0) return res.status(200).json({ success: true, count: 0, data: [] });
+            where.classes = { some: { classId: { in: scope.classIds } } };
+        }
+
         const exams = await prisma.exam.findMany({
-            where: { tenantId: req.user.tenantId },
+            where,
             include: { classes: { include: { class: { select: { id: true, name: true, section: true } } } } },
             orderBy: { startDate: 'desc' }
         });
@@ -104,11 +112,8 @@ exports.bulkMarkEntry = async (req, res) => {
         if (!exam) return res.status(404).json({ message: 'Exam not found' });
 
         if (req.user.role === 'teacher') {
-            const [isAssigned, isClassTeacher] = await Promise.all([
-                prisma.timetable.findFirst({ where: { tenantId, classId, subjectId, teachers: { some: { teacherId: req.user.id } } } }),
-                prisma.class.findFirst({ where: { id: classId, classTeacherId: req.user.id, tenantId } })
-            ]);
-            if (!isAssigned && !isClassTeacher)
+            const isAssigned = await canTeacherAccessClassSubject(req.user.id, classId, subjectId, tenantId);
+            if (!isAssigned)
                 return res.status(403).json({ success: false, message: 'Access denied.' });
         }
 
@@ -161,6 +166,10 @@ exports.deleteMark = async (req, res) => {
 
         const mark = await prisma.mark.findFirst({ where: { id: markId, tenantId } });
         if (!mark) return res.status(404).json({ success: false, message: 'Mark not found' });
+        if (req.user.role === 'teacher') {
+            const allowed = await canTeacherAccessClassSubject(req.user.id, mark.classId, mark.subjectId, tenantId);
+            if (!allowed) return res.status(403).json({ success: false, message: 'You are not assigned to this class subject' });
+        }
 
         await prisma.mark.delete({ where: { id: markId } });
         emitToTenant(tenantId, 'mark:deleted', { markId });
@@ -182,6 +191,11 @@ exports.bulkDeleteMarks = async (req, res) => {
         let where = { examId, subjectId, classId, tenantId };
         if (studentIds?.length > 0) where.studentId = { in: studentIds };
 
+        if (req.user.role === 'teacher') {
+            const allowed = await canTeacherAccessClassSubject(req.user.id, classId, subjectId, tenantId);
+            if (!allowed) return res.status(403).json({ success: false, message: 'You are not assigned to this class subject' });
+        }
+
         const result = await prisma.mark.deleteMany({ where });
         emitToTenant(tenantId, 'marks:bulk-deleted', { examId, subjectId, classId, deletedCount: result.count });
         res.status(200).json({ success: true, message: `Deleted ${result.count} mark(s)`, deletedCount: result.count });
@@ -201,6 +215,14 @@ exports.getMarks = async (req, res) => {
         if (classId) where.classId = classId;
         if (req.user.role === 'student') where.studentId = req.user.id;
         else if (studentId) where.studentId = studentId;
+
+        if (req.user.role === 'teacher') {
+            const scope = await getTeacherScope(req.user.id, req.user.tenantId);
+            if (scope.classIds.length === 0 || scope.subjectIds.length === 0)
+                return res.status(200).json({ success: true, data: [] });
+            where.classId = classId || { in: scope.classIds };
+            where.subjectId = subjectId || { in: scope.subjectIds };
+        }
 
         const marks = await prisma.mark.findMany({
             where,
@@ -249,6 +271,11 @@ exports.getStudentReport = async (req, res) => {
     try {
         const { examId, studentId } = req.params;
         const tenantId = req.user.tenantId;
+
+        if (req.user.role === 'teacher') {
+            const allowed = await canTeacherAccessStudent(req.user.id, studentId, tenantId);
+            if (!allowed) return res.status(403).json({ success: false, message: 'You are not assigned to this student' });
+        }
 
         const [exam, marks, gradeSystem] = await Promise.all([
             prisma.exam.findFirst({ where: { id: examId, tenantId } }),
@@ -315,9 +342,26 @@ exports.exportExcelMatrix = async (req, res) => {
         const { examId, classId } = req.query;
         const tenantId = req.user.tenantId;
 
-        const subjects = await prisma.subject.findMany({ where: { tenantId } });
+        if (req.user.role === 'teacher') {
+            const scope = await getTeacherScope(req.user.id, tenantId);
+            if (classId && !scope.classIds.includes(classId))
+                return res.status(403).json({ success: false, message: 'You are not assigned to this class' });
+        }
+
+        const scope = req.user.role === 'teacher' ? await getTeacherScope(req.user.id, tenantId) : null;
+        const subjects = await prisma.subject.findMany({
+            where: {
+                tenantId,
+                ...(scope && { id: { in: scope.subjectIds } })
+            }
+        });
         const marks = await prisma.mark.findMany({
-            where: { examId, classId, tenantId },
+            where: {
+                examId,
+                classId,
+                tenantId,
+                ...(scope && { subjectId: { in: scope.subjectIds } })
+            },
             include: { student: { select: { id: true, firstName: true, lastName: true, rollNo: true } } }
         });
 
@@ -457,6 +501,14 @@ exports.getExamAnalytics = async (req, res) => {
         let where = { examId, tenantId };
         if (classId) where.classId = classId;
 
+        if (req.user.role === 'teacher') {
+            const scope = await getTeacherScope(req.user.id, tenantId);
+            if (classId && !scope.classIds.includes(classId))
+                return res.status(403).json({ success: false, message: 'You are not assigned to this class' });
+            where.classId = classId || { in: scope.classIds };
+            where.subjectId = { in: scope.subjectIds };
+        }
+
         const marks = await prisma.mark.findMany({ where, include: { subject: { select: { name: true } } } });
 
         if (!marks.length) return res.status(200).json({ success: true, data: { message: 'No data available' } });
@@ -502,6 +554,12 @@ exports.getTopPerformers = async (req, res) => {
         const { examId, classId } = req.params;
         const tenantId = req.user.tenantId;
 
+        if (req.user.role === 'teacher') {
+            const scope = await getTeacherScope(req.user.id, tenantId);
+            if (!scope.classIds.includes(classId))
+                return res.status(403).json({ success: false, message: 'You are not assigned to this class' });
+        }
+
         const marks = await prisma.mark.findMany({
             where: { examId, classId, tenantId },
             include: { student: { select: { id: true, firstName: true, lastName: true, rollNo: true } } }
@@ -536,6 +594,11 @@ exports.getStudentGrades = async (req, res) => {
     try {
         const studentId = req.params.studentId || req.user.id;
         const tenantId = req.user.tenantId;
+
+        if (req.user.role === 'teacher') {
+            const allowed = await canTeacherAccessStudent(req.user.id, studentId, tenantId);
+            if (!allowed) return res.status(403).json({ success: false, message: 'You are not assigned to this student' });
+        }
 
         const [marks, gradeSystem] = await Promise.all([
             prisma.mark.findMany({

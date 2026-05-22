@@ -1,5 +1,51 @@
 const prisma = require('../config/prismaClient');
 const { logAction } = require('../utils/logger');
+const { canTeacherAccessClassSubject } = require('../utils/teacherScope');
+
+const startOfDay = (value) => {
+    const date = value ? new Date(value) : new Date();
+    date.setHours(0, 0, 0, 0);
+    return date;
+};
+
+const endOfDay = (value) => {
+    const date = startOfDay(value);
+    date.setHours(23, 59, 59, 999);
+    return date;
+};
+
+const formatAttendance = (record) => ({
+    ...record,
+    _id: record.id,
+    student: record.student ? { ...record.student, _id: record.student.id } : record.student,
+    class: record.class ? { ...record.class, _id: record.class.id } : record.class,
+    subject: record.subject ? { ...record.subject, _id: record.subject.id } : record.subject,
+    markedBy: record.markedBy ? { ...record.markedBy, _id: record.markedBy.id } : record.markedBy
+});
+
+const buildStats = (records) => {
+    const total = records.length;
+    const present = records.filter(r => r.status === 'present').length;
+    const absent = records.filter(r => r.status === 'absent').length;
+    const late = records.filter(r => r.status === 'late').length;
+    const excused = records.filter(r => r.status === 'excused').length;
+
+    return {
+        total,
+        present,
+        absent,
+        late,
+        excused,
+        percentage: total > 0 ? ((present / total) * 100).toFixed(1) : '0.0'
+    };
+};
+
+const includeAttendanceRelations = {
+    student: { select: { id: true, firstName: true, lastName: true, admissionNo: true, rollNo: true } },
+    class: { select: { id: true, name: true, section: true } },
+    subject: { select: { id: true, name: true } },
+    markedBy: { select: { id: true, firstName: true, lastName: true } }
+};
 
 // @desc    Mark attendance
 exports.markAttendance = async (req, res) => {
@@ -7,31 +53,43 @@ exports.markAttendance = async (req, res) => {
         const { classId, date, subjectId, records } = req.body; // records: [{studentId, status, remarks}]
         const tenantId = req.user.tenantId;
 
+        if (!classId) return res.status(400).json({ success: false, message: 'Class is required' });
+        if (!Array.isArray(records) || records.length === 0)
+            return res.status(400).json({ success: false, message: 'Attendance records are required' });
+
+        if (req.user.role === 'teacher') {
+            if (!subjectId) {
+                return res.status(400).json({ success: false, message: 'Subject is required for teacher attendance' });
+            }
+
+            const allowed = await canTeacherAccessClassSubject(req.user.id, classId, subjectId, tenantId);
+            if (!allowed) return res.status(403).json({ success: false, message: 'You are not assigned to this class subject' });
+        }
+
+        const attendanceDate = startOfDay(date);
         const results = [];
         for (const rec of records) {
             try {
-                const att = await prisma.attendance.upsert({
-                    where: {
-                        studentId_classId_subjectId_date_tenantId: {
-                            studentId: rec.studentId,
-                            classId,
-                            subjectId: subjectId || null,
-                            date: new Date(date),
-                            tenantId
-                        }
-                    },
-                    update: { status: rec.status, remarks: rec.remarks || null },
-                    create: {
+                const student = await prisma.user.findFirst({
+                    where: { id: rec.studentId, tenantId, role: 'student' },
+                    select: { id: true }
+                });
+
+                if (!student) throw new Error('Student not found in this school');
+
+                const att = await prisma.attendance.create({
+                    data: {
                         studentId: rec.studentId,
                         classId,
                         subjectId: subjectId || null,
-                        date: new Date(date),
+                        date: attendanceDate,
                         status: rec.status || 'present',
                         markedById: req.user.id,
                         tenantId,
                         remarks: rec.remarks || null
                     }
                 });
+
                 results.push({ studentId: rec.studentId, status: 'success', data: att });
             } catch (err) {
                 results.push({ studentId: rec.studentId, status: 'failed', reason: err.message });
@@ -48,28 +106,30 @@ exports.markAttendance = async (req, res) => {
 // @desc    Get attendance records
 exports.getAttendance = async (req, res) => {
     try {
-        const { classId, date, subjectId, studentId } = req.query;
+        const { date, subjectId, studentId } = req.query;
+        const classId = req.params.classId || req.query.classId;
         const tenantId = req.user.tenantId;
         let where = { tenantId };
 
         if (classId) where.classId = classId;
         if (subjectId) where.subjectId = subjectId;
-        if (date) where.date = new Date(date);
+        if (date) where.date = { gte: startOfDay(date), lte: endOfDay(date) };
         if (req.user.role === 'student') where.studentId = req.user.id;
         else if (studentId) where.studentId = studentId;
 
+        if (req.user.role === 'teacher' && classId) {
+            if (!subjectId) return res.status(400).json({ success: false, message: 'Subject is required for teacher attendance' });
+            const allowed = await canTeacherAccessClassSubject(req.user.id, classId, subjectId, tenantId);
+            if (!allowed) return res.status(403).json({ success: false, message: 'You are not assigned to this class subject' });
+        }
+
         const records = await prisma.attendance.findMany({
             where,
-            include: {
-                student: { select: { id: true, firstName: true, lastName: true, admissionNo: true, rollNo: true } },
-                class: { select: { id: true, name: true, section: true } },
-                subject: { select: { id: true, name: true } },
-                markedBy: { select: { id: true, firstName: true, lastName: true } }
-            },
-            orderBy: { date: 'desc' }
+            include: includeAttendanceRelations,
+            orderBy: [{ date: 'desc' }, { createdAt: 'desc' }]
         });
 
-        res.status(200).json({ success: true, count: records.length, data: records });
+        res.status(200).json({ success: true, count: records.length, data: records.map(formatAttendance) });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -78,7 +138,8 @@ exports.getAttendance = async (req, res) => {
 // @desc    Get attendance summary
 exports.getAttendanceSummary = async (req, res) => {
     try {
-        const { classId, studentId, startDate, endDate } = req.query;
+        const { studentId, startDate, endDate } = req.query;
+        const classId = req.params.classId || req.query.classId;
         const tenantId = req.user.tenantId;
         let where = { tenantId };
 
@@ -91,19 +152,37 @@ exports.getAttendanceSummary = async (req, res) => {
             if (endDate) where.date.lte = new Date(endDate);
         }
 
-        const records = await prisma.attendance.findMany({ where });
+        if (req.user.role === 'teacher' && classId) {
+            if (!req.query.subjectId) return res.status(400).json({ success: false, message: 'Subject is required for teacher attendance' });
+            const allowed = await canTeacherAccessClassSubject(req.user.id, classId, req.query.subjectId, tenantId);
+            if (!allowed) return res.status(403).json({ success: false, message: 'You are not assigned to this class subject' });
+        }
 
-        const total = records.length;
-        const present = records.filter(r => r.status === 'present').length;
-        const absent = records.filter(r => r.status === 'absent').length;
-        const late = records.filter(r => r.status === 'late').length;
-        const excused = records.filter(r => r.status === 'excused').length;
+        const records = await prisma.attendance.findMany({
+            where,
+            include: includeAttendanceRelations,
+            orderBy: [{ date: 'desc' }, { createdAt: 'desc' }]
+        });
+
+        res.status(200).json({ success: true, data: records.map(formatAttendance), stats: buildStats(records) });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.getMyAttendance = async (req, res) => {
+    try {
+        const records = await prisma.attendance.findMany({
+            where: { tenantId: req.user.tenantId, studentId: req.user.id },
+            include: includeAttendanceRelations,
+            orderBy: [{ date: 'desc' }, { createdAt: 'desc' }]
+        });
 
         res.status(200).json({
             success: true,
             data: {
-                total, present, absent, late, excused,
-                percentage: total > 0 ? ((present / total) * 100).toFixed(1) : '0.0'
+                records: records.map(formatAttendance),
+                stats: buildStats(records)
             }
         });
     } catch (error) {
@@ -111,8 +190,59 @@ exports.getAttendanceSummary = async (req, res) => {
     }
 };
 
-
 exports.getClassAttendance = exports.getAttendance;
 exports.getClassAttendanceHistory = exports.getAttendanceSummary;
-exports.getMyAttendance = exports.getAttendance;
+exports.getAttendanceReport = async (req, res) => {
+    try {
+        const classId = req.query.classId;
+        const month = Number(req.query.month);
+        const tenantId = req.user.tenantId;
+
+        if (!classId) return res.status(400).json({ success: false, message: 'Class is required' });
+
+        if (req.user.role === 'teacher') {
+            if (!req.query.subjectId) return res.status(400).json({ success: false, message: 'Subject is required for teacher attendance report' });
+            const allowed = await canTeacherAccessClassSubject(req.user.id, classId, req.query.subjectId, tenantId);
+            if (!allowed) return res.status(403).json({ success: false, message: 'You are not assigned to this class subject' });
+        }
+
+        const year = Number(req.query.year) || new Date().getFullYear();
+        const where = { tenantId, classId };
+        if (req.query.subjectId) where.subjectId = req.query.subjectId;
+        if (month >= 1 && month <= 12) {
+            where.date = {
+                gte: new Date(year, month - 1, 1),
+                lt: new Date(year, month, 1)
+            };
+        }
+
+        const records = await prisma.attendance.findMany({
+            where,
+            include: includeAttendanceRelations,
+            orderBy: { date: 'asc' }
+        });
+
+        const rows = [
+            ['Date', 'Student', 'Class', 'Status', 'Remarks'],
+            ...records.sort((a, b) => {
+                const dateDiff = a.date.getTime() - b.date.getTime();
+                if (dateDiff !== 0) return dateDiff;
+                return `${a.student.firstName} ${a.student.lastName}`.localeCompare(`${b.student.firstName} ${b.student.lastName}`);
+            }).map(r => [
+                r.date.toISOString().slice(0, 10),
+                `${r.student.firstName} ${r.student.lastName}`,
+                `${r.class.name} - ${r.class.section}`,
+                r.status,
+                r.remarks || ''
+            ])
+        ];
+
+        const csv = rows.map(row => row.map(value => `"${String(value).replace(/"/g, '""')}"`).join(',')).join('\n');
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename="attendance-${classId}.csv"`);
+        res.status(200).send(csv);
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
 

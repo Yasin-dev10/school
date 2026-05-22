@@ -17,12 +17,14 @@ import {
     AlertCircle
 } from 'lucide-react';
 import { PermissionGuard } from '../../../components/PermissionGuard';
-import { usePermission, RESOURCES, ACTIONS } from '../../../hooks/usePermission';
+import { usePermission, RESOURCES, ACTIONS, normalizeRole } from '../../../hooks/usePermission';
 
 
 export default function AttendancePage() {
     const [classes, setClasses] = useState([]);
     const [selectedClass, setSelectedClass] = useState<any>(null);
+    const [subjects, setSubjects] = useState([]);
+    const [selectedSubject, setSelectedSubject] = useState<any>(null);
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [students, setStudents] = useState([]);
     const [attendanceRecords, setAttendanceRecords] = useState<any>({}); // { studentId: { status, remarks } }
@@ -38,15 +40,19 @@ export default function AttendancePage() {
 
     useEffect(() => {
         const u = JSON.parse(localStorage.getItem('user') || '{}');
-        setUser(u);
+        setUser({ ...u, role: normalizeRole(u.role) });
     }, []);
 
     // Fetch school classes
     useEffect(() => {
         const fetchClasses = async () => {
             try {
-                const { data } = await api.get('/classes');
-                setClasses(data.data);
+                const [classRes, subjectRes] = await Promise.all([
+                    api.get('/classes'),
+                    api.get('/subjects')
+                ]);
+                setClasses(classRes.data.data);
+                setSubjects(subjectRes.data.data || []);
             } catch (err) {
                 console.error("Failed to fetch classes");
             }
@@ -77,6 +83,7 @@ export default function AttendancePage() {
 
     const fetchClassData = async () => {
         if (!selectedClass || view !== 'mark') return;
+        if (user?.role === 'teacher' && !selectedSubject) return;
         setLoading(true);
         try {
             // 1. Fetch all students in this class/section
@@ -88,7 +95,8 @@ export default function AttendancePage() {
             setStudents(classStudents);
 
             // 2. Fetch existing attendance for this date
-            const { data: attendanceRes } = await api.get(`/attendance/class/${selectedClass._id}?date=${date}`);
+            const subjectQuery = selectedSubject?._id ? `&subjectId=${selectedSubject._id}` : '';
+            const { data: attendanceRes } = await api.get(`/attendance/class/${selectedClass._id}?date=${date}${subjectQuery}`);
 
             const existingRecords: any = {};
             // Initialize with 'present' for all students
@@ -98,9 +106,11 @@ export default function AttendancePage() {
 
             // Override with existing data from DB
             attendanceRes.data.forEach((rec: any) => {
+                if (existingRecords[rec.student._id]?.loaded) return;
                 existingRecords[rec.student._id] = {
                     status: rec.status,
-                    remarks: rec.remarks || ''
+                    remarks: rec.remarks || '',
+                    loaded: true
                 };
             });
 
@@ -114,9 +124,11 @@ export default function AttendancePage() {
 
     const fetchHistory = async () => {
         if (!selectedClass || view !== 'history') return;
+        if (user?.role === 'teacher' && !selectedSubject) return;
         setLoading(true);
         try {
-            const { data } = await api.get(`/attendance/history/${selectedClass._id}`);
+            const subjectQuery = selectedSubject?._id ? `?subjectId=${selectedSubject._id}` : '';
+            const { data } = await api.get(`/attendance/history/${selectedClass._id}${subjectQuery}`);
             setHistory(data.data);
         } catch (err) {
             console.error("Failed to fetch history");
@@ -142,12 +154,12 @@ export default function AttendancePage() {
     // When class or date changes, fetch students and existing attendance
     useEffect(() => {
         fetchClassData();
-    }, [selectedClass, date, view]);
+    }, [selectedClass, selectedSubject, date, view, user]);
 
     // Fetch history
     useEffect(() => {
         fetchHistory();
-    }, [selectedClass, view]);
+    }, [selectedClass, selectedSubject, view, user]);
 
     // Fetch student specific history
     useEffect(() => {
@@ -163,6 +175,10 @@ export default function AttendancePage() {
 
     const handleSave = async () => {
         if (!selectedClass) return;
+        if (user?.role === 'teacher' && !selectedSubject) {
+            alert("Please select a subject first");
+            return;
+        }
         setSaving(true);
         try {
             const records = Object.keys(attendanceRecords).map(studentId => ({
@@ -173,6 +189,7 @@ export default function AttendancePage() {
 
             await api.post('/attendance/mark', {
                 classId: selectedClass._id,
+                subjectId: selectedSubject?._id,
                 date,
                 records
             });
@@ -186,8 +203,16 @@ export default function AttendancePage() {
 
     const downloadAttendanceReport = async () => {
         if (!selectedClass) return alert("Please select a class first");
-        window.open(`${api.defaults.baseURL}/attendance/report?classId=${selectedClass._id}&month=${new Date().getMonth() + 1}`, '_blank');
+        if (user?.role === 'teacher' && !selectedSubject) return alert("Please select a subject first");
+        const subjectQuery = selectedSubject?._id ? `&subjectId=${selectedSubject._id}` : '';
+        window.open(`${api.defaults.baseURL}/attendance/report?classId=${selectedClass._id}${subjectQuery}&month=${new Date().getMonth() + 1}`, '_blank');
     };
+
+    const subjectOptions = selectedClass?.subjects?.length
+        ? selectedClass.subjects
+            .map((entry: any) => ({ ...entry.subject, _id: entry.subject?._id || entry.subject?.id }))
+            .filter((subject: any) => subjects.some((assigned: any) => assigned._id === subject?._id || assigned.id === subject?._id))
+        : subjects;
 
     return (
         <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-6 sm:space-y-8">
@@ -253,16 +278,32 @@ export default function AttendancePage() {
                     ))}
                 </div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-slate-900/40 p-6 rounded-[2rem] border border-white/5 shadow-xl">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 bg-slate-900/40 p-6 rounded-[2rem] border border-white/5 shadow-xl">
                     <div className="space-y-2">
                         <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Select Class</label>
                         <select
-                            onChange={(e) => setSelectedClass(classes.find((c: any) => c._id === e.target.value))}
+                            onChange={(e) => {
+                                setSelectedClass(classes.find((c: any) => c._id === e.target.value));
+                                setSelectedSubject(null);
+                            }}
                             className="w-full px-5 py-3 bg-slate-950 border border-white/10 rounded-2xl text-white outline-none focus:ring-2 focus:ring-indigo-500/50"
                         >
                             <option value="">Choose a Class...</option>
                             {classes.map((c: any) => (
                                 <option key={c._id} value={c._id}>{c.name} - {c.section}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Subject</label>
+                        <select
+                            value={selectedSubject?._id || ''}
+                            onChange={(e) => setSelectedSubject(subjectOptions.find((s: any) => s._id === e.target.value) || null)}
+                            className="w-full px-5 py-3 bg-slate-950 border border-white/10 rounded-2xl text-white outline-none focus:ring-2 focus:ring-indigo-500/50"
+                        >
+                            <option value="">Choose a Subject...</option>
+                            {subjectOptions.map((s: any) => (
+                                <option key={s._id} value={s._id}>{s.name}</option>
                             ))}
                         </select>
                     </div>

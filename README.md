@@ -215,7 +215,8 @@ PORT=5000
 NODE_ENV=development
 
 # Database
-MONGODB_URI=mongodb://localhost:27017/school_management
+DATABASE_URL=postgresql://postgres:your_password@localhost:5432/school_management
+DIRECT_URL=postgresql://postgres:your_password@localhost:5432/school_management
 
 # JWT Secret
 JWT_SECRET=your_super_secret_jwt_key_change_this_in_production
@@ -279,22 +280,30 @@ static const String baseUrl = 'http://192.168.1.XXX:5000/api';
 
 ### Database Setup
 
-1. **Start MongoDB:**
+1. **Start PostgreSQL:**
    ```bash
    # Windows (if installed as service)
-   net start MongoDB
-   
+   net start postgresql-x64-16
+
    # macOS/Linux
-   sudo systemctl start mongod
+   sudo systemctl start postgresql
    ```
 
 2. **Create Database:**
-   MongoDB will automatically create the database on first connection.
+   ```bash
+   createdb -U postgres school_management
+   ```
 
-3. **Seed Initial Data (Optional):**
+3. **Apply Prisma Migrations:**
    ```bash
    cd backend
-   node src/scripts/seed.js
+   npm run db:migrate
+   ```
+
+4. **Seed Initial Data (Optional):**
+   ```bash
+   cd backend
+   npm run db:seed
    ```
 
 ### Environment Variables

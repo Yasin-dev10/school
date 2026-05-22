@@ -1,10 +1,11 @@
 import axios from 'axios';
 
-// Create axios instance
 const defaultUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:5000' : '';
+const configuredUrl = process.env.NEXT_PUBLIC_API_URL || defaultUrl;
+const baseURL = configuredUrl.endsWith('/api') ? configuredUrl : `${configuredUrl}/api`;
 
 const api = axios.create({
-    baseURL: (process.env.NEXT_PUBLIC_API_URL || defaultUrl) + '/api',
+    baseURL,
     headers: {
         'Content-Type': 'application/json',
     },

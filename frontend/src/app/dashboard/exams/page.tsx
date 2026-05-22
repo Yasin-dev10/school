@@ -42,7 +42,7 @@ export default function ExamsPage() {
     const [selectedClass, setSelectedClass] = useState<any>(null);
     const [selectedSubject, setSelectedSubject] = useState<any>(null);
     const [students, setStudents] = useState([]);
-    const [marksData, setMarksData] = useState<any>({}); // { studentId: { score, remarks } }
+    const [marksData, setMarksData] = useState<any>({}); // { studentId: { score, remarks, grade, gpa, gradeRemarks, isDirty } }
     const [studentMarks, setStudentMarks] = useState([]); // For student view
     const [saving, setSaving] = useState(false);
 
@@ -197,35 +197,45 @@ export default function ExamsPage() {
         }
     }, [view, user]);
 
+    const fetchMarksAndStudents = async () => {
+        if (!selectedExam || !selectedClass || !selectedSubject) return;
+        setLoading(true);
+        try {
+            const { data: stuRes } = await api.get(`/students?class=${selectedClass._id}`);
+            const classStudents = stuRes.data;
+            setStudents(classStudents);
+
+            const { data: markRes } = await api.get(`/exams/marks?examId=${selectedExam._id}&subjectId=${selectedSubject._id}&classId=${selectedClass._id}`);
+
+            const existing: any = {};
+            classStudents.forEach((s: any) => {
+                existing[s._id] = { score: '', remarks: '', grade: null, gpa: null, gradeRemarks: null, isDirty: false };
+            });
+            markRes.data.forEach((m: any) => {
+                const studentId = m.student?._id;
+                if (studentId && existing[studentId]) {
+                    existing[studentId] = {
+                        score: m.marksObtained,
+                        remarks: m.remarks || '',
+                        maxMarks: m.maxMarks,
+                        grade: m.grade || null,
+                        gpa: m.gpa ?? null,
+                        gradeRemarks: m.gradeRemarks || null,
+                        isDirty: false
+                    };
+                }
+            });
+            setMarksData(existing);
+        } catch (err) {
+            console.error("Marks/Students fetch failed");
+        } finally {
+            setLoading(false);
+        }
+    };
+
     // When filters change for grades view (Admin/Teacher)
     useEffect(() => {
         if (view !== 'grades' || !selectedExam || !selectedClass || !selectedSubject) return;
-
-        const fetchMarksAndStudents = async () => {
-            setLoading(true);
-            try {
-                const { data: stuRes } = await api.get(`/students?class=${selectedClass._id}`);
-                const classStudents = stuRes.data;
-                setStudents(classStudents);
-
-                const { data: markRes } = await api.get(`/exams/marks?examId=${selectedExam._id}&subjectId=${selectedSubject._id}&classId=${selectedClass._id}`);
-
-                const existing: any = {};
-                classStudents.forEach((s: any) => {
-                    existing[s._id] = { score: '', remarks: '' };
-                });
-                markRes.data.forEach((m: any) => {
-                    if (existing[m.student?._id]) {
-                        existing[m.student._id] = { score: m.marksObtained, remarks: m.remarks || '' };
-                    }
-                });
-                setMarksData(existing);
-            } catch (err) {
-                console.error("Marks/Students fetch failed");
-            } finally {
-                setLoading(false);
-            }
-        };
         fetchMarksAndStudents();
     }, [view, selectedExam, selectedClass, selectedSubject]);
 
@@ -276,6 +286,7 @@ export default function ExamsPage() {
                 marks,
                 maxMarks: Number(maxMarks)
             });
+            await fetchMarksAndStudents();
             alert("Grade book updated!");
         } catch (err: any) {
             alert(err.response?.data?.message || "Failed to save marks.");
@@ -349,7 +360,7 @@ export default function ExamsPage() {
                             </div>
                             <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1">Overall GPA</p>
                             <p className="text-4xl font-black text-white">
-                                {studentMarks.length > 0 ? (studentMarks.reduce((acc: number, m: any) => acc + (m.marksObtained / m.maxMarks * 4), 0) / studentMarks.length).toFixed(2) : '0.00'}
+                                {studentMarks.length > 0 ? (studentMarks.reduce((acc: number, m: any) => acc + Number(m.gpa || 0), 0) / studentMarks.length).toFixed(2) : '0.00'}
                             </p>
                             <p className="text-[10px] text-indigo-400 font-bold mt-2 flex items-center gap-1">
                                 <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" /> Based on {studentMarks.length} subjects
@@ -390,11 +401,11 @@ export default function ExamsPage() {
                                         </td>
                                         <td className="px-8 py-5 text-indigo-400 font-black text-lg">{m.marksObtained} <span className="text-slate-600 text-[10px] font-medium">/ {m.maxMarks}</span></td>
                                         <td className="px-8 py-5">
-                                            <span className={`px-4 py-1.5 rounded-xl font-black text-xs border ${((m.marksObtained / m.maxMarks) * 100) >= 80 ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/10'}`}>
-                                                {((m.marksObtained / m.maxMarks) * 100) >= 90 ? 'A+' : ((m.marksObtained / m.maxMarks) * 100) >= 80 ? 'A' : ((m.marksObtained / m.maxMarks) * 100) >= 70 ? 'B' : 'F'}
+                                            <span className={`px-4 py-1.5 rounded-xl font-black text-xs border ${m.grade === 'F' ? 'bg-red-500/10 text-red-400 border-red-500/20' : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/10'}`}>
+                                                {m.grade || 'N/A'}{m.gpa !== null && m.gpa !== undefined ? ` / ${Number(m.gpa).toFixed(1)}` : ''}
                                             </span>
                                         </td>
-                                        <td className="px-8 py-5 text-slate-400 italic text-xs leading-relaxed max-w-xs">{m.remarks || 'No specific remarks shared.'}</td>
+                                        <td className="px-8 py-5 text-slate-400 italic text-xs leading-relaxed max-w-xs">{m.gradeRemarks || m.remarks || 'No specific remarks shared.'}</td>
                                     </tr>
                                 ))}
                                 {studentMarks.filter((m: any) => m.exam?.isApproved).length === 0 && (
@@ -585,7 +596,7 @@ export default function ExamsPage() {
                         <div className="glass-dark rounded-[3.5rem] border border-white/5 overflow-hidden shadow-2xl overflow-x-auto custom-scrollbar">
                             <table className="w-full text-left min-w-[800px]">
                                 <thead className="text-[10px] uppercase bg-slate-950/50 text-slate-500 font-black tracking-widest border-b border-white/5">
-                                    <tr><th className="px-10 py-6">Student</th><th className="px-10 py-6">Score</th><th className="px-10 py-6">Grade</th><th className="px-10 py-6">Remarks</th></tr>
+                                    <tr><th className="px-10 py-6">Student</th><th className="px-10 py-6">Score</th><th className="px-10 py-6">Stored Grade</th><th className="px-10 py-6">Grade Remarks</th><th className="px-10 py-6">Teacher Remarks</th></tr>
                                 </thead>
                                 <tbody className="divide-y divide-white/5 text-sm">
                                     {students.map((s: any) => (
@@ -595,17 +606,19 @@ export default function ExamsPage() {
                                                 <input
                                                     type="number"
                                                     value={marksData[s._id]?.score || ''}
-                                                    onChange={(e) => setMarksData({ ...marksData, [s._id]: { ...marksData[s._id], score: e.target.value } })}
+                                                    onChange={(e) => setMarksData({ ...marksData, [s._id]: { ...marksData[s._id], score: e.target.value, grade: null, gpa: null, gradeRemarks: null, isDirty: true } })}
                                                     className="w-24 px-4 py-3 bg-slate-950 border border-white/10 rounded-2xl text-white outline-none text-center font-black"
                                                 />
                                             </td>
                                             <td className="px-10 py-6">
                                                 {marksData[s._id]?.score !== '' && (
                                                     <span className="px-4 py-2 bg-indigo-500/10 text-indigo-400 rounded-xl font-black">
-                                                        {(Number(marksData[s._id]?.score) / Number(maxMarks) * 100) >= 90 ? 'A+' : (Number(marksData[s._id]?.score) / Number(maxMarks) * 100) >= 80 ? 'A' : 'F'}
+                                                        {marksData[s._id]?.isDirty ? 'Pending save' : marksData[s._id]?.grade || 'N/A'}
+                                                        {!marksData[s._id]?.isDirty && marksData[s._id]?.gpa !== null && marksData[s._id]?.gpa !== undefined ? ` / ${Number(marksData[s._id].gpa).toFixed(1)}` : ''}
                                                     </span>
                                                 )}
                                             </td>
+                                            <td className="px-10 py-6 text-xs text-slate-400 italic">{marksData[s._id]?.isDirty ? 'Recalculated by backend after save' : marksData[s._id]?.gradeRemarks || 'No stored grade remarks yet'}</td>
                                             <td className="px-10 py-6"><input value={marksData[s._id]?.remarks || ''} onChange={(e) => setMarksData({ ...marksData, [s._id]: { ...marksData[s._id], remarks: e.target.value } })} className="w-full bg-transparent border-b border-white/5 text-slate-500 outline-none italic" placeholder="Feedback..." /></td>
                                         </tr>
                                     ))}

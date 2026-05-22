@@ -222,9 +222,10 @@ export default function ChildDetailPage() {
                                                 </td>
                                                 <td className="py-6 px-4 font-black text-white">{m.marksObtained} / {m.maxMarks}</td>
                                                 <td className="py-6 px-4">
-                                                    <span className={`px-3 py-1 rounded-lg text-[10px] font-black ${perc >= 80 ? 'bg-green-400/10 text-green-400' : perc >= 60 ? 'bg-indigo-400/10 text-indigo-400' : 'bg-red-400/10 text-red-400'}`}>
-                                                        {perc >= 90 ? 'A+' : perc >= 80 ? 'A' : perc >= 70 ? 'B' : perc >= 60 ? 'C' : 'F'}
+                                                    <span className={`px-3 py-1 rounded-lg text-[10px] font-black ${m.grade === 'F' ? 'bg-red-400/10 text-red-400' : m.grade ? 'bg-indigo-400/10 text-indigo-400' : 'bg-slate-400/10 text-slate-400'}`}>
+                                                        {m.grade || 'N/A'}{m.gpa !== null && m.gpa !== undefined ? ` / ${Number(m.gpa).toFixed(1)}` : ''}
                                                     </span>
+                                                    {m.gradeRemarks && <p className="mt-2 text-[10px] text-slate-500 font-bold uppercase">{m.gradeRemarks}</p>}
                                                 </td>
                                                 <td className="py-6 px-4 text-right">
                                                     <div className="w-full max-w-[120px] ml-auto h-2 bg-slate-800 rounded-full overflow-hidden">

@@ -1,12 +1,19 @@
 const prisma = require('../config/prismaClient');
 const { logAction } = require('../utils/logger');
 const { emitToTenant } = require('../config/socket');
+const { canTeacherAccessClassSubject } = require('../utils/teacherScope');
 
 // @desc    Create assignment
 exports.createAssignment = async (req, res) => {
     try {
         const { title, description, classId, subjectId, dueDate, status } = req.body;
         const tenantId = req.user.tenantId;
+
+        if (req.user.role === 'teacher') {
+            if (!subjectId) return res.status(400).json({ success: false, message: 'Subject is required' });
+            const allowed = await canTeacherAccessClassSubject(req.user.id, classId, subjectId, tenantId);
+            if (!allowed) return res.status(403).json({ success: false, message: 'You are not assigned to this class subject' });
+        }
 
         const assignment = await prisma.assignment.create({
             data: {
@@ -97,8 +104,19 @@ exports.updateAssignment = async (req, res) => {
     try {
         const exists = await prisma.assignment.findFirst({ where: { id: req.params.id, tenantId: req.user.tenantId } });
         if (!exists) return res.status(404).json({ message: 'Assignment not found' });
+        if (req.user.role === 'teacher' && exists.teacherId !== req.user.id)
+            return res.status(403).json({ success: false, message: 'You can only update your own assignments' });
 
         const { title, description, classId, subjectId, dueDate, status } = req.body;
+        const targetClassId = classId || exists.classId;
+        const targetSubjectId = subjectId !== undefined ? subjectId : exists.subjectId;
+
+        if (req.user.role === 'teacher') {
+            if (!targetSubjectId) return res.status(400).json({ success: false, message: 'Subject is required' });
+            const allowed = await canTeacherAccessClassSubject(req.user.id, targetClassId, targetSubjectId, req.user.tenantId);
+            if (!allowed) return res.status(403).json({ success: false, message: 'You are not assigned to this class subject' });
+        }
+
         const updated = await prisma.assignment.update({
             where: { id: req.params.id },
             data: {
@@ -121,6 +139,8 @@ exports.deleteAssignment = async (req, res) => {
     try {
         const exists = await prisma.assignment.findFirst({ where: { id: req.params.id, tenantId: req.user.tenantId } });
         if (!exists) return res.status(404).json({ message: 'Assignment not found' });
+        if (req.user.role === 'teacher' && exists.teacherId !== req.user.id)
+            return res.status(403).json({ success: false, message: 'You can only delete your own assignments' });
 
         await prisma.assignment.delete({ where: { id: req.params.id } });
         res.status(200).json({ success: true, message: 'Assignment deleted' });
@@ -173,6 +193,14 @@ exports.submitAssignment = async (req, res) => {
 exports.gradeSubmission = async (req, res) => {
     try {
         const { grade, feedback } = req.body;
+        const submission = await prisma.submission.findFirst({
+            where: { id: req.params.id, tenantId: req.user.tenantId },
+            include: { assignment: true }
+        });
+        if (!submission) return res.status(404).json({ message: 'Submission not found' });
+        if (req.user.role === 'teacher' && submission.assignment.teacherId !== req.user.id)
+            return res.status(403).json({ success: false, message: 'You can only grade submissions for your own assignments' });
+
         const updated = await prisma.submission.update({
             where: { id: req.params.id },
             data: { grade, feedback, status: 'graded' }
@@ -186,6 +214,11 @@ exports.gradeSubmission = async (req, res) => {
 
 exports.getSubmissions = async (req, res) => {
     try {
+        const assignment = await prisma.assignment.findFirst({ where: { id: req.params.id, tenantId: req.user.tenantId } });
+        if (!assignment) return res.status(404).json({ message: 'Assignment not found' });
+        if (req.user.role === 'teacher' && assignment.teacherId !== req.user.id)
+            return res.status(403).json({ success: false, message: 'You can only view submissions for your own assignments' });
+
         const submissions = await prisma.submission.findMany({
             where: { assignmentId: req.params.id, tenantId: req.user.tenantId },
             include: { student: { select: { id: true, firstName: true, lastName: true, rollNo: true } } }

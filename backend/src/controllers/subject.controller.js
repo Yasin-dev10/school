@@ -1,5 +1,15 @@
 const prisma = require('../config/prismaClient');
 const { logAction } = require('../utils/logger');
+const { canTeacherAccessSubject } = require('../utils/teacherScope');
+
+const teacherSubjectWhere = (teacherId, tenantId) => ({
+    tenantId,
+    OR: [
+        { teachers: { some: { teacherId } } },
+        { classSubjects: { some: { teachers: { some: { teacherId } } } } },
+        { timetables: { some: { teachers: { some: { teacherId } } } } }
+    ]
+});
 
 // @desc    Create subject
 exports.createSubject = async (req, res) => {
@@ -34,8 +44,12 @@ exports.createSubject = async (req, res) => {
 // @desc    Get all subjects
 exports.getSubjects = async (req, res) => {
     try {
+        const where = req.user.role === 'teacher'
+            ? teacherSubjectWhere(req.user.id, req.user.tenantId)
+            : { tenantId: req.user.tenantId };
+
         const subjects = await prisma.subject.findMany({
-            where: { tenantId: req.user.tenantId },
+            where,
             include: { teachers: { include: { teacher: { select: { id: true, firstName: true, lastName: true } } } }, resources: true },
             orderBy: { name: 'asc' }
         });
@@ -48,6 +62,11 @@ exports.getSubjects = async (req, res) => {
 // @desc    Get subject by ID
 exports.getSubjectById = async (req, res) => {
     try {
+        if (req.user.role === 'teacher') {
+            const allowed = await canTeacherAccessSubject(req.user.id, req.params.id, req.user.tenantId);
+            if (!allowed) return res.status(403).json({ success: false, message: 'You are not assigned to this subject' });
+        }
+
         const subject = await prisma.subject.findFirst({
             where: { id: req.params.id, tenantId: req.user.tenantId },
             include: { teachers: { include: { teacher: { select: { id: true, firstName: true, lastName: true } } } }, resources: true }
@@ -116,6 +135,11 @@ const formatSubject = (s) => ({
 exports.addResource = async (req, res) => {
     try {
         const { title, url, type } = req.body;
+        if (req.user.role === 'teacher') {
+            const allowed = await canTeacherAccessSubject(req.user.id, req.params.id, req.user.tenantId);
+            if (!allowed) return res.status(403).json({ success: false, message: 'You are not assigned to this subject' });
+        }
+
         const exists = await prisma.subject.findFirst({ where: { id: req.params.id, tenantId: req.user.tenantId } });
         if (!exists) return res.status(404).json({ message: 'Subject not found' });
 
@@ -136,6 +160,11 @@ exports.addResource = async (req, res) => {
 exports.removeResource = async (req, res) => {
     try {
         const resourceId = req.params.resourceId;
+        if (req.user.role === 'teacher') {
+            const allowed = await canTeacherAccessSubject(req.user.id, req.params.id, req.user.tenantId);
+            if (!allowed) return res.status(403).json({ success: false, message: 'You are not assigned to this subject' });
+        }
+
         const subjectExists = await prisma.subject.findFirst({ where: { id: req.params.id, tenantId: req.user.tenantId } });
         if (!subjectExists) return res.status(404).json({ message: 'Subject not found' });
 

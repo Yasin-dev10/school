@@ -8,7 +8,29 @@ const teacherSelect = {
     id: true, tenantId: true, firstName: true, lastName: true,
     email: true, role: true, status: true, phone: true,
     designation: true, qualification: true, salary: true, avatarUrl: true,
-    createdAt: true, updatedAt: true
+    passwordPlain: true, createdAt: true, updatedAt: true
+};
+
+const canViewTeacherPasswords = (user) => ['school-admin', 'receptionist'].includes(user?.role);
+
+const formatTeacher = (teacher, user) => {
+    if (!teacher) return null;
+
+    const { passwordPlain, ...safeTeacher } = teacher;
+
+    return {
+        ...safeTeacher,
+        _id: teacher.id,
+        role: teacher.role ? teacher.role.replace('_', '-') : teacher.role,
+        ...(canViewTeacherPasswords(user) && { password_plain: passwordPlain }),
+        profile: {
+            phone: teacher.phone,
+            designation: teacher.designation,
+            qualification: teacher.qualification,
+            salary: teacher.salary,
+            avatarUrl: teacher.avatarUrl
+        }
+    };
 };
 
 // @desc    Create a new teacher
@@ -33,15 +55,18 @@ exports.createTeacher = async (req, res) => {
                 phone: profile?.phone || null,
                 designation: profile?.designation || null,
                 qualification: profile?.qualification || null,
+                salary: profile?.salary || null,
                 avatarUrl: profile?.avatarUrl || null
             },
             select: teacherSelect
         });
 
-        await logAction({ action: 'CREATE', module: 'USER', details: `Created teacher: ${firstName} ${lastName}`, userId: req.user._id, tenantId });
-        emitToTenant(tenantId, 'teacher:created', teacher);
+        const formattedTeacher = formatTeacher(teacher, req.user);
 
-        res.status(201).json({ success: true, data: teacher, tempPassword: generatedPassword });
+        await logAction({ action: 'CREATE', module: 'USER', details: `Created teacher: ${firstName} ${lastName}`, userId: req.user._id, tenantId });
+        emitToTenant(tenantId, 'teacher:created', formattedTeacher);
+
+        res.status(201).json({ success: true, data: formattedTeacher, tempPassword: generatedPassword });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -55,7 +80,7 @@ exports.getTeachers = async (req, res) => {
             select: teacherSelect,
             orderBy: { firstName: 'asc' }
         });
-        res.status(200).json({ success: true, count: teachers.length, data: teachers });
+        res.status(200).json({ success: true, count: teachers.length, data: teachers.map(teacher => formatTeacher(teacher, req.user)) });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -69,7 +94,7 @@ exports.getTeacherById = async (req, res) => {
             select: teacherSelect
         });
         if (!teacher) return res.status(404).json({ message: 'Teacher not found' });
-        res.status(200).json({ success: true, data: teacher });
+        res.status(200).json({ success: true, data: formatTeacher(teacher, req.user) });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -92,13 +117,14 @@ exports.updateTeacher = async (req, res) => {
                 ...(profile?.phone !== undefined && { phone: profile.phone }),
                 ...(profile?.designation !== undefined && { designation: profile.designation }),
                 ...(profile?.qualification !== undefined && { qualification: profile.qualification }),
+                ...(profile?.salary !== undefined && { salary: profile.salary }),
                 ...(profile?.avatarUrl !== undefined && { avatarUrl: profile.avatarUrl })
             },
             select: teacherSelect
         });
 
         await logAction({ action: 'UPDATE', module: 'USER', details: `Updated teacher: ${updated.firstName} ${updated.lastName}`, userId: req.user._id, tenantId: req.user.tenantId });
-        res.status(200).json({ success: true, data: updated });
+        res.status(200).json({ success: true, data: formatTeacher(updated, req.user) });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -172,14 +198,14 @@ exports.bulkRegisterTeachers = async (req, res) => {
                         role: 'teacher',
                         tenantId,
                         phone: teacherData.phone || null,
-                        designation: teacherData.designation || null
+                        designation: teacherData.designation || null,
+                        qualification: teacherData.qualification || null,
+                        salary: teacherData.salary || null
                     },
                     select: teacherSelect
                 });
 
-                // Attach plain password for response
-                teacher.tempPassword = generatedPassword;
-                addedTeachers.push(teacher);
+                addedTeachers.push({ ...formatTeacher(teacher, req.user), tempPassword: generatedPassword });
             } catch (err) {
                 errors.push({ email: teacherData.email, error: err.message });
             }
@@ -189,7 +215,17 @@ exports.bulkRegisterTeachers = async (req, res) => {
             await logAction({ action: 'CREATE', module: 'USER', details: `Bulk created ${addedTeachers.length} teachers`, userId: req.user._id, tenantId });
         }
 
-        res.status(201).json({ success: true, added: addedTeachers.length, data: addedTeachers, errors });
+        res.status(201).json({
+            success: true,
+            added: addedTeachers.length,
+            data: addedTeachers,
+            errors,
+            summary: {
+                total: teachers.length,
+                success: addedTeachers.length,
+                failed: errors.length
+            }
+        });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }

@@ -1,10 +1,16 @@
 const prisma = require('../config/prismaClient');
+const { canTeacherAccessClassSubject } = require('../utils/teacherScope');
 
 // @desc    Create material
 exports.createMaterial = async (req, res) => {
     try {
         const { title, description, type, content, fileUrl, classId, subjectId, visibleToStudents } = req.body;
         const tenantId = req.user.tenantId;
+
+        if (req.user.role === 'teacher') {
+            const allowed = await canTeacherAccessClassSubject(req.user.id, classId, subjectId, tenantId);
+            if (!allowed) return res.status(403).json({ success: false, message: 'You are not assigned to this class subject' });
+        }
 
         const material = await prisma.material.create({
             data: {
@@ -71,8 +77,15 @@ exports.updateMaterial = async (req, res) => {
     try {
         const exists = await prisma.material.findFirst({ where: { id: req.params.id, tenantId: req.user.tenantId } });
         if (!exists) return res.status(404).json({ message: 'Material not found' });
+        if (req.user.role === 'teacher' && exists.teacherId !== req.user.id)
+            return res.status(403).json({ success: false, message: 'You can only update your own materials' });
 
         const { title, description, type, content, fileUrl, classId, subjectId, visibleToStudents } = req.body;
+        if (req.user.role === 'teacher' && (classId || subjectId)) {
+            const allowed = await canTeacherAccessClassSubject(req.user.id, classId || exists.classId, subjectId || exists.subjectId, req.user.tenantId);
+            if (!allowed) return res.status(403).json({ success: false, message: 'You are not assigned to this class subject' });
+        }
+
         const updated = await prisma.material.update({
             where: { id: req.params.id },
             data: {
@@ -97,6 +110,8 @@ exports.deleteMaterial = async (req, res) => {
     try {
         const exists = await prisma.material.findFirst({ where: { id: req.params.id, tenantId: req.user.tenantId } });
         if (!exists) return res.status(404).json({ message: 'Material not found' });
+        if (req.user.role === 'teacher' && exists.teacherId !== req.user.id)
+            return res.status(403).json({ success: false, message: 'You can only delete your own materials' });
 
         await prisma.material.delete({ where: { id: req.params.id } });
         res.status(200).json({ success: true, message: 'Material deleted' });

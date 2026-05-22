@@ -628,7 +628,7 @@ model Attendance {
   subject  Subject? @relation(fields: [subjectId], references: [id])
   markedBy User     @relation("AttendanceMarker", fields: [markedById], references: [id])
 
-  @@unique([studentId, classId, subjectId, date, tenantId])
+  @@index([studentId, classId, subjectId, date, tenantId])
   @@index([tenantId])
   @@map("attendances")
 }

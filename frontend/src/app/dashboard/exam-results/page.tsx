@@ -13,9 +13,10 @@ interface StudentResult {
     totalObtained: number;
     totalMax: number;
     percentage: number;
+    averageGpa: number;
     subjectCount: number;
     rank?: number;
-    subjectMarks?: Record<string, { obtained: number; max: number }>;
+    subjectMarks?: Record<string, { obtained: number; max: number; grade?: string | null; gpa?: number | null; gradeRemarks?: string | null }>;
 }
 
 export default function ExamResultsPage() {
@@ -90,6 +91,7 @@ export default function ExamResultsPage() {
                         totalObtained: 0,
                         totalMax: 0,
                         percentage: 0,
+                        averageGpa: 0,
                         subjectCount: 0,
                         subjectMarks: {}
                     };
@@ -97,11 +99,15 @@ export default function ExamResultsPage() {
 
                 studentMap[sId].totalObtained += mark.marksObtained;
                 studentMap[sId].totalMax += mark.maxMarks;
+                studentMap[sId].averageGpa += Number(mark.gpa || 0);
                 studentMap[sId].subjectCount++;
                 if (studentMap[sId].subjectMarks) {
                     studentMap[sId].subjectMarks![mark.subject._id] = {
                         obtained: mark.marksObtained,
-                        max: mark.maxMarks
+                        max: mark.maxMarks,
+                        grade: mark.grade || null,
+                        gpa: mark.gpa ?? null,
+                        gradeRemarks: mark.gradeRemarks || null
                     };
                 }
             });
@@ -111,7 +117,8 @@ export default function ExamResultsPage() {
             // Calculate Percentage & Convert to Array
             const resultArray = Object.values(studentMap).map(s => ({
                 ...s,
-                percentage: s.totalMax > 0 ? (s.totalObtained / s.totalMax) * 100 : 0
+                percentage: s.totalMax > 0 ? (s.totalObtained / s.totalMax) * 100 : 0,
+                averageGpa: s.subjectCount > 0 ? s.averageGpa / s.subjectCount : 0
             }));
 
             // Sort by Percentage (Desc) for Rank
@@ -147,15 +154,6 @@ export default function ExamResultsPage() {
         } catch (error) {
             toast.error('Failed to download report card');
         }
-    };
-
-    const getGrade = (percentage: number) => {
-        if (percentage >= 90) return { label: 'A+', color: 'text-green-600 bg-green-50' };
-        if (percentage >= 80) return { label: 'A', color: 'text-green-500 bg-green-50' };
-        if (percentage >= 70) return { label: 'B', color: 'text-blue-600 bg-blue-50' };
-        if (percentage >= 60) return { label: 'C', color: 'text-yellow-600 bg-yellow-50' };
-        if (percentage >= 50) return { label: 'D', color: 'text-orange-600 bg-orange-50' };
-        return { label: 'F', color: 'text-red-600 bg-red-50' };
     };
 
     return (
@@ -256,14 +254,12 @@ export default function ExamResultsPage() {
                                         <th className="px-8 py-5 text-center">Modules</th>
                                         <th className="px-8 py-5 text-right">Raw Score</th>
                                         <th className="px-8 py-5 text-center">Index %</th>
-                                        <th className="px-8 py-5 text-center">Grade</th>
+                                        <th className="px-8 py-5 text-center">Avg GPA</th>
                                         <th className="px-8 py-5 text-right">Report</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-white/5">
-                                    {results.map((student) => {
-                                        const grade = getGrade(student.percentage);
-                                        return (
+                                    {results.map((student) => (
                                             <tr key={student.id} className="hover:bg-white/5 transition-colors group">
                                                 <td className="px-8 py-4">
                                                     <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-xs ${student.rank === 1 ? 'bg-yellow-500/20 text-yellow-500 border border-yellow-500/30' :
@@ -289,8 +285,8 @@ export default function ExamResultsPage() {
                                                     <div className="text-indigo-400 font-black text-lg">{student.percentage.toFixed(1)}%</div>
                                                 </td>
                                                 <td className="px-8 py-4 text-center">
-                                                    <span className={`px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest ${grade.color.replace('bg-', 'bg-opacity-10 bg-').replace('text-', 'text-')}`}>
-                                                        {grade.label}
+                                                    <span className="px-3 py-1 rounded text-[10px] font-black uppercase tracking-widest bg-indigo-500/10 text-indigo-400">
+                                                        {student.averageGpa.toFixed(2)}
                                                     </span>
                                                 </td>
                                                 <td className="px-8 py-4 text-right">
@@ -302,8 +298,7 @@ export default function ExamResultsPage() {
                                                     </button>
                                                 </td>
                                             </tr>
-                                        );
-                                    })}
+                                    ))}
                                 </tbody>
                             </table>
                         ) : (
@@ -318,6 +313,7 @@ export default function ExamResultsPage() {
                                         ))}
                                         <th className="px-4 py-4 text-center bg-indigo-500/10 text-indigo-400">Total</th>
                                         <th className="px-4 py-4 text-center bg-indigo-500/10 text-indigo-400">Avg %</th>
+                                        <th className="px-4 py-4 text-center bg-indigo-500/10 text-indigo-400">Avg GPA</th>
                                         <th className="px-4 py-4 text-center bg-indigo-500/10 text-indigo-400">Rank</th>
                                     </tr>
                                 </thead>
@@ -336,6 +332,7 @@ export default function ExamResultsPage() {
                                                             <div>
                                                                 <div className="font-bold text-white">{mark.obtained}</div>
                                                                 <div className="text-[9px] text-slate-600">/ {mark.max}</div>
+                                                                <div className="mt-1 text-[10px] font-black text-indigo-400">{mark.grade || 'N/A'}</div>
                                                             </div>
                                                         ) : (
                                                             <div className="text-slate-700 text-xs">-</div>
@@ -348,6 +345,9 @@ export default function ExamResultsPage() {
                                             </td>
                                             <td className="px-4 py-4 text-center bg-indigo-500/5 font-bold text-indigo-300">
                                                 {student.percentage.toFixed(1)}%
+                                            </td>
+                                            <td className="px-4 py-4 text-center bg-indigo-500/5 font-bold text-indigo-300">
+                                                {student.averageGpa.toFixed(2)}
                                             </td>
                                             <td className="px-4 py-4 text-center bg-indigo-500/5">
                                                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs mx-auto ${student.rank === 1 ? 'bg-yellow-500/20 text-yellow-500' :
