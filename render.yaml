@@ -16,6 +16,14 @@ services:
         value: 5000
       - key: BACKEND_INTERNAL_URL
         value: http://127.0.0.1:5000
+      - key: DATABASE_CONNECT_RETRIES
+        value: 12
+      - key: DATABASE_CONNECT_RETRY_MS
+        value: 5000
+      - key: DATABASE_MIGRATE_RETRIES
+        value: 12
+      - key: DATABASE_MIGRATE_RETRY_SECONDS
+        value: 5
       - key: DATABASE_URL
         fromDatabase:
           name: school-management-db
@@ -59,5 +67,6 @@ databases:
   - name: school-management-db
     databaseName: school_management
     user: school_user
+    region: oregon
     plan: free
     postgresMajorVersion: "16"
