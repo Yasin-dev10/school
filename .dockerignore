@@ -1,0 +1,13 @@
+.git
+**/node_modules
+**/.next
+**/out
+**/build
+**/coverage
+**/.env
+**/.env.*
+backend/uploads
+uploads
+npm-debug.log*
+*.log
+frontend/tsconfig.tsbuildinfo

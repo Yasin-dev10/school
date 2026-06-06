@@ -1,0 +1,63 @@
+services:
+  - type: web
+    name: school-management-live
+    runtime: docker
+    plan: free
+    region: oregon
+    branch: main
+    autoDeploy: true
+    dockerfilePath: ./Dockerfile.render
+    dockerContext: .
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: BACKEND_PORT
+        value: 5000
+      - key: BACKEND_INTERNAL_URL
+        value: http://127.0.0.1:5000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: school-management-db
+          property: connectionString
+      - key: DIRECT_URL
+        fromDatabase:
+          name: school-management-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: FRONTEND_URL
+        value: https://school-management-live.onrender.com
+      - key: SOCKET_CORS_ORIGIN
+        value: https://school-management-live.onrender.com
+      - key: STRIPE_SECRET_KEY
+        value: ""
+      - key: STRIPE_WEBHOOK_SECRET
+        value: ""
+      - key: NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+        value: ""
+      - key: SMTP_HOST
+        value: ""
+      - key: SMTP_PORT
+        value: 587
+      - key: SMTP_USER
+        value: ""
+      - key: SMTP_PASS
+        value: ""
+      - key: TWILIO_ACCOUNT_SID
+        value: ""
+      - key: TWILIO_SID
+        value: ""
+      - key: TWILIO_AUTH_TOKEN
+        value: ""
+      - key: TWILIO_PHONE_NUMBER
+        value: ""
+      - key: TWILIO_PHONE
+        value: ""
+
+databases:
+  - name: school-management-db
+    databaseName: school_management
+    user: school_user
+    plan: free
+    postgresMajorVersion: "16"

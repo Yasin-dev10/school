@@ -1,0 +1,53 @@
+FROM node:22-alpine AS backend-build
+
+WORKDIR /app/backend
+
+RUN apk add --no-cache openssl
+
+ENV DATABASE_URL=postgresql://postgres:postgres@localhost:5432/school_management?schema=public
+ENV DIRECT_URL=postgresql://postgres:postgres@localhost:5432/school_management?schema=public
+
+COPY backend/package*.json backend/prisma.config.ts ./
+COPY backend/prisma ./prisma
+RUN npm ci
+
+COPY backend ./
+RUN npx prisma generate
+
+FROM node:22-alpine AS frontend-build
+
+WORKDIR /app/frontend
+
+ARG NEXT_PUBLIC_API_URL=
+ARG NEXT_PUBLIC_SOCKET_URL=
+ARG NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=
+
+ENV BACKEND_INTERNAL_URL=http://127.0.0.1:5000
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_SOCKET_URL=$NEXT_PUBLIC_SOCKET_URL
+ENV NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=$NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+
+COPY frontend/package*.json ./
+RUN npm ci
+
+COPY frontend ./
+RUN npm run build
+
+FROM node:22-alpine
+
+WORKDIR /app
+
+RUN apk add --no-cache openssl
+
+COPY --from=backend-build /app/backend ./backend
+COPY --from=frontend-build /app/frontend ./frontend
+COPY render-start.sh ./render-start.sh
+RUN chmod +x /app/render-start.sh
+
+ENV NODE_ENV=production
+ENV BACKEND_PORT=5000
+ENV BACKEND_INTERNAL_URL=http://127.0.0.1:5000
+
+EXPOSE 10000
+
+CMD ["/app/render-start.sh"]
