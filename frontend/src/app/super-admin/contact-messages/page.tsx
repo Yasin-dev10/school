@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { getApiUrl } from '@/app/utils/api';
 
 interface ContactMessage {
     _id: string;
@@ -52,7 +53,7 @@ export default function ContactMessagesPage() {
     const fetchStats = async () => {
         try {
             const token = localStorage.getItem('token');
-            const response = await fetch('http://localhost:5000/api/contact-messages/stats', {
+            const response = await fetch(getApiUrl('/contact-messages/stats'), {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }
@@ -72,8 +73,8 @@ export default function ContactMessagesPage() {
             setLoading(true);
             const token = localStorage.getItem('token');
             const url = filterStatus === 'all'
-                ? 'http://localhost:5000/api/contact-messages'
-                : `http://localhost:5000/api/contact-messages?status=${filterStatus}`;
+                ? getApiUrl('/contact-messages')
+                : getApiUrl(`/contact-messages?status=${filterStatus}`);
 
             const response = await fetch(url, {
                 headers: {
@@ -103,7 +104,7 @@ export default function ContactMessagesPage() {
     const handleUpdateStatus = async (messageId: string, newStatus: string) => {
         try {
             const token = localStorage.getItem('token');
-            const response = await fetch(`http://localhost:5000/api/contact-messages/${messageId}`, {
+            const response = await fetch(getApiUrl(`/contact-messages/${messageId}`), {
                 method: 'PATCH',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -130,7 +131,7 @@ export default function ContactMessagesPage() {
         try {
             setIsSubmitting(true);
             const token = localStorage.getItem('token');
-            const response = await fetch(`http://localhost:5000/api/contact-messages/${selectedMessage._id}`, {
+            const response = await fetch(getApiUrl(`/contact-messages/${selectedMessage._id}`), {
                 method: 'PATCH',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -162,7 +163,7 @@ export default function ContactMessagesPage() {
 
         try {
             const token = localStorage.getItem('token');
-            const response = await fetch(`http://localhost:5000/api/contact-messages/${messageId}`, {
+            const response = await fetch(getApiUrl(`/contact-messages/${messageId}`), {
                 method: 'DELETE',
                 headers: {
                     'Authorization': `Bearer ${token}`

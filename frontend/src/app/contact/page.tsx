@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { validateContactMessage, ValidationError } from '@/utils/validation';
 import { ValidationMessage } from '@/components/ui/ValidationMessage';
+import { getApiUrl } from '@/app/utils/api';
 
 export default function ContactPage() {
     const [formData, setFormData] = useState({
@@ -57,7 +58,7 @@ export default function ContactPage() {
         }
 
         try {
-            const response = await fetch('http://localhost:5000/api/contact-messages', {
+            const response = await fetch(getApiUrl('/contact-messages'), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

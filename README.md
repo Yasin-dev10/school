@@ -383,6 +383,52 @@ flutter build apk --release
 flutter build ios --release
 ```
 
+### Docker
+
+Docker runs PostgreSQL, the backend API, and the Next.js frontend together.
+
+```bash
+Copy-Item .env.example .env
+docker compose up --build
+```
+
+Services:
+
+- Frontend: `http://localhost:3000`
+- Backend API: `http://localhost:5001/api`
+- PostgreSQL: `localhost:5432`
+
+The backend container runs `prisma migrate deploy` before `npm start`. Uploaded backend files are stored in the `backend_uploads` Docker volume, and database data is stored in the `postgres_data` volume.
+
+Useful commands:
+
+```bash
+docker compose down
+docker compose logs backend
+docker compose exec backend npm run db:seed
+```
+
+If you run the backend locally with `npm run dev`, make sure `backend/.env` points to a running PostgreSQL database. To use the Docker PostgreSQL service with local `nodemon`, start only the database:
+
+```bash
+docker compose up -d postgres
+```
+
+Then set `backend/.env` database URLs to:
+
+```env
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/school_management?schema=public
+DIRECT_URL=postgresql://postgres:postgres@localhost:5432/school_management?schema=public
+```
+
+Apply migrations before starting the backend:
+
+```bash
+cd backend
+npm run db:migrate
+npm run dev
+```
+
 ---
 
 ## 📡 API Documentation

@@ -2,7 +2,13 @@ import axios from 'axios';
 
 const defaultUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:5000' : '';
 const configuredUrl = process.env.NEXT_PUBLIC_API_URL || defaultUrl;
-const baseURL = configuredUrl.endsWith('/api') ? configuredUrl : `${configuredUrl}/api`;
+const normalizedUrl = configuredUrl.replace(/\/+$/, '');
+const baseURL = normalizedUrl.endsWith('/api') ? normalizedUrl : `${normalizedUrl}/api`;
+
+export const getApiUrl = (path = '') => {
+    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+    return `${baseURL}${normalizedPath}`;
+};
 
 const api = axios.create({
     baseURL,

@@ -2,8 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import axios from 'axios';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+import { getApiUrl } from '@/app/utils/api';
 
 export default function VerifyCertificate() {
     const params = useParams();
@@ -14,7 +13,7 @@ export default function VerifyCertificate() {
     useEffect(() => {
         const verify = async () => {
             try {
-                const { data } = await axios.get(`${API_URL}/certificates/verify/${params.code}`);
+                const { data } = await axios.get(getApiUrl(`/certificates/verify/${params.code}`));
                 setResult(data.data.certificate);
             } catch (err: any) {
                 setError(err.response?.data?.message || "Invalid verification code");
