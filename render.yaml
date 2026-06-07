@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: school-management-live
+    name: school-management-api-live
     runtime: docker
     plan: free
     region: oregon
@@ -35,9 +35,9 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: FRONTEND_URL
-        value: https://school-management-live.onrender.com
+        value: https://school-management-api-live.onrender.com
       - key: SOCKET_CORS_ORIGIN
-        value: https://school-management-live.onrender.com
+        value: https://school-management-api-live.onrender.com
       - key: STRIPE_SECRET_KEY
         value: ""
       - key: STRIPE_WEBHOOK_SECRET
