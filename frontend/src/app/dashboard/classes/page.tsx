@@ -12,17 +12,24 @@ import {
     BookOpen,
     X,
     CheckCircle2,
-    GraduationCap
+    GraduationCap,
+    Users
 } from 'lucide-react';
 
 
 export default function ClassesPage() {
-    const [classes, setClasses] = useState([]);
+    const [classes, setClasses] = useState<any[]>([]);
     const [teachers, setTeachers] = useState([]);
     const [subjects, setSubjects] = useState([]);
     const [tenantSettings, setTenantSettings] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
+
+    // Student list states
+    const [selectedClassForStudents, setSelectedClassForStudents] = useState<any>(null);
+    const [classStudents, setClassStudents] = useState<any[]>([]);
+    const [loadingStudents, setLoadingStudents] = useState(false);
+    const [isStudentsModalOpen, setIsStudentsModalOpen] = useState(false);
 
     // Form state
     const [formData, setFormData] = useState({
@@ -71,6 +78,21 @@ export default function ClassesPage() {
     useEffect(() => {
         fetchData();
     }, []);
+
+    const handleViewStudents = async (c: any) => {
+        setSelectedClassForStudents(c);
+        setIsStudentsModalOpen(true);
+        setLoadingStudents(true);
+        try {
+            const res = await api.get(`/students?class=${c._id}`);
+            setClassStudents(res.data.data);
+        } catch (error) {
+            console.error("Failed to load students", error);
+            setClassStudents([]);
+        } finally {
+            setLoadingStudents(false);
+        }
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -289,6 +311,14 @@ export default function ClassesPage() {
                             <div className="flex items-center gap-3 text-slate-400 text-sm">
                                 <span className="w-6 flex justify-center text-indigo-400"><DoorOpen className="w-4 h-4" /></span>
                                 <span>Room: {c.room || 'N/A'}</span>
+                            </div>
+
+                            <div 
+                                onClick={() => handleViewStudents(c)}
+                                className="flex items-center gap-3 text-slate-400 text-sm cursor-pointer hover:text-indigo-400 transition-colors"
+                            >
+                                <span className="w-6 flex justify-center text-indigo-400"><Users className="w-4 h-4" /></span>
+                                <span className="font-bold underline decoration-dotted">{c.studentCount || 0} Students</span>
                             </div>
 
                             <div className="flex items-start gap-3 text-slate-400 text-sm">
@@ -542,6 +572,53 @@ export default function ClassesPage() {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+            {/* Students Modal */}
+            {isStudentsModalOpen && selectedClassForStudents && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-300 overflow-y-auto">
+                    <div className="glass-dark w-full max-w-2xl p-6 sm:p-10 rounded-[2.5rem] border border-white/10 shadow-2xl animate-in zoom-in-95 duration-300 my-8">
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-xl sm:text-2xl font-black text-white underline decoration-indigo-500 decoration-4 underline-offset-8">
+                                Students in {selectedClassForStudents.name} ({selectedClassForStudents.section})
+                            </h2>
+                            <button 
+                                onClick={() => setIsStudentsModalOpen(false)} 
+                                className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-slate-400 hover:text-white transition"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {loadingStudents ? (
+                            <div className="py-20 text-center text-slate-500 animate-pulse font-medium italic">Loading student roster...</div>
+                        ) : classStudents.length === 0 ? (
+                            <div className="py-20 text-center text-slate-400 italic">No students registered in this class.</div>
+                        ) : (
+                            <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                                <table className="w-full text-left text-sm text-slate-300">
+                                    <thead>
+                                        <tr className="border-b border-white/10 text-slate-400 font-bold uppercase text-[10px] tracking-widest">
+                                            <th className="py-3 px-4">Roll No</th>
+                                            <th className="py-3 px-4">Student Name</th>
+                                            <th className="py-3 px-4">Email</th>
+                                            <th className="py-3 px-4">Admission No</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-white/5">
+                                        {classStudents.map((student: any) => (
+                                            <tr key={student._id} className="hover:bg-white/5 transition-colors">
+                                                <td className="py-3.5 px-4 font-mono text-indigo-400">{student.profile?.rollNo || 'N/A'}</td>
+                                                <td className="py-3.5 px-4 font-bold text-white">{student.firstName} {student.lastName}</td>
+                                                <td className="py-3.5 px-4 text-slate-400">{student.email}</td>
+                                                <td className="py-3.5 px-4 text-xs font-semibold text-slate-500">{student.profile?.admissionNo || 'N/A'}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

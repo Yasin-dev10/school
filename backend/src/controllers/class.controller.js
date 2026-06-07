@@ -115,7 +115,21 @@ exports.getClasses = async (req, res) => {
             where, include: classInclude, orderBy: [{ name: 'asc' }, { section: 'asc' }]
         });
 
-        res.status(200).json({ success: true, count: classes.length, data: classes.map(formatClass) });
+        const studentCounts = await prisma.user.groupBy({
+            by: ['profileClass', 'profileSection'],
+            where: { tenantId, role: 'student' },
+            _count: { id: true }
+        });
+
+        const formattedClasses = classes.map(c => {
+            const match = studentCounts.find(sc => sc.profileClass === c.name && sc.profileSection === c.section);
+            return {
+                ...formatClass(c),
+                studentCount: match ? match._count.id : 0
+            };
+        });
+
+        res.status(200).json({ success: true, count: classes.length, data: formattedClasses });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -129,7 +143,23 @@ exports.getClass = async (req, res) => {
             include: classInclude
         });
         if (!academicClass) return res.status(404).json({ success: false, message: 'Class not found' });
-        res.status(200).json({ success: true, data: formatClass(academicClass) });
+
+        const studentCount = await prisma.user.count({
+            where: {
+                tenantId: req.user.tenantId,
+                role: 'student',
+                profileClass: academicClass.name,
+                profileSection: academicClass.section
+            }
+        });
+
+        res.status(200).json({
+            success: true,
+            data: {
+                ...formatClass(academicClass),
+                studentCount
+            }
+        });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
