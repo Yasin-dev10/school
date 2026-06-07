@@ -1,6 +1,6 @@
 import type { NextConfig } from "next";
 
-const DEFAULT_BACKEND_URL = "https://school-management-api-live.onrender.com";
+const DEFAULT_BACKEND_URL = "https://school-ta8j.onrender.com";
 const publicApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
 const apiUrl =
   process.env.BACKEND_INTERNAL_URL?.trim() ||
