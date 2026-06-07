@@ -1,6 +1,6 @@
 const prisma = require('../config/prismaClient');
 const { logAction } = require('../utils/logger');
-const { canTeacherAccessClassSubject } = require('../utils/teacherScope');
+const { canTeacherAccessClassSubject, canTeacherAccessStudent } = require('../utils/teacherScope');
 
 const startOfDay = (value) => {
     const date = value ? new Date(value) : new Date();
@@ -174,6 +174,45 @@ exports.getMyAttendance = async (req, res) => {
     try {
         const records = await prisma.attendance.findMany({
             where: { tenantId: req.user.tenantId, studentId: req.user.id },
+            include: includeAttendanceRelations,
+            orderBy: [{ date: 'desc' }, { createdAt: 'desc' }]
+        });
+
+        res.status(200).json({
+            success: true,
+            data: {
+                records: records.map(formatAttendance),
+                stats: buildStats(records)
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.getStudentAttendance = async (req, res) => {
+    try {
+        const { studentId } = req.params;
+        const { startDate, endDate, subjectId } = req.query;
+        const tenantId = req.user.tenantId;
+
+        if (!studentId) return res.status(400).json({ success: false, message: 'Student is required' });
+
+        if (req.user.role === 'teacher') {
+            const allowed = await canTeacherAccessStudent(req.user.id, studentId, tenantId);
+            if (!allowed) return res.status(403).json({ success: false, message: 'You are not assigned to this student' });
+        }
+
+        const where = { tenantId, studentId };
+        if (subjectId) where.subjectId = subjectId;
+        if (startDate || endDate) {
+            where.date = {};
+            if (startDate) where.date.gte = new Date(startDate);
+            if (endDate) where.date.lte = new Date(endDate);
+        }
+
+        const records = await prisma.attendance.findMany({
+            where,
             include: includeAttendanceRelations,
             orderBy: [{ date: 'desc' }, { createdAt: 'desc' }]
         });

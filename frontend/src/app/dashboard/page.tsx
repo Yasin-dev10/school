@@ -293,7 +293,7 @@ export default function DashboardPage() {
 
 
     const attendanceTrendData = adminData ? {
-        labels: adminData.attendance.trends.map((t: any) => t._id.slice(5)), // slice for cleaner date
+        labels: adminData.attendance.trends.map((t: any) => t._id ? t._id.slice(5) : ''), // slice for cleaner date
         datasets: [{
             label: 'Attendance Rate (%)',
             data: adminData.attendance.trends.map((t: any) => Math.round(t.rate)),
@@ -330,7 +330,7 @@ export default function DashboardPage() {
     } : null;
 
     const genderData = adminData ? {
-        labels: adminData.demographics.gender.map((g: any) => g._id?.charAt(0).toUpperCase() + g._id?.slice(1) || 'N/A'),
+        labels: adminData.demographics.gender.map((g: any) => g._id ? g._id.charAt(0).toUpperCase() + g._id.slice(1) : 'N/A'),
         datasets: [{
             data: adminData.demographics.gender.map((g: any) => g.count),
             backgroundColor: ['#60a5fa', '#f472b6', '#94a3b8'],

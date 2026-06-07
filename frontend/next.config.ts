@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
 
-const apiUrl = process.env.BACKEND_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || "https://school-ta8j.onrender.com/api";
+const DEFAULT_BACKEND_URL = "https://school-management-live.onrender.com";
+const publicApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
+const apiUrl =
+  process.env.BACKEND_INTERNAL_URL?.trim() ||
+  (publicApiUrl?.startsWith("http") ? publicApiUrl : "") ||
+  DEFAULT_BACKEND_URL;
 const backendUrl = apiUrl.replace(/\/api\/?$/, "").replace(/\/+$/, "");
 
 const nextConfig: NextConfig = {

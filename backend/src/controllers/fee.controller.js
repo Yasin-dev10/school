@@ -88,7 +88,11 @@ exports.getInvoices = async (req, res) => {
             include: {
                 student: { select: { id: true, firstName: true, lastName: true, admissionNo: true } },
                 class: { select: { id: true, name: true, section: true } },
-                items: { include: { feeType: { select: { id: true, name: true } } } }
+                items: { include: { feeType: { select: { id: true, name: true } } } },
+                payments: {
+                    include: { markedBy: { select: { id: true, firstName: true, lastName: true } } },
+                    orderBy: { paymentDate: 'desc' }
+                }
             },
             orderBy: { createdAt: 'desc' }
         });
@@ -150,7 +154,16 @@ exports.generateClassInvoices = async (req, res) => {
 };
 exports.getInvoiceById = async (req, res) => {
     try {
-        const invoice = await prisma.invoice.findFirst({ where: { id: req.params.id, tenantId: req.user.tenantId }, include: { items: { include: { feeType: true } } } });
+        const invoice = await prisma.invoice.findFirst({
+            where: { id: req.params.id, tenantId: req.user.tenantId },
+            include: {
+                items: { include: { feeType: true } },
+                payments: {
+                    include: { markedBy: { select: { id: true, firstName: true, lastName: true } } },
+                    orderBy: { paymentDate: 'desc' }
+                }
+            }
+        });
         res.status(200).json({ success: true, data: invoice });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });

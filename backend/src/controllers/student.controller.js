@@ -291,6 +291,7 @@ exports.updateStudent = async (req, res) => {
                 ...(profile?.rollNo !== undefined && { rollNo: profile.rollNo }),
                 ...(profile?.admissionNo !== undefined && { admissionNo: profile.admissionNo }),
                 ...(profile?.studentId !== undefined && { studentId: profile.studentId }),
+                ...(profile?.parentRelationship !== undefined && { parentRelationship: profile.parentRelationship }),
                 ...(profile?.qualification !== undefined && { qualification: profile.qualification })
             },
             select: userSelect
