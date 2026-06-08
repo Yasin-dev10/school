@@ -35,7 +35,7 @@ export default function ExamsPage() {
 
     // Board State
     const [isExamModalOpen, setIsExamModalOpen] = useState(false);
-    const [examForm, setExamForm] = useState({ name: '', term: 'First Term', startDate: '', endDate: '', classes: [] });
+    const [examForm, setExamForm] = useState<{ name: string; term: string; startDate: string; endDate: string; classes: string[] }>({ name: '', term: 'First_Term', startDate: '', endDate: '', classes: [] });
 
     // Grades State
     const [selectedExam, setSelectedExam] = useState<any>(null);
@@ -54,6 +54,13 @@ export default function ExamsPage() {
     const [complaints, setComplaints] = useState<any[]>([]);
     const [isComplaintModalOpen, setIsComplaintModalOpen] = useState(false);
     const [complaintForm, setComplaintForm] = useState({ examId: '', subjectId: '', currentMark: 0, reason: '' });
+
+    // Clearance State
+    const [clearanceClass, setClearanceClass] = useState<any>(null);
+    const [clearanceStudents, setClearanceStudents] = useState<any[]>([]);
+    const [clearanceSelectedStudent, setClearanceSelectedStudent] = useState<any>(null);
+    const [clearanceData, setClearanceData] = useState<any>(null);
+    const [isCheckingClearance, setIsCheckingClearance] = useState(false);
 
     // Report Card State
     const [reportData, setReportData] = useState<any>(null);
@@ -239,6 +246,38 @@ export default function ExamsPage() {
         fetchMarksAndStudents();
     }, [view, selectedExam, selectedClass, selectedSubject]);
 
+    // When class changes for clearance view
+    useEffect(() => {
+        if (view === 'clearance' && clearanceClass) {
+            const fetchStudents = async () => {
+                try {
+                    const { data } = await api.get(`/students?class=${clearanceClass._id}`);
+                    setClearanceStudents(data.data);
+                    setClearanceSelectedStudent(null);
+                    setClearanceData(null);
+                } catch (err) {
+                    console.error("Failed to fetch students");
+                }
+            };
+            fetchStudents();
+        }
+    }, [view, clearanceClass]);
+
+    const checkClearance = async (studentId: string) => {
+        setIsCheckingClearance(true);
+        try {
+            const { data } = await api.get(`/fees/invoices?studentId=${studentId}`);
+            const invoices = data.data;
+            const unpaidInvoices = invoices.filter((i: any) => i.status === 'unpaid' || i.status === 'partially_paid');
+            const totalOwed = unpaidInvoices.reduce((acc: number, i: any) => acc + (i.totalAmount - i.paidAmount), 0);
+            setClearanceData({ unpaidInvoices, totalOwed });
+        } catch (err) {
+            console.error("Failed to fetch fee clearance");
+        } finally {
+            setIsCheckingClearance(false);
+        }
+    };
+
     const handleCreateExam = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
@@ -298,7 +337,17 @@ export default function ExamsPage() {
     const handleSaveGradeConfig = async () => {
         setIsConfigSaving(true);
         try {
-            await api.put('/exams/grade-system', gradeSystem);
+            const payload = {
+                isActive: gradeSystem?.isActive ?? true,
+                grades: gradeSystem?.grades?.map((g: any) => ({
+                    grade: g.grade,
+                    minPercentage: Number(g.minPercentage),
+                    maxPercentage: Number(g.maxPercentage),
+                    gpa: Number(g.gpa),
+                    remarks: g.remarks || null
+                })) || []
+            };
+            await api.put('/exams/grade-system', payload);
             alert("Grade configuration saved!");
         } catch (err) {
             alert("Failed to save configuration");
@@ -340,6 +389,7 @@ export default function ExamsPage() {
                         <button onClick={() => setView('board')} className={`flex-1 lg:flex-none px-3 sm:px-4 py-2 rounded-xl text-[10px] sm:text-xs font-bold transition-all ${view === 'board' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Board</button>
                         <button onClick={() => setView('grades')} className={`flex-1 lg:flex-none px-3 sm:px-4 py-2 rounded-xl text-[10px] sm:text-xs font-bold transition-all ${view === 'grades' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Grades</button>
                         {isActualAdmin && <button onClick={() => setView('grade-config')} className={`flex-1 lg:flex-none px-3 sm:px-4 py-2 rounded-xl text-[10px] sm:text-xs font-bold transition-all ${view === 'grade-config' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Grading</button>}
+                        <button onClick={() => setView('clearance')} className={`flex-1 lg:flex-none px-3 sm:px-4 py-2 rounded-xl text-[10px] sm:text-xs font-bold transition-all ${view === 'clearance' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Clearance</button>
                         <button onClick={() => setView('complaints')} className={`flex-1 lg:flex-none px-3 sm:px-4 py-2 rounded-xl text-[10px] sm:text-xs font-bold transition-all ${view === 'complaints' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Complaints</button>
                     </div>
                 )}
@@ -432,7 +482,7 @@ export default function ExamsPage() {
                                     </span>
                                 </div>
                                 <h3 className="text-2xl font-black text-white mb-1">{exam.name}</h3>
-                                <p className="text-slate-500 text-[10px] uppercase font-black tracking-widest mb-6">{exam.term}</p>
+                                <p className="text-slate-500 text-[10px] uppercase font-black tracking-widest mb-6">{exam.term.replace('_', ' ')}</p>
                                 <div className="grid grid-cols-2 gap-4 mb-8">
                                     <div className="bg-white/5 p-3 rounded-2xl border border-white/5"><p className="text-[9px] text-slate-500 font-black uppercase">Starts</p><p className="text-xs font-bold text-slate-300">{new Date(exam.startDate).toLocaleDateString()}</p></div>
                                     <div className="bg-white/5 p-3 rounded-2xl border border-white/5"><p className="text-[9px] text-slate-500 font-black uppercase">Classes</p><p className="text-xs font-bold text-slate-300">{exam.classes?.length || 0}</p></div>
@@ -543,7 +593,7 @@ export default function ExamsPage() {
                                 <input type="number" value={g.minPercentage} onChange={(e) => { const n = [...gradeSystem.grades]; n[i].minPercentage = Number(e.target.value); setGradeSystem({ ...gradeSystem, grades: n }); }} className="bg-transparent text-indigo-400 font-bold text-center focus:outline-none" />
                                 <input type="number" value={g.maxPercentage} onChange={(e) => { const n = [...gradeSystem.grades]; n[i].maxPercentage = Number(e.target.value); setGradeSystem({ ...gradeSystem, grades: n }); }} className="bg-transparent text-indigo-400 font-bold text-center focus:outline-none" />
                                 <input type="number" step="0.1" value={g.gpa} onChange={(e) => { const n = [...gradeSystem.grades]; n[i].gpa = Number(e.target.value); setGradeSystem({ ...gradeSystem, grades: n }); }} className="bg-transparent text-emerald-400 font-bold text-center focus:outline-none" />
-                                <input value={g.remarks} onChange={(e) => { const n = [...gradeSystem.grades]; n[i].remarks = e.target.value; setGradeSystem({ ...gradeSystem, grades: n }); }} className="bg-transparent text-white text-xs focus:outline-none placeholder:text-slate-800" placeholder="Default remark..." />
+                                <input value={g.remarks || ''} onChange={(e) => { const n = [...gradeSystem.grades]; n[i].remarks = e.target.value; setGradeSystem({ ...gradeSystem, grades: n }); }} className="bg-transparent text-white text-xs focus:outline-none placeholder:text-slate-800" placeholder="Default remark..." />
                             </div>
                         ))}
                     </div>
@@ -578,6 +628,86 @@ export default function ExamsPage() {
                             </div>
                         )) : <div className="col-span-full py-24 text-center opacity-40">No complaints reported.</div>}
                     </div>
+                </div>
+            ) : view === 'clearance' ? (
+                <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
+                    <div className="flex justify-between items-center">
+                        <div>
+                            <h2 className="text-3xl font-black text-white">Exam Fee Clearance</h2>
+                            <p className="text-slate-400 text-sm mt-1">Hubi in ardeyga uu bixiyay dhammaan lacagaha si uu imtixaanka u galo.</p>
+                        </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-900/40 p-4 sm:p-6 rounded-[2.5rem] border border-white/5 items-end">
+                        <select 
+                            value={clearanceClass?._id || ''} 
+                            onChange={(e) => setClearanceClass(classes.find((cl: any) => cl._id === e.target.value))} 
+                            className="w-full px-5 py-3 bg-slate-950 border border-white/10 rounded-2xl text-white text-sm"
+                        >
+                            <option value="">Dooro Fasalka (Class)...</option>
+                            {classes.map((cl: any) => <option key={cl._id} value={cl._id}>{cl.name} - {cl.section}</option>)}
+                        </select>
+                        <select 
+                            value={clearanceSelectedStudent?._id || ''} 
+                            onChange={(e) => {
+                                const student = clearanceStudents.find((s: any) => s._id === e.target.value);
+                                setClearanceSelectedStudent(student);
+                                if (student) checkClearance(student._id);
+                            }} 
+                            disabled={!clearanceClass}
+                            className="w-full px-5 py-3 bg-slate-950 border border-white/10 rounded-2xl text-white text-sm disabled:opacity-50"
+                        >
+                            <option value="">Dooro Ardeyga (Student)...</option>
+                            {clearanceStudents.map((s: any) => <option key={s._id} value={s._id}>{s.firstName} {s.lastName}</option>)}
+                        </select>
+                    </div>
+
+                    {isCheckingClearance ? (
+                        <div className="glass-dark p-12 rounded-[3.5rem] text-center">
+                            <h3 className="text-xl font-bold text-slate-400 animate-pulse">Hubinayaa xogta lacagbixinta...</h3>
+                        </div>
+                    ) : clearanceData && clearanceSelectedStudent ? (
+                        <div className={`glass-dark p-8 sm:p-12 rounded-[3.5rem] border ${clearanceData.totalOwed > 0 ? 'border-red-500/30 bg-red-950/10' : 'border-emerald-500/30 bg-emerald-950/10'} text-center space-y-6 transition-all`}>
+                            {clearanceData.totalOwed > 0 ? (
+                                <>
+                                    <div className="w-20 h-20 mx-auto bg-red-500/10 rounded-full flex items-center justify-center text-4xl mb-4 shadow-lg shadow-red-500/20">⚠️</div>
+                                    <h3 className="text-3xl font-black text-white">Lacagaha Iska Xalli</h3>
+                                    <p className="text-slate-300 text-lg">Ardeygaan lacag ayaa lagu leeyahay. Fadlan ha iska bixiyo lacagaha hoos ku xusan ka hor inta uusan galin imtixaanka.</p>
+                                    <div className="inline-block bg-red-500/10 border border-red-500/20 rounded-3xl p-8 mt-6">
+                                        <p className="text-sm font-bold text-red-400 uppercase tracking-widest mb-2">Wadarta Lagu Leeyahay</p>
+                                        <p className="text-5xl font-black text-red-500">${clearanceData.totalOwed.toFixed(2)}</p>
+                                    </div>
+                                    {clearanceData.unpaidInvoices.length > 0 && (
+                                        <div className="mt-8 text-left max-w-2xl mx-auto space-y-3 bg-slate-950/50 p-6 rounded-[2rem] border border-white/5">
+                                            <h4 className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-4 px-2">Faahfaahinta Qaansheegta (Invoices)</h4>
+                                            {clearanceData.unpaidInvoices.map((inv: any) => (
+                                                <div key={inv._id} className="flex justify-between items-center bg-slate-900 p-4 rounded-2xl border border-white/5 hover:border-white/10 transition-colors">
+                                                    <div>
+                                                        <p className="text-white font-bold">{inv.invoiceNumber}</p>
+                                                        <p className="text-xs text-slate-400 mt-1">Due: {new Date(inv.dueDate).toLocaleDateString()}</p>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className="text-red-400 font-black text-lg">${(inv.totalAmount - inv.paidAmount).toFixed(2)}</p>
+                                                        <p className="text-[10px] text-slate-500 uppercase tracking-widest">{inv.status.replace('_', ' ')}</p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </>
+                            ) : (
+                                <>
+                                    <div className="w-20 h-20 mx-auto bg-emerald-500/10 rounded-full flex items-center justify-center text-4xl mb-4 shadow-lg shadow-emerald-500/20">✅</div>
+                                    <h3 className="text-3xl font-black text-white">U Fasaxan Imtixaanka</h3>
+                                    <p className="text-emerald-400 text-lg">Ardeygan wax lacag ah laguma laha. Waa u fasaxan yahay inuu imtixaanka galo.</p>
+                                </>
+                            )}
+                        </div>
+                    ) : clearanceClass && !clearanceSelectedStudent ? (
+                        <div className="glass-dark p-12 rounded-[3.5rem] text-center text-slate-500 font-medium">
+                            Fadlan dooro ardeyga si aad u hubiso lacagaha laga rabo.
+                        </div>
+                    ) : null}
                 </div>
             ) : (
                 /* Grades Marking Entry View */
@@ -642,10 +772,30 @@ export default function ExamsPage() {
                     <form onSubmit={handleCreateExam} className="bg-slate-900 w-full max-w-md p-6 sm:p-8 rounded-[2.5rem] border border-white/10 space-y-6 my-8">
                         <h2 className="text-xl sm:text-2xl font-bold">New Exam</h2>
                         <input placeholder="Exam Name" className="w-full p-4 bg-slate-950 border border-white/10 rounded-2xl text-white" value={examForm.name} onChange={e => setExamForm({ ...examForm, name: e.target.value })} required />
-                        <select className="w-full p-4 bg-slate-950 border border-white/10 rounded-2xl text-white" value={examForm.term} onChange={e => setExamForm({ ...examForm, term: e.target.value })}><option>First Term</option><option>Mid Term</option><option>Final Term</option></select>
+                        <select className="w-full p-4 bg-slate-950 border border-white/10 rounded-2xl text-white" value={examForm.term} onChange={e => setExamForm({ ...examForm, term: e.target.value })}><option value="First_Term">First Term</option><option value="Mid_Term">Mid Term</option><option value="Final_Term">Final Term</option></select>
                         <div className="grid grid-cols-2 gap-4">
                             <input type="date" className="p-4 bg-slate-950 border border-white/10 rounded-2xl text-white" value={examForm.startDate} onChange={e => setExamForm({ ...examForm, startDate: e.target.value })} />
                             <input type="date" className="p-4 bg-slate-950 border border-white/10 rounded-2xl text-white" value={examForm.endDate} onChange={e => setExamForm({ ...examForm, endDate: e.target.value })} />
+                        </div>
+                        <div className="space-y-2 max-h-32 overflow-y-auto custom-scrollbar p-2 bg-slate-950 border border-white/10 rounded-2xl">
+                            <p className="text-xs text-slate-400 font-bold px-2">Select Classes</p>
+                            {classes.map((cl: any) => (
+                                <label key={cl._id} className="flex items-center gap-2 px-2 py-1 hover:bg-white/5 rounded-lg cursor-pointer">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={examForm.classes.includes(cl._id)}
+                                        onChange={(e) => {
+                                            if (e.target.checked) {
+                                                setExamForm({ ...examForm, classes: [...examForm.classes, cl._id] });
+                                            } else {
+                                                setExamForm({ ...examForm, classes: examForm.classes.filter(id => id !== cl._id) });
+                                            }
+                                        }}
+                                        className="rounded border-white/10 bg-slate-900 text-indigo-500"
+                                    />
+                                    <span className="text-sm text-white">{cl.name} - {cl.section}</span>
+                                </label>
+                            ))}
                         </div>
                         <div className="flex gap-4"><button type="button" onClick={() => setIsExamModalOpen(false)} className="flex-1 py-4 bg-slate-800 text-white rounded-2xl font-bold">Cancel</button><button type="submit" className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-bold">Create</button></div>
                     </form>

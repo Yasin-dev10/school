@@ -84,6 +84,22 @@ export default function StudentsListPage() {
         return matchesSearch && matchesClass;
     });
 
+    const getSectionsForClass = (className: string) => {
+        return classes.filter((c: any) => c.name === className);
+    };
+
+    const firstSectionForClass = (className: string) => {
+        return getSectionsForClass(className)[0]?.section || 'A';
+    };
+
+    const handleAssignClassChange = (className: string) => {
+        setModalData({ class: className, section: firstSectionForClass(className) });
+    };
+
+    const handleEditClassChange = (className: string) => {
+        setEditStudentData({ ...editStudentData, class: className, section: firstSectionForClass(className) });
+    };
+
     const toggleSelectAll = () => {
         if (selectedStudents.length === filteredStudents.length) {
             setSelectedStudents([]);
@@ -468,7 +484,7 @@ export default function StudentsListPage() {
                                 <select
                                     required
                                     value={modalData.class}
-                                    onChange={e => setModalData({ ...modalData, class: e.target.value })}
+                                    onChange={e => handleAssignClassChange(e.target.value)}
                                     className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/50 outline-none transition"
                                 >
                                     <option value="">Select a Class</option>
@@ -486,10 +502,10 @@ export default function StudentsListPage() {
                                     onChange={e => setModalData({ ...modalData, section: e.target.value })}
                                     className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-2xl text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500/50 outline-none transition"
                                 >
-                                    {classes.filter((c: any) => c.name === modalData.class).map((c: any) => (
+                                    {getSectionsForClass(modalData.class).map((c: any) => (
                                         <option key={c._id} value={c.section}>{c.section}</option>
-                                    )) || <option value="A">A</option>}
-                                    {classes.filter((c: any) => c.name === modalData.class).length === 0 && <option value="A">A</option>}
+                                    ))}
+                                    {getSectionsForClass(modalData.class).length === 0 && <option value="A">A</option>}
                                 </select>
                             </div>
 
@@ -653,7 +669,7 @@ export default function StudentsListPage() {
                                         <select
                                             required
                                             value={editStudentData.class}
-                                            onChange={e => setEditStudentData({ ...editStudentData, class: e.target.value })}
+                                            onChange={e => handleEditClassChange(e.target.value)}
                                             className="w-full px-5 py-4 bg-slate-900 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500/50 outline-none transition"
                                         >
                                             <option value="">Select a Class</option>
@@ -670,10 +686,10 @@ export default function StudentsListPage() {
                                             onChange={e => setEditStudentData({ ...editStudentData, section: e.target.value })}
                                             className="w-full px-5 py-4 bg-slate-900 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500/50 outline-none transition"
                                         >
-                                            {classes.filter((c: any) => c.name === editStudentData.class).map((c: any) => (
+                                            {getSectionsForClass(editStudentData.class).map((c: any) => (
                                                 <option key={c._id} value={c.section}>{c.section}</option>
-                                            )) || <option value="A">A</option>}
-                                            {classes.filter((c: any) => c.name === editStudentData.class).length === 0 && <option value="A">A</option>}
+                                            ))}
+                                            {getSectionsForClass(editStudentData.class).length === 0 && <option value="A">A</option>}
                                         </select>
                                     </div>
                                     <div className="space-y-2">

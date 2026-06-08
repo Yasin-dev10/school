@@ -62,6 +62,16 @@ export default function AddStudentPage() {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
 
+    const getSectionsForClass = (className: string) => {
+        return classes.filter((c: any) => c.name === className);
+    };
+
+    const handleClassChange = (e: any) => {
+        const className = e.target.value;
+        const firstSection = getSectionsForClass(className)[0]?.section || 'A';
+        setFormData({ ...formData, class: className, section: firstSection });
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
@@ -265,7 +275,7 @@ export default function AddStudentPage() {
                         <div className="space-y-2">
                             <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Class</label>
                             <select
-                                name="class" required value={formData.class} onChange={handleChange}
+                                name="class" required value={formData.class} onChange={handleClassChange}
                                 className="w-full px-5 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500/50 outline-none"
                             >
                                 <option value="">Select Class</option>
@@ -280,10 +290,10 @@ export default function AddStudentPage() {
                                 name="section" required value={formData.section} onChange={handleChange}
                                 className="w-full px-5 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500/50 outline-none"
                             >
-                                {classes.filter((c: any) => c.name === formData.class).map((c: any) => (
+                                {getSectionsForClass(formData.class).map((c: any) => (
                                     <option key={c._id} value={c.section}>{c.section}</option>
-                                )) || <option value="A">A</option>}
-                                {classes.filter((c: any) => c.name === formData.class).length === 0 && <option value="A">A</option>}
+                                ))}
+                                {getSectionsForClass(formData.class).length === 0 && <option value="A">A</option>}
                             </select>
                         </div>
                         <div className="space-y-2 lg:col-span-2">

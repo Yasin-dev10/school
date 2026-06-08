@@ -1,5 +1,6 @@
 const prisma = require('../config/prismaClient');
 const { logAction } = require('../utils/logger');
+const { resolveClassReference, studentWhereForClass } = require('../utils/classProfile');
 
 const classInclude = {
     classTeacher: { select: { id: true, firstName: true, lastName: true, email: true } },
@@ -11,12 +12,15 @@ const classInclude = {
     }
 };
 
+const withId = (record) => record ? { ...record, _id: record.id } : record;
+
 const formatClass = (c) => ({
     ...c,
     _id: c.id,
+    classTeacher: withId(c.classTeacher),
     subjects: c.subjects?.map(cs => ({
-        subject: cs.subject,
-        teachers: cs.teachers?.map(t => t.teacher)
+        subject: withId(cs.subject),
+        teachers: cs.teachers?.map(t => withId(t.teacher)) || []
     })) || []
 });
 
@@ -93,8 +97,14 @@ exports.getClasses = async (req, res) => {
             ];
         } else if (role === 'student') {
             if (req.user.profile?.class) {
-                where.name = req.user.profile.class;
-                if (req.user.profile.section) where.section = req.user.profile.section;
+                const ownClass = await resolveClassReference(prisma, {
+                    tenantId,
+                    classRef: req.user.profile.class,
+                    section: req.user.profile.section
+                });
+
+                if (!ownClass) return res.status(200).json({ success: true, count: 0, data: [] });
+                where.id = ownClass.id;
             } else {
                 return res.status(200).json({ success: true, count: 0, data: [] });
             }
@@ -103,7 +113,14 @@ exports.getClasses = async (req, res) => {
                 where: { parentLinks: { some: { parentId: req.user.id } }, tenantId, role: 'student' }
             });
             if (children.length > 0) {
-                const filters = children.map(c => ({ name: c.profileClass, section: c.profileSection })).filter(f => f.name);
+                const childClasses = await Promise.all(children
+                    .filter(c => c.profileClass)
+                    .map(c => resolveClassReference(prisma, {
+                        tenantId,
+                        classRef: c.profileClass,
+                        section: c.profileSection
+                    }).catch(() => null)));
+                const filters = childClasses.filter(Boolean).map(c => ({ id: c.id }));
                 if (filters.length > 0) where.OR = filters;
                 else return res.status(200).json({ success: true, count: 0, data: [] });
             } else {
@@ -122,10 +139,15 @@ exports.getClasses = async (req, res) => {
         });
 
         const formattedClasses = classes.map(c => {
-            const match = studentCounts.find(sc => sc.profileClass === c.name && sc.profileSection === c.section);
+            const studentCount = studentCounts.reduce((total, sc) => {
+                const canonicalMatch = sc.profileClass === c.name && sc.profileSection === c.section;
+                const legacyIdMatch = sc.profileClass === c.id;
+                return canonicalMatch || legacyIdMatch ? total + sc._count.id : total;
+            }, 0);
+
             return {
                 ...formatClass(c),
-                studentCount: match ? match._count.id : 0
+                studentCount
             };
         });
 
@@ -145,12 +167,7 @@ exports.getClass = async (req, res) => {
         if (!academicClass) return res.status(404).json({ success: false, message: 'Class not found' });
 
         const studentCount = await prisma.user.count({
-            where: {
-                tenantId: req.user.tenantId,
-                role: 'student',
-                profileClass: academicClass.name,
-                profileSection: academicClass.section
-            }
+            where: studentWhereForClass(req.user.tenantId, academicClass)
         });
 
         res.status(200).json({
@@ -173,7 +190,7 @@ exports.updateClass = async (req, res) => {
 
         const { name, section, room, classTeacher, gradeLevel, grade, subjects } = req.body;
 
-        let subjectUpdate = {};
+        let subjectCreate = [];
         if (subjects !== undefined) {
             if (!Array.isArray(subjects)) return res.status(400).json({ success: false, message: 'Subjects must be an array' });
 
@@ -190,30 +207,46 @@ exports.updateClass = async (req, res) => {
                 validatedSubjects.push({ subjectId: sub.subject, teachers });
             }
 
-            // Delete existing and recreate
-            await prisma.classSubject.deleteMany({ where: { classId: req.params.id } });
-            subjectUpdate = {
-                subjects: {
-                    create: validatedSubjects.map(vs => ({
-                        subject: { connect: { id: vs.subjectId } },
-                        teachers: { create: vs.teachers.map(tId => ({ teacher: { connect: { id: tId } } })) }
-                    }))
-                }
-            };
+            subjectCreate = validatedSubjects.map(vs => ({
+                subject: { connect: { id: vs.subjectId } },
+                teachers: { create: vs.teachers.map(tId => ({ teacher: { connect: { id: tId } } })) }
+            }));
         }
 
-        const updated = await prisma.class.update({
-            where: { id: req.params.id },
-            data: {
-                ...(name !== undefined && { name }),
-                ...(section !== undefined && { section }),
-                ...(room !== undefined && { room }),
-                ...(classTeacher !== undefined && { classTeacherId: classTeacher || null }),
-                ...(gradeLevel !== undefined && { gradeLevel }),
-                ...(grade !== undefined && { grade }),
-                ...subjectUpdate
-            },
-            include: classInclude
+        const nextName = name !== undefined ? name : exists.name;
+        const nextSection = section !== undefined ? section : exists.section;
+        const classIdentityChanged = nextName !== exists.name || nextSection !== exists.section;
+
+        const updated = await prisma.$transaction(async (tx) => {
+            if (subjects !== undefined) {
+                await tx.classSubject.deleteMany({ where: { classId: req.params.id } });
+            }
+
+            const updatedClass = await tx.class.update({
+                where: { id: req.params.id },
+                data: {
+                    ...(name !== undefined && { name }),
+                    ...(section !== undefined && { section }),
+                    ...(room !== undefined && { room }),
+                    ...(classTeacher !== undefined && { classTeacherId: classTeacher || null }),
+                    ...(gradeLevel !== undefined && { gradeLevel }),
+                    ...(grade !== undefined && { grade }),
+                    ...(subjects !== undefined && subjectCreate.length > 0 && { subjects: { create: subjectCreate } })
+                },
+                include: classInclude
+            });
+
+            if (classIdentityChanged) {
+                await tx.user.updateMany({
+                    where: studentWhereForClass(req.user.tenantId, exists),
+                    data: {
+                        profileClass: updatedClass.name,
+                        profileSection: updatedClass.section
+                    }
+                });
+            }
+
+            return updatedClass;
         });
 
         await logAction({ action: 'UPDATE', module: 'CLASS', details: `Updated class: ${updated.name} - ${updated.section}`, userId: req.user._id, tenantId: req.user.tenantId });

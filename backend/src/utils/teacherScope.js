@@ -32,7 +32,10 @@ const getTeacherScope = async (teacherId, tenantId) => {
 
     return {
         classIds: [...new Set(classes.map(c => c.id))],
-        classFilters: classes.map(c => ({ profileClass: c.name, profileSection: c.section })),
+        classFilters: classes.flatMap(c => [
+            { profileClass: c.name, profileSection: c.section },
+            { profileClass: c.id }
+        ]),
         subjectIds: [...new Set(subjects.map(s => s.id))],
         timetablePairs: timetables.map(t => ({ classId: t.classId, subjectId: t.subjectId }))
     };

@@ -88,7 +88,11 @@ export default function FinancePage() {
     const handleCreateFee = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            await api.post('/fees/types', feeForm);
+            const payload = {
+                ...feeForm,
+                amount: Number(feeForm.amount)
+            };
+            await api.post('/fees/types', payload);
             setIsFeeModalOpen(false);
             setFeeForm({ name: '', amount: '', description: '' });
             fetchData();
@@ -122,6 +126,7 @@ export default function FinancePage() {
         try {
             await api.post('/fees/pay', {
                 ...paymentForm,
+                amount: Number(paymentForm.amount),
                 invoiceId: selectedInvoice._id
             });
             setIsPaymentModalOpen(false);
@@ -137,7 +142,10 @@ export default function FinancePage() {
     const handleCreateExpense = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            await api.post('/fees/expenses', expenseForm);
+            await api.post('/fees/expenses', {
+                ...expenseForm,
+                amount: Number(expenseForm.amount)
+            });
             setIsExpenseModalOpen(false);
             setExpenseForm({ title: '', category: 'supplies', amount: '', date: new Date().toISOString().split('T')[0], description: '' });
             fetchData();
@@ -388,22 +396,25 @@ export default function FinancePage() {
                             <div className="space-y-1.5">
                                 <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Select Fee Components</label>
                                 <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto pr-2">
-                                    {feeTypes.map((ft: any) => (
-                                        <label key={ft._id} className="flex items-center gap-3 p-3 bg-slate-900/50 rounded-xl cursor-pointer hover:bg-slate-800 transition">
-                                            <input
-                                                type="checkbox"
-                                                checked={bulkForm.feeTypeIds.includes(ft._id as never)}
-                                                onChange={(e) => {
-                                                    const ids = e.target.checked
-                                                        ? [...bulkForm.feeTypeIds, ft._id]
-                                                        : bulkForm.feeTypeIds.filter(id => id !== ft._id);
-                                                    setBulkForm({ ...bulkForm, feeTypeIds: ids as never[] });
-                                                }}
-                                                className="w-4 h-4 rounded border-white/10 bg-slate-950 text-indigo-600"
-                                            />
-                                            <span className="text-sm font-bold text-white">{ft.name}</span>
-                                            <span className="ml-auto text-xs text-indigo-400">${ft.amount}</span>
-                                        </label>
+                                    {feeTypes.map((ft: any, idx: number) => (
+                                        <div key={ft._id || ft.id || idx}>
+                                            <label className="flex items-center gap-3 p-3 bg-slate-900/50 rounded-xl cursor-pointer hover:bg-slate-800 transition">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={bulkForm.feeTypeIds.includes((ft._id || ft.id) as never)}
+                                                    onChange={(e) => {
+                                                        const feeId = ft._id || ft.id;
+                                                        const ids = e.target.checked
+                                                            ? [...bulkForm.feeTypeIds, feeId]
+                                                            : bulkForm.feeTypeIds.filter(id => id !== feeId);
+                                                        setBulkForm({ ...bulkForm, feeTypeIds: ids as never[] });
+                                                    }}
+                                                    className="w-4 h-4 rounded border-white/10 bg-slate-950 text-indigo-600"
+                                                />
+                                                <span className="text-sm font-bold text-white">{ft.name}</span>
+                                                <span className="ml-auto text-xs text-indigo-400">${ft.amount}</span>
+                                            </label>
+                                        </div>
                                     ))}
                                 </div>
                             </div>

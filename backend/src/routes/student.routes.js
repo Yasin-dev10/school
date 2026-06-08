@@ -19,7 +19,7 @@ const { studentSchema } = require('../utils/validationSchemas');
 router.use(protect);
 
 router.get('/my-children', authorize('parent'), getChildren);
-router.post('/promote', authorize('school-admin'), validateBulkOperation(), promoteStudents);
+router.post('/promote', authorize('school-admin'), promoteStudents);
 router.post('/bulk-import', authorize('school-admin'), validateBulkOperation(), bulkImportStudents);
 
 // Restricted to roles that can manage students

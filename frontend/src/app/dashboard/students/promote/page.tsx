@@ -80,8 +80,10 @@ export default function PromoteStudentsPage() {
             return;
         }
 
-        const fromClassName = classes.find(c => c._id === fromClass)?.name;
-        const toClassName = classes.find(c => c._id === toClass)?.name;
+        const sourceClassObj = classes.find(c => c._id === fromClass);
+        const targetClassObj = classes.find(c => c._id === toClass);
+        const fromClassName = sourceClassObj?.name;
+        const toClassName = targetClassObj?.name;
 
         if (!confirm(`Are you sure you want to ${promotionType === 'auto' ? 'AUTO ' : ''}promote students from ${fromClassName} to ${toClassName}?`)) {
             return;
@@ -91,12 +93,11 @@ export default function PromoteStudentsPage() {
         setPromotionResult(null); // Clear previous results
 
         try {
-            const targetClassObj = classes.find(c => c._id === toClass);
-
             const payload: any = {
-                currentClass: fromClassName, // Required for auto
-                nextClass: targetClassObj?.name,
-                nextSection: toSection,
+                currentClass: sourceClassObj?._id || fromClass,
+                currentSection: sourceClassObj?.section,
+                nextClass: targetClassObj?._id || toClass,
+                nextSection: targetClassObj?.section || toSection,
                 type: promotionType
             };
 
@@ -240,7 +241,11 @@ export default function PromoteStudentsPage() {
                             <div className="bg-slate-900/50 p-1 rounded-2xl border border-white/5 shadow-inner">
                                 <select
                                     value={toClass}
-                                    onChange={(e) => setToClass(e.target.value)}
+                                    onChange={(e) => {
+                                        const selected = classes.find(c => c._id === e.target.value);
+                                        setToClass(e.target.value);
+                                        setToSection(selected?.section || 'A');
+                                    }}
                                     className="w-full bg-transparent text-white text-xs font-black outline-none px-4 py-2.5 cursor-pointer"
                                 >
                                     <option value="" className="bg-slate-900">Select Target...</option>

@@ -4,6 +4,12 @@ const { logAction } = require('../utils/logger');
 const generatePassword = require('../utils/generatePassword');
 const { emitToTenant } = require('../config/socket');
 const { getTeacherScope, canTeacherAccessStudent } = require('../utils/teacherScope');
+const {
+    normalizeProfileValue,
+    resolveClassReference,
+    profileForClass,
+    studentWhereForClass
+} = require('../utils/classProfile');
 
 const userSelect = {
     id: true, tenantId: true, firstName: true, lastName: true,
@@ -57,6 +63,49 @@ const formatUser = (u, viewer) => {
 
 const optionalDate = (value) => value ? new Date(value) : null;
 
+const sendError = (res, error) => {
+    res.status(error.statusCode || 500).json({ success: false, message: error.message });
+};
+
+const classNotFoundError = (classRef, section) => {
+    const suffix = section ? ` - ${section}` : '';
+    const error = new Error(`Class ${classRef}${suffix} not found`);
+    error.statusCode = 400;
+    return error;
+};
+
+const resolveStudentClassProfile = async (tenantId, classRef, section) => {
+    const normalizedClass = normalizeProfileValue(classRef);
+    const normalizedSection = normalizeProfileValue(section);
+
+    if (!normalizedClass) {
+        return { profileClass: null, profileSection: null };
+    }
+
+    const academicClass = await resolveClassReference(prisma, {
+        tenantId,
+        classRef: normalizedClass,
+        section: normalizedSection
+    });
+
+    if (!academicClass) {
+        throw classNotFoundError(normalizedClass, normalizedSection);
+    }
+
+    return profileForClass(academicClass);
+};
+
+const resolveUpdatedClassProfile = async (tenantId, existing, profile = {}) => {
+    const hasClass = Object.prototype.hasOwnProperty.call(profile, 'class');
+    const hasSection = Object.prototype.hasOwnProperty.call(profile, 'section');
+
+    if (!hasClass && !hasSection) return {};
+
+    const classRef = hasClass ? profile.class : existing.profileClass;
+    const section = hasSection ? profile.section : existing.profileSection;
+    return resolveStudentClassProfile(tenantId, classRef, section);
+};
+
 // @desc    Register a new student
 exports.createStudent = async (req, res) => {
     try {
@@ -107,11 +156,12 @@ exports.createStudent = async (req, res) => {
         const yr2 = year.toString().slice(-2);
         const admissionNo = profile?.admissionNo || `${yr2}${String(studentCount + 1).padStart(4, '0')}`;
         const studentId = profile?.studentId || `STU-${year}-${String(studentCount + 1).padStart(4, '0')}`;
+        const classProfile = await resolveStudentClassProfile(tenantId, profile?.class, profile?.section);
 
         let rollNo = profile?.rollNo;
-        if (!rollNo && profile?.class) {
+        if (!rollNo && classProfile.profileClass) {
             const count = await prisma.user.count({
-                where: { tenantId, role: 'student', profileClass: profile.class, profileSection: profile.section }
+                where: { tenantId, role: 'student', ...classProfile }
             });
             rollNo = String(count + 1);
         }
@@ -133,8 +183,7 @@ exports.createStudent = async (req, res) => {
                 admissionNo,
                 studentId,
                 rollNo: rollNo || null,
-                profileClass: profile?.class || null,
-                profileSection: profile?.section || null,
+                ...classProfile,
                 gender: profile?.gender || null,
                 dob: profile?.dob ? new Date(profile.dob) : null,
                 motherName: profile?.motherName || null,
@@ -171,7 +220,7 @@ exports.createStudent = async (req, res) => {
             data: formatUser(student, req.user), tempPassword: generatedPassword
         });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        sendError(res, error);
     }
 };
 
@@ -194,10 +243,13 @@ exports.getStudents = async (req, res) => {
         }
 
         if (req.query.class) {
-            const targetClass = await prisma.class.findFirst({ where: { id: req.query.class, tenantId } });
+            const targetClass = await resolveClassReference(prisma, {
+                tenantId,
+                classRef: req.query.class,
+                section: req.query.section
+            });
             if (targetClass) {
-                where.profileClass = targetClass.name;
-                where.profileSection = targetClass.section;
+                where = { AND: [where, studentWhereForClass(tenantId, targetClass)] };
             } else {
                 return res.status(200).json({ success: true, count: 0, data: [] });
             }
@@ -210,7 +262,7 @@ exports.getStudents = async (req, res) => {
         const students = await prisma.user.findMany({ where, select: userSelect, orderBy });
         res.status(200).json({ success: true, count: students.length, data: students.map(student => formatUser(student, req.user)) });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        sendError(res, error);
     }
 };
 
@@ -257,6 +309,7 @@ exports.updateStudent = async (req, res) => {
         }
 
         const { firstName, lastName, email, status, profile } = req.body;
+        const classProfileUpdate = await resolveUpdatedClassProfile(req.user.tenantId, existing, profile);
         const updated = await prisma.user.update({
             where: { id: req.params.id },
             data: {
@@ -267,8 +320,7 @@ exports.updateStudent = async (req, res) => {
                 ...(profile?.phone !== undefined && { phone: profile.phone }),
                 ...(profile?.address !== undefined && { profileAddress: profile.address }),
                 ...(profile?.avatarUrl !== undefined && { avatarUrl: profile.avatarUrl }),
-                ...(profile?.class !== undefined && { profileClass: profile.class }),
-                ...(profile?.section !== undefined && { profileSection: profile.section }),
+                ...classProfileUpdate,
                 ...(profile?.gender !== undefined && { gender: profile.gender }),
                 ...(profile?.dob !== undefined && { dob: profile.dob ? new Date(profile.dob) : null }),
                 ...(profile?.motherName !== undefined && { motherName: profile.motherName }),
@@ -301,7 +353,7 @@ exports.updateStudent = async (req, res) => {
         emitToTenant(req.user.tenantId, 'student:updated', formatUser(updated, req.user));
         res.status(200).json({ success: true, data: formatUser(updated, req.user) });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        sendError(res, error);
     }
 };
 
@@ -324,14 +376,31 @@ exports.deleteStudent = async (req, res) => {
 // @desc    Promote students
 exports.promoteStudents = async (req, res) => {
     try {
-        const { studentIds, currentClass, nextClass, nextSection, type } = req.body;
+        const { studentIds, currentClass, currentSection, nextClass, nextSection, type } = req.body;
         const tenantId = req.user.tenantId;
+
+        if (!nextClass)
+            return res.status(400).json({ message: 'Next Class is required' });
+
+        const nextClassDoc = await resolveClassReference(prisma, {
+            tenantId,
+            classRef: nextClass,
+            section: nextSection
+        });
+
+        if (!nextClassDoc) return res.status(404).json({ message: 'Next class not found' });
+
+        const nextProfile = profileForClass(nextClassDoc);
 
         if (type === 'auto') {
             if (!currentClass || !nextClass)
                 return res.status(400).json({ message: 'Current Class and Next Class are required' });
 
-            const classDoc = await prisma.class.findFirst({ where: { name: currentClass, tenantId } });
+            const classDoc = await resolveClassReference(prisma, {
+                tenantId,
+                classRef: currentClass,
+                section: currentSection
+            });
             if (!classDoc) return res.status(404).json({ message: 'Current class not found' });
 
             const exams = await prisma.exam.findMany({
@@ -341,7 +410,7 @@ exports.promoteStudents = async (req, res) => {
             if (exams.length === 0)
                 return res.status(400).json({ message: 'No completed exams found for this class.' });
 
-            const students = await prisma.user.findMany({ where: { profileClass: currentClass, tenantId, role: 'student' } });
+            const students = await prisma.user.findMany({ where: studentWhereForClass(tenantId, classDoc) });
             const promotedIds = [], retainedIds = [], debugDetails = [];
 
             for (const student of students) {
@@ -359,11 +428,11 @@ exports.promoteStudents = async (req, res) => {
             if (promotedIds.length > 0) {
                 await prisma.user.updateMany({
                     where: { id: { in: promotedIds } },
-                    data: { profileClass: nextClass, profileSection: nextSection || 'A' }
+                    data: nextProfile
                 });
             }
 
-            await logAction({ action: 'UPDATE', module: 'USER', details: `Auto-promoted ${promotedIds.length} students from ${currentClass} to ${nextClass}`, userId: req.user._id, tenantId });
+            await logAction({ action: 'UPDATE', module: 'USER', details: `Auto-promoted ${promotedIds.length} students from ${classDoc.name} - ${classDoc.section} to ${nextClassDoc.name} - ${nextClassDoc.section}`, userId: req.user._id, tenantId });
 
             return res.status(200).json({
                 success: true, message: `Promotion complete. ${promotedIds.length} promoted, ${retainedIds.length} retained.`,
@@ -376,14 +445,14 @@ exports.promoteStudents = async (req, res) => {
 
             const result = await prisma.user.updateMany({
                 where: { id: { in: studentIds }, tenantId, role: 'student' },
-                data: { profileClass: nextClass, profileSection: nextSection || 'A' }
+                data: nextProfile
             });
 
-            await logAction({ action: 'UPDATE', module: 'USER', details: `Promoted ${result.count} students to ${nextClass}`, userId: req.user._id, tenantId });
+            await logAction({ action: 'UPDATE', module: 'USER', details: `Promoted ${result.count} students to ${nextClassDoc.name} - ${nextClassDoc.section}`, userId: req.user._id, tenantId });
             res.status(200).json({ success: true, message: `Successfully promoted ${result.count} students`, modifiedCount: result.count });
         }
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        sendError(res, error);
     }
 };
 
@@ -438,6 +507,7 @@ exports.bulkImportStudents = async (req, res) => {
                 const genPass = s.password || generatePassword();
                 const salt = await bcrypt.genSalt(10);
                 const hashed = await bcrypt.hash(genPass, salt);
+                const classProfile = await resolveStudentClassProfile(tenantId, s.class, s.section);
 
                 await prisma.user.create({
                     data: {
@@ -445,7 +515,7 @@ exports.bulkImportStudents = async (req, res) => {
                         email: s.email.toLowerCase(), password: hashed, passwordPlain: genPass,
                         role: 'student', tenantId,
                         admissionNo, studentId,
-                        profileClass: s.class || null, profileSection: s.section || 'A',
+                        ...classProfile,
                         gender: s.gender || null, phone: s.phone || null
                     }
                 });

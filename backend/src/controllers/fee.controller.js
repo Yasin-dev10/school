@@ -8,7 +8,7 @@ exports.createFeeType = async (req, res) => {
         const feeType = await prisma.feeType.create({
             data: { name, description, amount, tenantId: req.user.tenantId }
         });
-        res.status(201).json({ success: true, data: feeType });
+        res.status(201).json({ success: true, data: { ...feeType, _id: feeType.id } });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -21,7 +21,7 @@ exports.getFeeTypes = async (req, res) => {
             where: { tenantId: req.user.tenantId },
             orderBy: { name: 'asc' }
         });
-        res.status(200).json({ success: true, data: feeTypes });
+        res.status(200).json({ success: true, data: feeTypes.map(ft => ({ ...ft, _id: ft.id })) });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -97,7 +97,16 @@ exports.getInvoices = async (req, res) => {
             orderBy: { createdAt: 'desc' }
         });
 
-        res.status(200).json({ success: true, count: invoices.length, data: invoices });
+        // Add _id aliases for frontend compatibility
+        const formatted = invoices.map(inv => ({
+            ...inv,
+            _id: inv.id,
+            student: inv.student ? { ...inv.student, _id: inv.student.id } : null,
+            class: inv.class ? { ...inv.class, _id: inv.class.id } : null,
+            items: inv.items?.map(item => ({ ...item, _id: item.id })) || []
+        }));
+
+        res.status(200).json({ success: true, count: formatted.length, data: formatted });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -149,14 +158,111 @@ exports.getPayments = async (req, res) => {
 };
 
 
+// @desc    Generate invoices for all students in a class
 exports.generateClassInvoices = async (req, res) => {
-    res.status(200).json({ success: true, message: "Not implemented yet" });
+    try {
+        const { classId, feeTypeIds, dueDate } = req.body;
+        const tenantId = req.user.tenantId;
+
+        if (!classId || !feeTypeIds || !feeTypeIds.length || !dueDate) {
+            return res.status(400).json({ success: false, message: 'classId, feeTypeIds, and dueDate are required' });
+        }
+
+        // Get the class
+        const cls = await prisma.class.findFirst({ where: { id: classId, tenantId } });
+        if (!cls) return res.status(404).json({ success: false, message: 'Class not found' });
+
+        // Get the selected fee types
+        const feeTypes = await prisma.feeType.findMany({
+            where: { id: { in: feeTypeIds }, tenantId }
+        });
+        if (!feeTypes.length) {
+            return res.status(404).json({ success: false, message: 'No valid fee types found' });
+        }
+
+        const totalAmount = feeTypes.reduce((sum, ft) => sum + ft.amount, 0);
+
+        // Get all students in this class by profileClass/profileSection matching
+        const targetStudents = await prisma.user.findMany({
+            where: {
+                tenantId,
+                role: 'student',
+                OR: [
+                    // Primary: students who match by profileClass and profileSection
+                    { profileClass: cls.name, profileSection: cls.section },
+                    // Secondary: students who have marks in this class
+                    { marks: { some: { classId, tenantId } } },
+                    // Tertiary: students who have attendance in this class
+                    { attendancesAsStudent: { some: { classId, tenantId } } }
+                ]
+            },
+            select: { id: true, firstName: true, lastName: true }
+        });
+
+        if (!targetStudents.length) {
+            return res.status(404).json({ success: false, message: 'No students found in this class' });
+        }
+
+        // Filter out students who already have an invoice for this class with the same due date
+        const existingInvoices = await prisma.invoice.findMany({
+            where: {
+                tenantId,
+                classId,
+                dueDate: new Date(dueDate),
+                studentId: { in: targetStudents.map(s => s.id) }
+            },
+            select: { studentId: true }
+        });
+        const alreadyBilled = new Set(existingInvoices.map(i => i.studentId));
+        const newStudents = targetStudents.filter(s => !alreadyBilled.has(s.id));
+
+        if (!newStudents.length) {
+            return res.status(400).json({ success: false, message: 'All students in this class already have invoices for this period.' });
+        }
+
+        // Create invoices in bulk
+        const created = [];
+        for (const student of newStudents) {
+            const invoiceNumber = `INV-${Date.now()}-${student.id.slice(-4).toUpperCase()}`;
+            const invoice = await prisma.invoice.create({
+                data: {
+                    invoiceNumber,
+                    studentId: student.id,
+                    classId,
+                    tenantId,
+                    totalAmount,
+                    dueDate: new Date(dueDate),
+                    items: {
+                        create: feeTypes.map(ft => ({
+                            feeTypeId: ft.id,
+                            name: ft.name,
+                            amount: ft.amount
+                        }))
+                    }
+                }
+            });
+            created.push(invoice);
+        }
+
+        res.status(201).json({
+            success: true,
+            message: `Generated ${created.length} invoices for class ${cls.name} - ${cls.section}`,
+            count: created.length,
+            data: created
+        });
+    } catch (error) {
+        console.error('generateClassInvoices error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
 };
+
 exports.getInvoiceById = async (req, res) => {
     try {
         const invoice = await prisma.invoice.findFirst({
             where: { id: req.params.id, tenantId: req.user.tenantId },
             include: {
+                student: { select: { id: true, firstName: true, lastName: true, admissionNo: true } },
+                class: { select: { id: true, name: true, section: true } },
                 items: { include: { feeType: true } },
                 payments: {
                     include: { markedBy: { select: { id: true, firstName: true, lastName: true } } },
@@ -164,11 +270,44 @@ exports.getInvoiceById = async (req, res) => {
                 }
             }
         });
+        if (!invoice) return res.status(404).json({ success: false, message: 'Invoice not found' });
         res.status(200).json({ success: true, data: invoice });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }
 };
-exports.createExpense = async (req, res) => { res.status(200).json({ success: true, message: "Not implemented yet" }) };
-exports.getExpenses = async (req, res) => { res.status(200).json({ success: true, count: 0, data: [] }) };
 
+exports.createExpense = async (req, res) => {
+    try {
+        const { title, category, amount, date, description } = req.body;
+        const expense = await prisma.expense.create({
+            data: {
+                title,
+                category,
+                amount: Number(amount),
+                date: date ? new Date(date) : new Date(),
+                description: description || null,
+                recordedById: req.user.id,
+                tenantId: req.user.tenantId
+            }
+        });
+        res.status(201).json({ success: true, data: expense });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.getExpenses = async (req, res) => {
+    try {
+        const expenses = await prisma.expense.findMany({
+            where: { tenantId: req.user.tenantId },
+            include: {
+                recordedBy: { select: { id: true, firstName: true, lastName: true } }
+            },
+            orderBy: { date: 'desc' }
+        });
+        res.status(200).json({ success: true, count: expenses.length, data: expenses });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
