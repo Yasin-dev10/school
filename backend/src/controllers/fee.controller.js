@@ -191,7 +191,7 @@ exports.generateClassInvoices = async (req, res) => {
                     // Primary: students who match by profileClass and profileSection
                     { profileClass: cls.name, profileSection: cls.section },
                     // Secondary: students who have marks in this class
-                    { marks: { some: { classId, tenantId } } },
+                    { marksAsStudent: { some: { classId, tenantId } } },
                     // Tertiary: students who have attendance in this class
                     { attendancesAsStudent: { some: { classId, tenantId } } }
                 ]
