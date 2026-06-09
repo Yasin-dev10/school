@@ -2,6 +2,15 @@
  * Validation schemas for different entities
  */
 
+const validateRecordId = (value) => {
+    const objectIdPattern = /^[0-9a-fA-F]{24}$/;
+    const cuidPattern = /^c[a-z0-9]{8,}$/;
+    const cuid2Pattern = /^[a-z][a-z0-9]{23,}$/;
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    return [objectIdPattern, cuidPattern, cuid2Pattern, uuidPattern].some(pattern => pattern.test(value))
+        || 'Invalid ID format';
+};
+
 // Contact Message Schema
 const contactMessageSchema = {
     firstName: {
@@ -97,26 +106,17 @@ const markEntrySchema = {
     examId: {
         type: 'string',
         required: true,
-        custom: (value) => {
-            const objectIdPattern = /^[0-9a-fA-F]{24}$/;
-            return objectIdPattern.test(value) || 'Invalid exam ID format';
-        }
+        custom: validateRecordId
     },
     subjectId: {
         type: 'string',
         required: true,
-        custom: (value) => {
-            const objectIdPattern = /^[0-9a-fA-F]{24}$/;
-            return objectIdPattern.test(value) || 'Invalid subject ID format';
-        }
+        custom: validateRecordId
     },
     classId: {
         type: 'string',
         required: true,
-        custom: (value) => {
-            const objectIdPattern = /^[0-9a-fA-F]{24}$/;
-            return objectIdPattern.test(value) || 'Invalid class ID format';
-        }
+        custom: validateRecordId
     },
     marks: {
         type: 'array',
@@ -135,26 +135,17 @@ const bulkMarkEntrySchema = {
     examId: {
         type: 'string',
         required: true,
-        custom: (value) => {
-            const objectIdPattern = /^[0-9a-fA-F]{24}$/;
-            return objectIdPattern.test(value) || 'Invalid exam ID format';
-        }
+        custom: validateRecordId
     },
     subjectId: {
         type: 'string',
         required: true,
-        custom: (value) => {
-            const objectIdPattern = /^[0-9a-fA-F]{24}$/;
-            return objectIdPattern.test(value) || 'Invalid subject ID format';
-        }
+        custom: validateRecordId
     },
     classId: {
         type: 'string',
         required: true,
-        custom: (value) => {
-            const objectIdPattern = /^[0-9a-fA-F]{24}$/;
-            return objectIdPattern.test(value) || 'Invalid class ID format';
-        }
+        custom: validateRecordId
     },
     marks: {
         type: 'array',
@@ -190,18 +181,12 @@ const timetableSchema = {
     class: {
         type: 'string',
         required: true,
-        custom: (value) => {
-            const objectIdPattern = /^[0-9a-fA-F]{24}$/;
-            return objectIdPattern.test(value) || 'Invalid class ID format';
-        }
+        custom: validateRecordId
     },
     subject: {
         type: 'string',
         required: true,
-        custom: (value) => {
-            const objectIdPattern = /^[0-9a-fA-F]{24}$/;
-            return objectIdPattern.test(value) || 'Invalid subject ID format';
-        }
+        custom: validateRecordId
     },
     startTime: {
         type: 'string',

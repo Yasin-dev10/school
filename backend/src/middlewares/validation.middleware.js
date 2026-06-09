@@ -173,19 +173,22 @@ const customValidations = {
             const errors = [];
             
             marks.forEach((mark, index) => {
-                if (mark.marksObtained > maxMarks) {
+                const obtained = mark.score ?? mark.marksObtained;
+                const maximum = mark.maxMarks ?? maxMarks;
+
+                if (Number(obtained) > Number(maximum)) {
                     errors.push({
-                        field: `marks[${index}].marksObtained`,
+                        field: `marks[${index}].score`,
                         message: 'Marks obtained cannot exceed maximum marks',
-                        value: mark.marksObtained
+                        value: obtained
                     });
                 }
                 
-                if (mark.marksObtained < 0) {
+                if (Number(obtained) < 0) {
                     errors.push({
-                        field: `marks[${index}].marksObtained`,
+                        field: `marks[${index}].score`,
                         message: 'Marks cannot be negative',
-                        value: mark.marksObtained
+                        value: obtained
                     });
                 }
             });

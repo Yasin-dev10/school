@@ -137,7 +137,7 @@ export default function DashboardLayout({
                 { name: 'Promote Students', href: '/dashboard/students/promote', icon: <ArrowUpCircle className="w-5 h-5" /> },
                 // Extra Modules
                 { name: 'Human Resources', href: '/dashboard/hr', icon: <Users2 className="w-5 h-5" /> },
-                { name: 'Library', href: '/dashboard/library', icon: <BookCopy className="w-5 h-5" /> },
+                { name: 'Library', href: '/dashboard/materials', icon: <BookCopy className="w-5 h-5" /> },
                 { name: 'Inventory', href: '/dashboard/inventory', icon: <Package className="w-5 h-5" /> },
                 { name: 'Reports', href: '/dashboard/reports', icon: <BarChart3 className="w-5 h-5" /> },
                 { name: 'Certificates', href: '/dashboard/certificates', icon: <FileBadge className="w-5 h-5" /> },
