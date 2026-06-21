@@ -130,9 +130,12 @@ exports.updateTenant = async (req, res) => {
                     gradeLevels: config.gradeLevels
                 }),
                 ...(subscription && {
-                    subscriptionPlan: subscription.plan,
-                    subscriptionValid: subscription.validUntil,
-                    subscriptionActive: subscription.isActive
+                    ...(subscription.plan !== undefined && { subscriptionPlan: subscription.plan }),
+                    ...(subscription.validUntil !== undefined && subscription.validUntil !== null && subscription.validUntil !== '' && {
+                        subscriptionValid: new Date(subscription.validUntil).toISOString()
+                    }),
+                    ...(subscription.isActive !== undefined && { subscriptionActive: subscription.isActive }),
+                    ...(subscription.billingCycle !== undefined && { billingCycle: subscription.billingCycle })
                 })
             }
         });

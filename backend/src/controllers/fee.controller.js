@@ -158,6 +158,58 @@ exports.getPayments = async (req, res) => {
 };
 
 
+// @desc    Get all payments across all tenants (Super Admin)
+exports.getAllPayments = async (req, res) => {
+    try {
+        const { page = 1, limit = 20, status } = req.query;
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+
+        const where = status ? { invoice: { status } } : {};
+
+        const [payments, total] = await Promise.all([
+            prisma.payment.findMany({
+                where,
+                include: {
+                    invoice: { select: { id: true, invoiceNumber: true, totalAmount: true, status: true } },
+                    markedBy: { select: { id: true, firstName: true, lastName: true } },
+                    tenant: { select: { name: true, tenantId: true } }
+                },
+                orderBy: { paymentDate: 'desc' },
+                skip,
+                take: parseInt(limit)
+            }),
+            prisma.payment.count({ where })
+        ]);
+
+        // Aggregate stats
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const [mtdRevenue, pendingAmount] = await Promise.all([
+            prisma.payment.aggregate({
+                where: { paymentDate: { gte: startOfMonth } },
+                _sum: { amount: true }
+            }),
+            prisma.invoice.aggregate({
+                where: { status: 'unpaid' },
+                _sum: { totalAmount: true }
+            })
+        ]);
+
+        res.status(200).json({
+            success: true,
+            data: payments,
+            pagination: { total, page: parseInt(page), pages: Math.ceil(total / parseInt(limit)) },
+            stats: {
+                mtdRevenue: mtdRevenue._sum.amount || 0,
+                pendingAmount: pendingAmount._sum.totalAmount || 0,
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+
 // @desc    Generate invoices for all students in a class
 exports.generateClassInvoices = async (req, res) => {
     try {

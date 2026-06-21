@@ -90,3 +90,52 @@ exports.getUnreadCount = async (req, res) => {
     }
 };
 
+// @desc    Get all platform announcements (Super Admin)
+exports.getPlatformAnnouncements = async (req, res) => {
+    try {
+        const announcements = await prisma.notification.findMany({
+            where: { type: 'announcement', senderId: req.user.id },
+            include: { sender: { select: { id: true, firstName: true, lastName: true } } },
+            orderBy: { createdAt: 'desc' },
+            take: 100
+        });
+        res.status(200).json({ success: true, count: announcements.length, data: announcements });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// @desc    Send platform-wide announcement to all tenants (Super Admin)
+exports.sendPlatformAnnouncement = async (req, res) => {
+    try {
+        const { title, message } = req.body;
+        if (!title || !message) return res.status(400).json({ message: 'Title and message are required' });
+
+        const tenants = await prisma.tenant.findMany({
+            where: { status: 'active' },
+            select: { tenantId: true }
+        });
+
+        // Create one announcement per active tenant
+        const created = await prisma.$transaction(
+            tenants.map(t =>
+                prisma.notification.create({
+                    data: {
+                        title, message,
+                        type: 'announcement',
+                        channels: [],
+                        targetRole: 'all',
+                        senderId: req.user.id,
+                        tenantId: t.tenantId,
+                        status: 'sent'
+                    }
+                })
+            )
+        );
+
+        res.status(201).json({ success: true, message: `Announcement sent to ${created.length} schools`, count: created.length });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+

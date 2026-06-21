@@ -52,7 +52,7 @@ const baseOpts: ChartOptions<any> = {
 /* ─── shared UI pieces ───────────────────────────────────────────────────── */
 function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
     return (
-        <div className={`glass-dark rounded-2xl p-5 ${className}`}>{children}</div>
+        <div className={`bg-white dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700/50 rounded-2xl p-5 ${className}`}>{children}</div>
     );
 }
 function SectionTitle({ children }: { children: React.ReactNode }) {

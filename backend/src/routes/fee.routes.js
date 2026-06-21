@@ -8,7 +8,8 @@ const {
     recordPayment,
     getInvoiceById,
     createExpense,
-    getExpenses
+    getExpenses,
+    getAllPayments
 } = require('../controllers/fee.controller');
 const { protect, authorize } = require('../middlewares/auth.middleware');
 
@@ -29,6 +30,7 @@ router.post('/generate-invoices', authorize('school-admin'), generateClassInvoic
 
 // Payments
 router.post('/pay', authorize('school-admin', 'receptionist'), recordPayment);
+router.get('/payments/all', authorize('super-admin'), getAllPayments);
 
 // Expenses
 router.route('/expenses')

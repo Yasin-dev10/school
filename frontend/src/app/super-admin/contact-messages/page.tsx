@@ -3,9 +3,13 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { getApiUrl } from '@/app/utils/api';
+import {
+    Search, MessageSquare, Loader2, X,
+    CheckCircle2, Trash2, Reply, Filter
+} from 'lucide-react';
 
 interface ContactMessage {
-    _id: string;
+    id: string;
     firstName: string;
     lastName: string;
     email: string;
@@ -14,11 +18,7 @@ interface ContactMessage {
     message: string;
     status: 'new' | 'read' | 'replied' | 'archived';
     reply?: string;
-    repliedBy?: {
-        firstName: string;
-        lastName: string;
-        email: string;
-    };
+    repliedBy?: { firstName: string; lastName: string; email: string };
     repliedAt?: string;
     createdAt: string;
     updatedAt: string;
@@ -27,448 +27,345 @@ interface ContactMessage {
 interface Stats {
     total: number;
     todayCount: number;
-    statusCounts: {
-        new: number;
-        read: number;
-        replied: number;
-        archived: number;
-    };
+    statusCounts: { new: number; read: number; replied: number; archived: number };
 }
 
 export default function ContactMessagesPage() {
     const router = useRouter();
-    const [messages, setMessages] = useState<ContactMessage[]>([]);
-    const [stats, setStats] = useState<Stats | null>(null);
-    const [loading, setLoading] = useState(true);
+    const [messages, setMessages]       = useState<ContactMessage[]>([]);
+    const [stats, setStats]             = useState<Stats | null>(null);
+    const [loading, setLoading]         = useState(true);
     const [selectedMessage, setSelectedMessage] = useState<ContactMessage | null>(null);
-    const [filterStatus, setFilterStatus] = useState<string>('all');
-    const [replyText, setReplyText] = useState('');
+    const [filterStatus, setFilterStatus]       = useState<string>('all');
+    const [search, setSearch]           = useState('');
+    const [replyText, setReplyText]     = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    useEffect(() => {
-        fetchStats();
-        fetchMessages();
-    }, [filterStatus]);
+    useEffect(() => { fetchStats(); fetchMessages(); }, [filterStatus]);
+
+    const authHeaders = () => ({ 'Authorization': `Bearer ${localStorage.getItem('token')}` });
 
     const fetchStats = async () => {
         try {
-            const token = localStorage.getItem('token');
-            const response = await fetch(getApiUrl('/contact-messages/stats'), {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                setStats(data);
-            }
-        } catch (error) {
-            console.error('Error fetching stats:', error);
-        }
+            const res = await fetch(getApiUrl('/contact-messages/stats'), { headers: authHeaders() });
+            if (res.ok) setStats(await res.json());
+        } catch {}
     };
 
     const fetchMessages = async () => {
         try {
             setLoading(true);
-            const token = localStorage.getItem('token');
             const url = filterStatus === 'all'
                 ? getApiUrl('/contact-messages')
                 : getApiUrl(`/contact-messages?status=${filterStatus}`);
-
-            const response = await fetch(url, {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                setMessages(data.messages);
-            } else if (response.status === 403) {
-                alert('Access denied. This page is only accessible to super-admins.');
+            const res = await fetch(url, { headers: authHeaders() });
+            if (res.ok) {
+                const data = await res.json();
+                setMessages(data.messages || []);
+            } else if (res.status === 403) {
                 router.push('/super-admin/dashboard');
             }
-        } catch (error) {
-            console.error('Error fetching messages:', error);
-        } finally {
-            setLoading(false);
-        }
+        } catch {} finally { setLoading(false); }
     };
 
-    const handleViewMessage = async (message: ContactMessage) => {
-        setSelectedMessage(message);
-        setReplyText(message.reply || '');
+    const handleViewMessage = (msg: ContactMessage) => {
+        setSelectedMessage(msg);
+        setReplyText(msg.reply || '');
     };
 
-    const handleUpdateStatus = async (messageId: string, newStatus: string) => {
+    const handleUpdateStatus = async (id: string, newStatus: string) => {
         try {
-            const token = localStorage.getItem('token');
-            const response = await fetch(getApiUrl(`/contact-messages/${messageId}`), {
+            const res = await fetch(getApiUrl(`/contact-messages/${id}`), {
                 method: 'PATCH',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ status: newStatus })
+                headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: newStatus }),
             });
-
-            if (response.ok) {
-                fetchMessages();
-                fetchStats();
-                if (selectedMessage?._id === messageId) {
-                    setSelectedMessage(null);
-                }
-            }
-        } catch (error) {
-            console.error('Error updating status:', error);
-        }
+            if (res.ok) { fetchMessages(); fetchStats(); if (selectedMessage?.id === id) setSelectedMessage(null); }
+        } catch {}
     };
 
     const handleReply = async () => {
         if (!selectedMessage || !replyText.trim()) return;
-
         try {
             setIsSubmitting(true);
-            const token = localStorage.getItem('token');
-            const response = await fetch(getApiUrl(`/contact-messages/${selectedMessage._id}`), {
+            const res = await fetch(getApiUrl(`/contact-messages/${selectedMessage.id}`), {
                 method: 'PATCH',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    status: 'replied',
-                    reply: replyText
-                })
+                headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'replied', reply: replyText }),
             });
-
-            if (response.ok) {
-                alert('Reply saved successfully!');
-                fetchMessages();
-                fetchStats();
-                setSelectedMessage(null);
-                setReplyText('');
-            }
-        } catch (error) {
-            console.error('Error sending reply:', error);
-            alert('Failed to save reply');
-        } finally {
-            setIsSubmitting(false);
-        }
+            if (res.ok) { fetchMessages(); fetchStats(); setSelectedMessage(null); setReplyText(''); }
+        } catch {} finally { setIsSubmitting(false); }
     };
 
-    const handleDelete = async (messageId: string) => {
-        if (!confirm('Are you sure you want to delete this message?')) return;
-
+    const handleDelete = async (id: string) => {
+        if (!confirm('Delete this message?')) return;
         try {
-            const token = localStorage.getItem('token');
-            const response = await fetch(getApiUrl(`/contact-messages/${messageId}`), {
-                method: 'DELETE',
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-
-            if (response.ok) {
-                fetchMessages();
-                fetchStats();
-                if (selectedMessage?._id === messageId) {
-                    setSelectedMessage(null);
-                }
-            }
-        } catch (error) {
-            console.error('Error deleting message:', error);
-        }
+            const res = await fetch(getApiUrl(`/contact-messages/${id}`), { method: 'DELETE', headers: authHeaders() });
+            if (res.ok) { fetchMessages(); fetchStats(); if (selectedMessage?.id === id) setSelectedMessage(null); }
+        } catch {}
     };
 
-    const getStatusColor = (status: string) => {
-        switch (status) {
-            case 'new': return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
-            case 'read': return 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20';
-            case 'replied': return 'bg-green-500/10 text-green-400 border-green-500/20';
-            case 'archived': return 'bg-gray-500/10 text-gray-400 border-gray-500/20';
-            default: return 'bg-gray-500/10 text-gray-400 border-gray-500/20';
-        }
+    const statusMeta = (status: string) => {
+        if (status === 'new')      return { cls: 'bg-blue-500/15 text-blue-400 border border-blue-500/25',       dot: 'bg-blue-400' };
+        if (status === 'read')     return { cls: 'bg-amber-500/15 text-amber-400 border border-amber-500/25',     dot: 'bg-amber-400' };
+        if (status === 'replied')  return { cls: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25', dot: 'bg-emerald-400' };
+        if (status === 'archived') return { cls: 'bg-slate-500/15 text-slate-400 border border-slate-500/20',   dot: 'bg-slate-400' };
+        return { cls: 'bg-slate-500/15 text-slate-400 border border-slate-500/20', dot: 'bg-slate-400' };
     };
 
-    const formatDate = (dateString: string) => {
-        return new Date(dateString).toLocaleString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-    };
+    const filtered = messages.filter(m => {
+        const q = search.toLowerCase();
+        return !search
+            || `${m.firstName} ${m.lastName}`.toLowerCase().includes(q)
+            || m.email.toLowerCase().includes(q)
+            || (m.institution || '').toLowerCase().includes(q)
+            || m.message.toLowerCase().includes(q);
+    });
+
+    const formatDate = (d: string) => new Date(d).toLocaleString('en-US', {
+        month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit'
+    });
+
+    const STATUS_TABS = ['all', 'new', 'read', 'replied', 'archived'];
+    const inputCls = 'w-full px-3.5 py-2.5 bg-slate-900 border border-white/10 rounded-xl text-white text-sm placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 outline-none transition';
 
     return (
-        <div className="p-8 space-y-6 bg-slate-950 min-h-screen">
+        <div className="p-6 max-w-7xl mx-auto space-y-6">
             {/* Header */}
-            <div className="flex justify-between items-center">
-                <div>
-                    <h1 className="text-3xl font-bold text-white">Contact Messages</h1>
-                    <p className="text-slate-400 mt-1">Manage inquiries from the contact form</p>
-                </div>
+            <div>
+                <p className="text-slate-400 text-sm font-medium mb-1">Super Admin</p>
+                <h1 className="text-2xl font-bold text-white">Contact Messages</h1>
             </div>
 
             {/* Stats Cards */}
             {stats && (
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                    <div className="bg-slate-900/50 p-6 rounded-xl border border-white/5">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm text-slate-400">Total Messages</p>
-                                <p className="text-2xl font-bold text-white mt-1">{stats.total}</p>
-                            </div>
-                            <div className="text-3xl">📧</div>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                    {[
+                        { label: 'Total',    value: stats.total,                  cls: 'text-white',         bg: 'bg-slate-800/60 border-white/8' },
+                        { label: 'New',      value: stats.statusCounts.new,       cls: 'text-blue-400',      bg: 'bg-blue-500/10 border-blue-500/20' },
+                        { label: 'Read',     value: stats.statusCounts.read,      cls: 'text-amber-400',     bg: 'bg-amber-500/10 border-amber-500/20' },
+                        { label: 'Replied',  value: stats.statusCounts.replied,   cls: 'text-emerald-400',   bg: 'bg-emerald-500/10 border-emerald-500/20' },
+                        { label: 'Today',    value: stats.todayCount,             cls: 'text-purple-400',    bg: 'bg-purple-500/10 border-purple-500/20' },
+                    ].map(s => (
+                        <div key={s.label} className={`rounded-2xl border p-4 ${s.bg}`}>
+                            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">{s.label}</p>
+                            <p className={`text-2xl font-black ${s.cls}`}>{s.value}</p>
                         </div>
-                    </div>
-
-                    <div className="bg-slate-900/50 p-6 rounded-xl border border-white/5">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm text-slate-400">New</p>
-                                <p className="text-2xl font-bold text-blue-400 mt-1">{stats.statusCounts.new}</p>
-                            </div>
-                            <div className="text-3xl">🆕</div>
-                        </div>
-                    </div>
-
-                    <div className="bg-slate-900/50 p-6 rounded-xl border border-white/5">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm text-slate-400">Read</p>
-                                <p className="text-2xl font-bold text-yellow-400 mt-1">{stats.statusCounts.read}</p>
-                            </div>
-                            <div className="text-3xl">👁️</div>
-                        </div>
-                    </div>
-
-                    <div className="bg-slate-900/50 p-6 rounded-xl border border-white/5">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm text-slate-400">Replied</p>
-                                <p className="text-2xl font-bold text-green-400 mt-1">{stats.statusCounts.replied}</p>
-                            </div>
-                            <div className="text-3xl">✅</div>
-                        </div>
-                    </div>
-
-                    <div className="bg-slate-900/50 p-6 rounded-xl border border-white/5">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className="text-sm text-slate-400">Today</p>
-                                <p className="text-2xl font-bold text-purple-400 mt-1">{stats.todayCount}</p>
-                            </div>
-                            <div className="text-3xl">📅</div>
-                        </div>
-                    </div>
+                    ))}
                 </div>
             )}
 
-            {/* Filter Tabs */}
-            <div className="flex gap-2 border-b border-white/5">
-                {['all', 'new', 'read', 'replied', 'archived'].map((status) => (
-                    <button
-                        key={status}
-                        onClick={() => setFilterStatus(status)}
-                        className={`px-4 py-2 font-medium capitalize transition ${filterStatus === status
-                            ? 'text-indigo-400 border-b-2 border-indigo-400'
-                            : 'text-slate-400 hover:text-white'
-                            }`}
-                    >
-                        {status}
-                    </button>
-                ))}
-            </div>
+            {/* Table Container */}
+            <div className="bg-slate-800/50 border border-white/8 rounded-2xl overflow-hidden">
+                {/* Toolbar */}
+                <div className="flex flex-col sm:flex-row gap-3 items-center p-4 border-b border-white/8">
+                    <div className="relative flex-1 min-w-0">
+                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                        <input
+                            type="text"
+                            placeholder="Search messages…"
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2.5 bg-slate-700/50 border border-white/8 rounded-xl text-white text-sm placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                        />
+                    </div>
+                    {/* Status filter tabs */}
+                    <div className="flex items-center gap-1 bg-slate-700/40 rounded-xl p-1 border border-white/8">
+                        {STATUS_TABS.map(s => (
+                            <button
+                                key={s}
+                                onClick={() => setFilterStatus(s)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition ${
+                                    filterStatus === s
+                                        ? 'bg-indigo-600 text-white shadow'
+                                        : 'text-slate-400 hover:text-white'
+                                }`}
+                            >
+                                {s}
+                            </button>
+                        ))}
+                    </div>
+                </div>
 
-            {/* Messages List */}
-            <div className="bg-slate-900/50 rounded-xl border border-white/5 overflow-hidden">
+                {/* Table */}
                 {loading ? (
-                    <div className="p-8 text-center text-slate-400">Loading messages...</div>
-                ) : messages.length === 0 ? (
-                    <div className="p-8 text-center text-slate-400">No messages found</div>
+                    <div className="flex items-center justify-center py-24">
+                        <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
+                    </div>
+                ) : filtered.length === 0 ? (
+                    <div className="py-20 text-center text-slate-500">
+                        <MessageSquare className="w-10 h-10 mx-auto mb-3 text-slate-600" />
+                        No messages found.
+                    </div>
                 ) : (
                     <div className="overflow-x-auto">
-                        <table className="w-full">
-                            <thead className="bg-slate-800/50 border-b border-white/5">
-                                <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
-                                        From
-                                    </th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
-                                        Institution
-                                    </th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
-                                        Role
-                                    </th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
-                                        Message Preview
-                                    </th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
-                                        Status
-                                    </th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
-                                        Date
-                                    </th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
-                                        Actions
-                                    </th>
+                        <table className="w-full text-sm">
+                            <thead>
+                                <tr className="border-b border-white/8">
+                                    <th className="py-3 px-5 text-left text-slate-400 font-semibold text-xs uppercase tracking-wide">From</th>
+                                    <th className="py-3 px-5 text-left text-slate-400 font-semibold text-xs uppercase tracking-wide">Institution</th>
+                                    <th className="py-3 px-5 text-left text-slate-400 font-semibold text-xs uppercase tracking-wide">Role</th>
+                                    <th className="py-3 px-5 text-left text-slate-400 font-semibold text-xs uppercase tracking-wide">Message Preview</th>
+                                    <th className="py-3 px-5 text-left text-slate-400 font-semibold text-xs uppercase tracking-wide">Status</th>
+                                    <th className="py-3 px-5 text-left text-slate-400 font-semibold text-xs uppercase tracking-wide">Date</th>
+                                    <th className="py-3 px-5 text-right text-slate-400 font-semibold text-xs uppercase tracking-wide">Actions</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-white/5">
-                                {messages.map((message) => (
-                                    <tr key={message._id} className="hover:bg-slate-800/30 transition">
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div>
-                                                <div className="text-sm font-medium text-white">
-                                                    {message.firstName} {message.lastName}
+                            <tbody>
+                                {filtered.map((msg, idx) => {
+                                    const sm = statusMeta(msg.status);
+                                    return (
+                                        <tr
+                                            key={msg.id}
+                                            className={`border-b border-white/5 last:border-0 transition hover:bg-slate-700/30 ${idx % 2 === 1 ? 'bg-slate-800/20' : ''} ${msg.status === 'new' ? 'border-l-2 border-l-blue-500' : ''}`}
+                                        >
+                                            <td className="py-3.5 px-5">
+                                                <div>
+                                                    <p className="font-medium text-white text-sm">{msg.firstName} {msg.lastName}</p>
+                                                    <p className="text-[10px] text-slate-500">{msg.email}</p>
                                                 </div>
-                                                <div className="text-sm text-slate-400">{message.email}</div>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-400">
-                                            {message.institution || '-'}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-400">
-                                            {message.role || 'Other'}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className="text-sm text-white truncate max-w-xs">
-                                                {message.message}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <span className={`px-3 py-1 text-xs font-medium rounded-full border ${getStatusColor(message.status)}`}>
-                                                {message.status}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-400">
-                                            {formatDate(message.createdAt)}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                            <div className="flex gap-2">
-                                                <button
-                                                    onClick={() => handleViewMessage(message)}
-                                                    className="text-indigo-400 hover:text-indigo-300 font-medium"
-                                                >
-                                                    View
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(message._id)}
-                                                    className="text-red-400 hover:text-red-300 font-medium"
-                                                >
-                                                    Delete
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
+                                            </td>
+                                            <td className="py-3.5 px-5 text-slate-400 text-sm">{msg.institution || '—'}</td>
+                                            <td className="py-3.5 px-5 text-slate-400 text-sm capitalize">{msg.role || 'Other'}</td>
+                                            <td className="py-3.5 px-5 max-w-xs">
+                                                <p className="text-slate-300 text-sm truncate">{msg.message}</p>
+                                            </td>
+                                            <td className="py-3.5 px-5">
+                                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold capitalize ${sm.cls}`}>
+                                                    <span className={`w-1.5 h-1.5 rounded-full ${sm.dot}`} />
+                                                    {msg.status}
+                                                </span>
+                                            </td>
+                                            <td className="py-3.5 px-5 text-slate-400 text-xs whitespace-nowrap">
+                                                {formatDate(msg.createdAt)}
+                                            </td>
+                                            <td className="py-3.5 px-5 text-right">
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <button
+                                                        onClick={() => handleViewMessage(msg)}
+                                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 text-xs font-medium transition"
+                                                    >
+                                                        <Reply className="w-3.5 h-3.5" /> View
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDelete(msg.id)}
+                                                        className="flex items-center justify-center px-2.5 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 text-xs transition"
+                                                    >
+                                                        <Trash2 className="w-3.5 h-3.5" />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>
                 )}
             </div>
 
-            {/* Message Detail Modal */}
+            {/* ── View / Reply Modal ──────────────────────────────────────── */}
             {selectedMessage && (
-                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-                    <div className="bg-slate-900 rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto border border-white/10">
-                        <div className="p-6 border-b border-white/10">
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <h2 className="text-2xl font-bold text-white">
-                                        Message from {selectedMessage.firstName} {selectedMessage.lastName}
-                                    </h2>
-                                    <p className="text-slate-400 mt-1">{selectedMessage.email}</p>
-                                </div>
-                                <button
-                                    onClick={() => setSelectedMessage(null)}
-                                    className="text-slate-400 hover:text-white"
-                                >
-                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                </button>
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSelectedMessage(null)} />
+                    <div className="relative w-full max-w-2xl bg-slate-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+                        <div className="h-1 bg-gradient-to-r from-indigo-600 to-purple-600" />
+
+                        {/* Modal Header */}
+                        <div className="flex items-start justify-between p-6 border-b border-white/8">
+                            <div>
+                                <h2 className="text-lg font-bold text-white">
+                                    {selectedMessage.firstName} {selectedMessage.lastName}
+                                </h2>
+                                <p className="text-slate-400 text-sm">{selectedMessage.email}</p>
                             </div>
+                            <button onClick={() => setSelectedMessage(null)} className="text-slate-500 hover:text-white transition p-1">
+                                <X className="w-5 h-5" />
+                            </button>
                         </div>
 
-                        <div className="p-6 space-y-6">
-                            {/* Message Details */}
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="text-sm font-medium text-slate-400">Institution</label>
-                                    <p className="text-white mt-1">{selectedMessage.institution || 'Not provided'}</p>
+                        <div className="overflow-y-auto flex-1 p-6 space-y-5">
+                            {/* Info grid */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="bg-slate-800/50 rounded-xl p-3 border border-white/8">
+                                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Institution</p>
+                                    <p className="text-white text-sm">{selectedMessage.institution || '—'}</p>
                                 </div>
-
-                                <div>
-                                    <label className="text-sm font-medium text-slate-400">Sender Role</label>
-                                    <p className="text-white mt-1 font-bold">{selectedMessage.role || 'Other'}</p>
+                                <div className="bg-slate-800/50 rounded-xl p-3 border border-white/8">
+                                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Role</p>
+                                    <p className="text-white text-sm capitalize">{selectedMessage.role || 'Other'}</p>
                                 </div>
-
-                                <div>
-                                    <label className="text-sm font-medium text-slate-400">Message</label>
-                                    <p className="text-white mt-1 whitespace-pre-wrap">{selectedMessage.message}</p>
+                                <div className="bg-slate-800/50 rounded-xl p-3 border border-white/8">
+                                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Received</p>
+                                    <p className="text-white text-sm">{formatDate(selectedMessage.createdAt)}</p>
                                 </div>
-
-                                <div>
-                                    <label className="text-sm font-medium text-slate-400">Received</label>
-                                    <p className="text-white mt-1">{formatDate(selectedMessage.createdAt)}</p>
-                                </div>
-
-                                <div>
-                                    <label className="text-sm font-medium text-slate-400">Status</label>
-                                    <div className="mt-2 flex gap-2">
-                                        {['new', 'read', 'replied', 'archived'].map((status) => (
+                                <div className="bg-slate-800/50 rounded-xl p-3 border border-white/8">
+                                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Status</p>
+                                    <div className="flex flex-wrap gap-1 mt-1">
+                                        {['new', 'read', 'replied', 'archived'].map(s => (
                                             <button
-                                                key={status}
-                                                onClick={() => handleUpdateStatus(selectedMessage._id, status)}
-                                                className={`px-4 py-2 rounded-lg text-sm font-medium capitalize transition ${selectedMessage.status === status
-                                                    ? 'bg-indigo-600 text-white'
-                                                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                                                    }`}
+                                                key={s}
+                                                onClick={() => handleUpdateStatus(selectedMessage.id, s)}
+                                                className={`px-2.5 py-1 rounded-lg text-xs font-semibold capitalize transition ${selectedMessage.status === s ? 'bg-indigo-600 text-white' : 'bg-slate-700 text-slate-400 hover:bg-slate-600'}`}
                                             >
-                                                {status}
+                                                {s}
                                             </button>
                                         ))}
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Reply Section */}
-                            <div className="border-t border-white/10 pt-6">
-                                <label className="text-sm font-medium text-slate-400">Reply (for internal notes)</label>
-                                <textarea
-                                    value={replyText}
-                                    onChange={(e) => setReplyText(e.target.value)}
-                                    rows={4}
-                                    className="w-full mt-2 px-4 py-3 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
-                                    placeholder="Add your reply or notes here..."
-                                />
-
-                                {selectedMessage.repliedBy && (
-                                    <div className="mt-2 text-sm text-slate-400">
-                                        Replied by {selectedMessage.repliedBy.firstName} {selectedMessage.repliedBy.lastName} on {formatDate(selectedMessage.repliedAt!)}
-                                    </div>
-                                )}
-
-                                <div className="flex gap-3 mt-4">
-                                    <button
-                                        onClick={handleReply}
-                                        disabled={isSubmitting || !replyText.trim()}
-                                        className="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        {isSubmitting ? 'Saving...' : 'Save Reply'}
-                                    </button>
-                                    <button
-                                        onClick={() => setSelectedMessage(null)}
-                                        className="px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition"
-                                    >
-                                        Close
-                                    </button>
+                            {/* Message */}
+                            <div>
+                                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Message</p>
+                                <div className="bg-slate-800/50 rounded-xl p-4 border border-white/8">
+                                    <p className="text-slate-200 text-sm whitespace-pre-wrap leading-relaxed">{selectedMessage.message}</p>
                                 </div>
                             </div>
+
+                            {/* Reply */}
+                            <div>
+                                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Reply / Notes</p>
+                                <textarea
+                                    value={replyText}
+                                    onChange={e => setReplyText(e.target.value)}
+                                    rows={4}
+                                    className={inputCls + ' resize-none'}
+                                    placeholder="Add your reply or internal notes…"
+                                />
+                                {selectedMessage.repliedBy && (
+                                    <p className="text-[10px] text-slate-500 mt-1">
+                                        Replied by {selectedMessage.repliedBy.firstName} {selectedMessage.repliedBy.lastName}
+                                        {selectedMessage.repliedAt && ` · ${formatDate(selectedMessage.repliedAt)}`}
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="flex gap-3 p-6 border-t border-white/8">
+                            <button
+                                onClick={handleReply}
+                                disabled={isSubmitting || !replyText.trim()}
+                                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl text-sm font-semibold transition"
+                            >
+                                {isSubmitting
+                                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                                    : <CheckCircle2 className="w-4 h-4" />}
+                                {isSubmitting ? 'Saving…' : 'Save Reply'}
+                            </button>
+                            <button
+                                onClick={() => handleDelete(selectedMessage.id)}
+                                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-xl text-sm font-semibold transition"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                            </button>
+                            <button
+                                onClick={() => setSelectedMessage(null)}
+                                className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-white/10 rounded-xl text-sm font-semibold transition"
+                            >
+                                Close
+                            </button>
                         </div>
                     </div>
                 </div>

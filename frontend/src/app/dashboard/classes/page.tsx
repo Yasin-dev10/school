@@ -224,18 +224,18 @@ export default function ClassesPage() {
                     <h2 className="text-base font-bold text-slate-800 dark:text-white mb-3">{grade}</h2>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                         {grouped[grade].map((c: any) => (
-                            <div key={c._id} className="bg-slate-800 dark:bg-slate-800 rounded-xl border border-slate-700 p-4 flex flex-col gap-3">
+                            <div key={c._id} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 flex flex-col gap-3">
                                 {/* Title row */}
                                 <div className="flex items-start justify-between">
-                                    <h3 className="text-sm font-bold text-white leading-tight">
+                                    <h3 className="text-sm font-bold text-slate-800 dark:text-white leading-tight">
                                         {c.name}{c.section ? ` - Class ${c.section}` : ''}
                                     </h3>
                                     {canManage && (
                                         <div className="flex gap-1 shrink-0 ml-2">
-                                            <button onClick={() => handleEdit(c)} className="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-700 transition">
+                                            <button onClick={() => handleEdit(c)} className="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-blue-500 hover:bg-slate-100 dark:hover:bg-slate-700 transition">
                                                 <Pencil className="w-3 h-3" />
                                             </button>
-                                            <button onClick={() => handleDelete(c._id)} className="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-red-400 hover:bg-slate-700 transition">
+                                            <button onClick={() => handleDelete(c._id)} className="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-red-400 hover:bg-red-50 dark:hover:bg-slate-700 transition">
                                                 <Trash2 className="w-3 h-3" />
                                             </button>
                                         </div>
@@ -245,18 +245,18 @@ export default function ClassesPage() {
                                 {/* Stats */}
                                 <div className="space-y-1.5 text-sm flex-1">
                                     <div className="flex items-center justify-between">
-                                        <span className="text-slate-400">Class Teacher:</span>
-                                        <span className="text-white font-semibold text-right truncate max-w-[55%]">
+                                        <span className="text-slate-500 dark:text-slate-400">Class Teacher:</span>
+                                        <span className="text-slate-800 dark:text-white font-semibold text-right truncate max-w-[55%]">
                                             {c.classTeacher ? `${c.classTeacher.firstName} ${c.classTeacher.lastName}` : '—'}
                                         </span>
                                     </div>
                                     <div className="flex items-center justify-between">
-                                        <span className="text-slate-400">Students:</span>
-                                        <span className="text-white font-semibold">{c.studentCount ?? 0}</span>
+                                        <span className="text-slate-500 dark:text-slate-400">Students:</span>
+                                        <span className="text-slate-800 dark:text-white font-semibold">{c.studentCount ?? 0}</span>
                                     </div>
                                     <div className="flex items-center justify-between">
-                                        <span className="text-slate-400">Room Number:</span>
-                                        <span className="text-white font-semibold">{c.room || '—'}</span>
+                                        <span className="text-slate-500 dark:text-slate-400">Room Number:</span>
+                                        <span className="text-slate-800 dark:text-white font-semibold">{c.room || '—'}</span>
                                     </div>
                                 </div>
 

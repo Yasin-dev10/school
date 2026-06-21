@@ -278,7 +278,7 @@ export default function GradeEntryPage() {
                     <div className="relative">
                         <select value={selClass} onChange={e => setSelClass(e.target.value)}
                             className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 appearance-none pr-8">
-                            <option value="">Class 10A</option>
+                            <option value="">— Select Class —</option>
                             {classes.map(c => <option key={c._id} value={c._id}>{c.grade || c.name}{c.section ? ` ${c.section}` : ''}</option>)}
                         </select>
                         <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
@@ -289,7 +289,7 @@ export default function GradeEntryPage() {
                     <div className="relative">
                         <select value={selSubject} onChange={e => setSelSubject(e.target.value)}
                             className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 appearance-none pr-8">
-                            <option value="">Mathematics</option>
+                            <option value="">— Select Subject —</option>
                             {subjects.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
                         </select>
                         <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
@@ -300,7 +300,7 @@ export default function GradeEntryPage() {
                     <div className="relative">
                         <select value={selExam} onChange={e => setSelExam(e.target.value)}
                             className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 appearance-none pr-8">
-                            <option value="">Final Exam 2024</option>
+                            <option value="">— Select Exam —</option>
                             {exams.map(e => <option key={e._id} value={e._id}>{e.name} — {e.term}</option>)}
                         </select>
                         <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />

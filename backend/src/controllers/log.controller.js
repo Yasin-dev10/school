@@ -4,7 +4,7 @@ const prisma = require('../config/prismaClient');
 exports.getAuditLogs = async (req, res) => {
     try {
         let where = {};
-        if (req.user.role !== 'super_admin') {
+        if (req.user.role !== 'super-admin') {
             where.tenantId = req.user.tenantId;
         }
 
