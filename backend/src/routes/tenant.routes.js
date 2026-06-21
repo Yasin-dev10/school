@@ -7,7 +7,8 @@ const {
     updateTenant,
     deleteTenant,
     getMyTenant,
-    updateMyTenant
+    updateMyTenant,
+    recordTenantPayment
 } = require('../controllers/tenant.controller');
 const { protect, authorize } = require('../middlewares/auth.middleware');
 
@@ -29,5 +30,7 @@ router.route('/:id')
     .get(getTenantById)
     .put(updateTenant)
     .delete(deleteTenant);
+
+router.post('/:id/payments', recordTenantPayment);
 
 module.exports = router;

@@ -172,6 +172,69 @@ exports.deleteTenant = async (req, res) => {
     }
 };
 
+// @desc    Record a subscription payment for a tenant (Super Admin)
+// @route   POST /api/tenants/:id/payments
+exports.recordTenantPayment = async (req, res) => {
+    try {
+        const tenant = await prisma.tenant.findUnique({ where: { id: req.params.id } });
+        if (!tenant) return res.status(404).json({ message: 'Tenant not found' });
+
+        const {
+            amount,
+            paymentMethod = 'credit_card',
+            transactionId,
+            note,
+            paymentDate,
+            renewMonths = 1,
+        } = req.body;
+
+        if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+            return res.status(400).json({ success: false, message: 'Valid amount is required' });
+        }
+
+        // Extend subscription validity
+        const baseDate = tenant.subscriptionValid && new Date(tenant.subscriptionValid) > new Date()
+            ? new Date(tenant.subscriptionValid)
+            : new Date();
+        baseDate.setMonth(baseDate.getMonth() + Number(renewMonths));
+
+        const updated = await prisma.tenant.update({
+            where: { id: req.params.id },
+            data: {
+                subscriptionActive: true,
+                subscriptionValid: baseDate.toISOString(),
+                status: 'active',
+            }
+        });
+
+        await logAction({
+            action: 'UPDATE',
+            module: 'TENANT',
+            details: `Payment recorded for ${tenant.name}: $${amount} via ${paymentMethod}. TxnID: ${transactionId || 'N/A'}. Note: ${note || '—'}`,
+            userId: req.user?._id,
+            tenantId: 'platform'
+        });
+
+        res.status(201).json({
+            success: true,
+            message: 'Payment recorded and subscription extended',
+            data: {
+                tenantId:    tenant.id,
+                schoolName:  tenant.name,
+                amount:      Number(amount),
+                paymentMethod,
+                transactionId: transactionId || null,
+                note:          note || null,
+                paymentDate:   paymentDate ? new Date(paymentDate).toISOString() : new Date().toISOString(),
+                newValidUntil: baseDate.toISOString(),
+                renewMonths:   Number(renewMonths),
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 // @desc    Get current tenant (Dashboard/Branding)
 // @route   GET /api/tenants/me
 exports.getMyTenant = async (req, res) => {
