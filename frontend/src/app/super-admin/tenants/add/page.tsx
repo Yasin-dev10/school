@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '../../../utils/api';
 import Link from 'next/link';
-import LogoUpload from '../../../components/LogoUpload';
+import LogoUpload from '../../../../components/LogoUpload';
 
 export default function AddTenantPage() {
     const router = useRouter();

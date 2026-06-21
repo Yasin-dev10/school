@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import api from '../../../../utils/api';
 import Link from 'next/link';
-import LogoUpload from '../../../../components/LogoUpload';
+import LogoUpload from '../../../../../components/LogoUpload';
 
 export default function EditTenantPage() {
     const router = useRouter();

@@ -1,6 +1,6 @@
 "use client";
 import { useState } from 'react';
-import LogoUpload from '../../components/LogoUpload';
+import LogoUpload from '../../../components/LogoUpload';
 import api from '../../utils/api';
 
 export default function GlobalSettingsPage() {
