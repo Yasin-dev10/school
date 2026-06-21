@@ -1,8 +1,60 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import api from '@/app/utils/api';
 import { toast } from 'react-hot-toast';
-import { Search, FileDown, Trophy, Ban, Users, TrendingUp, Grid, List } from 'lucide-react';
+import { FileDown, Trophy, TrendingUp, Grid, List, Edit2, Trash2, X } from 'lucide-react';
+
+interface ExamOption {
+    id?: string;
+    _id?: string;
+    name: string;
+    term?: string;
+}
+
+interface ClassOption {
+    id?: string;
+    _id?: string;
+    name: string;
+    section?: string | null;
+}
+
+interface SubjectOption {
+    id: string;
+    name: string;
+    code?: string | null;
+}
+
+interface MarkStudent {
+    id: string;
+    firstName: string;
+    lastName: string;
+    rollNo?: string | null;
+    admissionNo?: string | null;
+}
+
+interface ApiMark {
+    id: string;
+    marksObtained: number;
+    maxMarks: number;
+    remarks?: string | null;
+    grade?: string | null;
+    gpa?: number | null;
+    gradeRemarks?: string | null;
+    student?: MarkStudent | null;
+    subject: SubjectOption;
+}
+
+interface SubjectMark {
+    markId: string;
+    subjectId: string;
+    subjectName: string;
+    obtained: number;
+    max: number;
+    remarks: string;
+    grade?: string | null;
+    gpa?: number | null;
+    gradeRemarks?: string | null;
+}
 
 interface StudentResult {
     id: string;
@@ -16,26 +68,45 @@ interface StudentResult {
     averageGpa: number;
     subjectCount: number;
     rank?: number;
-    subjectMarks?: Record<string, { obtained: number; max: number; grade?: string | null; gpa?: number | null; gradeRemarks?: string | null }>;
+    subjectMarks?: Record<string, SubjectMark>;
 }
 
+type SelectedMark = SubjectMark & {
+    studentId: string;
+    studentName: string;
+};
+
+const getApiErrorMessage = (error: unknown, fallback: string) => {
+    if (typeof error === 'object' && error !== null && 'response' in error) {
+        const response = (error as { response?: { data?: { message?: string } } }).response;
+        return response?.data?.message || fallback;
+    }
+    return fallback;
+};
+
 export default function ExamResultsPage() {
-    const [exams, setExams] = useState<any[]>([]);
-    const [classes, setClasses] = useState<any[]>([]);
+    const [exams, setExams] = useState<ExamOption[]>([]);
+    const [classes, setClasses] = useState<ClassOption[]>([]);
     const [selectedExam, setSelectedExam] = useState('');
     const [selectedClass, setSelectedClass] = useState('');
 
     const [results, setResults] = useState<StudentResult[]>([]);
-    const [subjects, setSubjects] = useState<any[]>([]);
+    const [subjects, setSubjects] = useState<SubjectOption[]>([]);
     const [loading, setLoading] = useState(false);
     const [viewMode, setViewMode] = useState<'list' | 'matrix'>('list');
+    const [editingStudent, setEditingStudent] = useState<StudentResult | null>(null);
+    const [editingMark, setEditingMark] = useState<SelectedMark | null>(null);
+    const [editFormData, setEditFormData] = useState({ marksObtained: '', maxMarks: '', remarks: '' });
+    const [deleteTarget, setDeleteTarget] = useState<SelectedMark | null>(null);
+    const [updating, setUpdating] = useState(false);
+    const [deleting, setDeleting] = useState(false);
 
     useEffect(() => {
         const fetchFilters = async () => {
             try {
                 const [examsRes, classesRes] = await Promise.all([
-                    api.get('/exams'),
-                    api.get('/classes')
+                    api.get<{ data: ExamOption[] }>('/exams'),
+                    api.get<{ data: ClassOption[] }>('/classes')
                 ]);
                 setExams(examsRes.data.data);
                 setClasses(classesRes.data.data);
@@ -47,20 +118,11 @@ export default function ExamResultsPage() {
         fetchFilters();
     }, []);
 
-    useEffect(() => {
-        if (selectedExam && selectedClass) {
-            fetchResults();
-        } else {
-            setResults([]);
-            setSubjects([]);
-        }
-    }, [selectedExam, selectedClass]);
-
-    const fetchResults = async () => {
+    const fetchResults = useCallback(async () => {
         setLoading(true);
         try {
             // Fetch all marks for this class/exam
-            const res = await api.get('/exams/marks', {
+            const res = await api.get<{ data: ApiMark[] }>('/exams/marks', {
                 params: {
                     examId: selectedExam,
                     classId: selectedClass
@@ -71,14 +133,14 @@ export default function ExamResultsPage() {
 
             // Group by Student
             const studentMap: Record<string, StudentResult> = {};
-            const subjectMap: Record<string, any> = {};
+            const subjectMap: Record<string, SubjectOption> = {};
 
-            marks.forEach((mark: any) => {
+            marks.forEach((mark) => {
                 if (!mark.student) return; // Skip if student deleted
-                const sId = mark.student._id;
+                const sId = mark.student.id;
 
-                if (!subjectMap[mark.subject._id]) {
-                    subjectMap[mark.subject._id] = mark.subject;
+                if (!subjectMap[mark.subject.id]) {
+                    subjectMap[mark.subject.id] = mark.subject;
                 }
 
                 if (!studentMap[sId]) {
@@ -86,8 +148,8 @@ export default function ExamResultsPage() {
                         id: sId,
                         firstName: mark.student.firstName,
                         lastName: mark.student.lastName,
-                        rollNo: mark.student.profile?.rollNo || '-',
-                        admissionNo: mark.student.profile?.admissionNo || '-',
+                        rollNo: mark.student.rollNo || '-',
+                        admissionNo: mark.student.admissionNo || '-',
                         totalObtained: 0,
                         totalMax: 0,
                         percentage: 0,
@@ -102,9 +164,13 @@ export default function ExamResultsPage() {
                 studentMap[sId].averageGpa += Number(mark.gpa || 0);
                 studentMap[sId].subjectCount++;
                 if (studentMap[sId].subjectMarks) {
-                    studentMap[sId].subjectMarks![mark.subject._id] = {
+                    studentMap[sId].subjectMarks![mark.subject.id] = {
+                        markId: mark.id,
+                        subjectId: mark.subject.id,
+                        subjectName: mark.subject.name,
                         obtained: mark.marksObtained,
                         max: mark.maxMarks,
+                        remarks: mark.remarks || '',
                         grade: mark.grade || null,
                         gpa: mark.gpa ?? null,
                         gradeRemarks: mark.gradeRemarks || null
@@ -112,7 +178,7 @@ export default function ExamResultsPage() {
                 }
             });
 
-            setSubjects(Object.values(subjectMap).sort((a: any, b: any) => a.name.localeCompare(b.name)));
+            setSubjects(Object.values(subjectMap).sort((a, b) => a.name.localeCompare(b.name)));
 
             // Calculate Percentage & Convert to Array
             const resultArray = Object.values(studentMap).map(s => ({
@@ -137,7 +203,16 @@ export default function ExamResultsPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [selectedExam, selectedClass]);
+
+    useEffect(() => {
+        if (selectedExam && selectedClass) {
+            fetchResults();
+        } else {
+            setResults([]);
+            setSubjects([]);
+        }
+    }, [selectedExam, selectedClass, fetchResults]);
 
     const downloadReportCard = async (studentId: string, studentName: string) => {
         try {
@@ -151,8 +226,104 @@ export default function ExamResultsPage() {
             document.body.appendChild(link);
             link.click();
             link.remove();
-        } catch (error) {
+        } catch {
             toast.error('Failed to download report card');
+        }
+    };
+
+    const getSelectedMark = (student: StudentResult, mark: SubjectMark): SelectedMark => ({
+        ...mark,
+        studentId: student.id,
+        studentName: `${student.firstName} ${student.lastName}`.trim()
+    });
+
+    const openEditModal = (markData: SelectedMark) => {
+        setEditingMark(markData);
+        setEditFormData({
+            marksObtained: String(markData.obtained ?? ''),
+            maxMarks: String(markData.max || ''),
+            remarks: markData.remarks || ''
+        });
+    };
+
+    const selectStudentForEdit = (student: StudentResult) => {
+        setEditingStudent(student);
+    };
+
+    const saveEditedMark = async () => {
+        if (!editingMark || !selectedExam || !selectedClass) return;
+
+        // Validate required fields
+        if (!editingMark.studentId) {
+            toast.error('Student ID is missing');
+            return;
+        }
+        if (!editingMark.subjectId) {
+            toast.error('Subject ID is missing');
+            return;
+        }
+
+        // Validate input
+        const marksObtained = Number(editFormData.marksObtained);
+        const maxMarks = Number(editFormData.maxMarks);
+        
+        if (isNaN(marksObtained) || marksObtained < 0) {
+            toast.error('Marks obtained must be a valid number');
+            return;
+        }
+        if (isNaN(maxMarks) || maxMarks <= 0) {
+            toast.error('Max marks must be a valid positive number');
+            return;
+        }
+        if (marksObtained > maxMarks) {
+            toast.error('Marks obtained cannot be greater than max marks');
+            return;
+        }
+
+        setUpdating(true);
+        try {
+            const marks = [{
+                studentId: editingMark.studentId,
+                score: marksObtained,
+                maxMarks,
+                remarks: editFormData.remarks
+            }];
+
+            const payload = {
+                examId: selectedExam,
+                subjectId: editingMark.subjectId,
+                classId: selectedClass,
+                marks,
+                maxMarks
+            };
+
+            await api.post('/exams/marks/bulk', payload);
+
+            toast.success('Mark updated successfully');
+            setEditingMark(null);
+            setEditingStudent(null);
+            await fetchResults();
+        } catch (error: unknown) {
+            toast.error(getApiErrorMessage(error, 'Failed to update mark'));
+        } finally {
+            setUpdating(false);
+        }
+    };
+
+    const deleteMark = async () => {
+        if (!deleteTarget) return;
+
+        setDeleting(true);
+        try {
+            await api.delete(`/exams/marks/${deleteTarget.markId}`);
+            toast.success('Mark deleted successfully');
+            setDeleteTarget(null);
+            setEditingStudent(null);
+            await fetchResults();
+        } catch (error: unknown) {
+            toast.error(getApiErrorMessage(error, 'Failed to delete mark'));
+        } finally {
+            setDeleting(false);
         }
     };
 
@@ -204,7 +375,7 @@ export default function ExamResultsPage() {
                         >
                             <option value="" className="bg-slate-900">Choose Exam...</option>
                             {exams.map(e => (
-                                <option key={e._id} value={e._id} className="bg-slate-900">{e.name} ({e.term})</option>
+                                <option key={e._id || e.id || e.name} value={e._id || e.id || ''} className="bg-slate-900">{e.name} ({e.term})</option>
                             ))}
                         </select>
                     </div>
@@ -219,7 +390,7 @@ export default function ExamResultsPage() {
                         >
                             <option value="" className="bg-slate-900">Choose Class...</option>
                             {classes.map(c => (
-                                <option key={c._id} value={c._id} className="bg-slate-900">{c.name} {c.section && `(${c.section})`}</option>
+                                <option key={c._id || c.id || c.name} value={c._id || c.id || ''} className="bg-slate-900">{c.name} {c.section && `(${c.section})`}</option>
                             ))}
                         </select>
                     </div>
@@ -255,12 +426,12 @@ export default function ExamResultsPage() {
                                         <th className="px-8 py-5 text-right">Raw Score</th>
                                         <th className="px-8 py-5 text-center">Index %</th>
                                         <th className="px-8 py-5 text-center">Avg GPA</th>
-                                        <th className="px-8 py-5 text-right">Report</th>
+                                        <th className="px-8 py-5 text-right">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-white/5">
-                                    {results.map((student) => (
-                                            <tr key={student.id} className="hover:bg-white/5 transition-colors group">
+                                    {results.map((student, index) => (
+                                            <tr key={`${student.id}-${index}`} className="hover:bg-white/5 transition-colors group">
                                                 <td className="px-8 py-4">
                                                     <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-xs ${student.rank === 1 ? 'bg-yellow-500/20 text-yellow-500 border border-yellow-500/30' :
                                                         student.rank === 2 ? 'bg-slate-500/20 text-slate-400 border border-slate-500/30' :
@@ -290,12 +461,22 @@ export default function ExamResultsPage() {
                                                     </span>
                                                 </td>
                                                 <td className="px-8 py-4 text-right">
-                                                    <button
-                                                        onClick={() => downloadReportCard(student.id, student.firstName)}
-                                                        className="p-2.5 text-slate-500 hover:text-white hover:bg-indigo-600 rounded-xl transition-all border border-white/5 hover:border-indigo-500 group-hover:shadow-lg shadow-indigo-500/20"
-                                                    >
-                                                        <FileDown className="w-4 h-4" />
-                                                    </button>
+                                                    <div className="flex items-center justify-end gap-2">
+                                                        <button
+                                                            onClick={() => downloadReportCard(student.id, student.firstName)}
+                                                            className="p-2.5 text-slate-500 hover:text-white hover:bg-indigo-600 rounded-xl transition-all border border-white/5 hover:border-indigo-500 group-hover:shadow-lg shadow-indigo-500/20"
+                                                            title="Download Report"
+                                                        >
+                                                            <FileDown className="w-4 h-4" />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => selectStudentForEdit(student)}
+                                                            className="p-2.5 text-slate-500 hover:text-white hover:bg-blue-600 rounded-xl transition-all border border-white/5 hover:border-blue-500 group-hover:shadow-lg shadow-blue-500/20"
+                                                            title="Edit Marks"
+                                                        >
+                                                            <Edit2 className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                     ))}
@@ -307,7 +488,7 @@ export default function ExamResultsPage() {
                                     <tr>
                                         <th className="px-6 py-4 sticky left-0 z-20 bg-slate-950/90 backdrop-blur border-r border-white/5">Student Information</th>
                                         {subjects.map(subject => (
-                                            <th key={subject._id} className="px-4 py-4 text-center min-w-[100px]">
+                                            <th key={subject.id} className="px-4 py-4 text-center min-w-[100px]">
                                                 {subject.name}
                                             </th>
                                         ))}
@@ -318,21 +499,39 @@ export default function ExamResultsPage() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-white/5">
-                                    {results.map((student) => (
-                                        <tr key={student.id} className="hover:bg-white/5 transition-colors">
+                                    {results.map((student, index) => (
+                                        <tr key={`${student.id}-${index}`} className="hover:bg-white/5 transition-colors">
                                             <td className="px-6 py-4 sticky left-0 bg-slate-900/90 backdrop-blur border-r border-white/5 z-10">
                                                 <div className="font-bold text-white mb-0.5">{student.firstName} {student.lastName}</div>
                                                 <div className="text-[9px] text-slate-500 font-black uppercase tracking-widest">Adm: {student.admissionNo}</div>
                                             </td>
                                             {subjects.map(subject => {
-                                                const mark = student.subjectMarks?.[subject._id];
+                                                const mark = student.subjectMarks?.[subject.id];
                                                 return (
-                                                    <td key={subject._id} className="px-4 py-4 text-center border-l border-white/5 first:border-l-0">
+                                                    <td key={subject.id} className="px-4 py-4 text-center border-l border-white/5 first:border-l-0">
                                                         {mark ? (
-                                                            <div>
-                                                                <div className="font-bold text-white">{mark.obtained}</div>
-                                                                <div className="text-[9px] text-slate-600">/ {mark.max}</div>
-                                                                <div className="mt-1 text-[10px] font-black text-indigo-400">{mark.grade || 'N/A'}</div>
+                                                            <div className="flex flex-col items-center gap-2">
+                                                                <div>
+                                                                    <div className="font-bold text-white">{mark.obtained}</div>
+                                                                    <div className="text-[9px] text-slate-600">/ {mark.max}</div>
+                                                                    <div className="mt-1 text-[10px] font-black text-indigo-400">{mark.grade || 'N/A'}</div>
+                                                                </div>
+                                                                <div className="flex items-center justify-center gap-1">
+                                                                    <button
+                                                                        onClick={() => openEditModal(getSelectedMark(student, mark))}
+                                                                        className="p-1.5 text-slate-500 hover:text-blue-400 hover:bg-blue-500/20 rounded-lg transition-all"
+                                                                        title={`Edit ${subject.name} mark`}
+                                                                    >
+                                                                        <Edit2 className="w-3.5 h-3.5" />
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => setDeleteTarget(getSelectedMark(student, mark))}
+                                                                        className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/20 rounded-lg transition-all"
+                                                                        title={`Delete ${subject.name} mark`}
+                                                                    >
+                                                                        <Trash2 className="w-3.5 h-3.5" />
+                                                                    </button>
+                                                                </div>
                                                             </div>
                                                         ) : (
                                                             <div className="text-slate-700 text-xs">-</div>
@@ -366,6 +565,195 @@ export default function ExamResultsPage() {
                     </div>
                 )}
             </div>
+
+            {/* Subject Selection Modal */}
+            {editingStudent && !editingMark && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className="bg-slate-900 border border-white/10 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-6">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-lg font-bold text-white">Manage Subject Marks</h3>
+                            <button
+                                onClick={() => setEditingStudent(null)}
+                                className="p-1.5 text-slate-500 hover:text-white hover:bg-white/10 rounded-lg transition-all"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-2">
+                            <p className="text-sm text-slate-400 mb-4">
+                                <strong>{editingStudent.firstName} {editingStudent.lastName}</strong>
+                                {editingStudent.admissionNo && ` (Adm: ${editingStudent.admissionNo})`}
+                            </p>
+                            <div className="space-y-2 max-h-96 overflow-y-auto custom-scrollbar">
+                                {Object.entries(editingStudent.subjectMarks || {}).map(([subId, mark]) => {
+                                    const subject = subjects.find(s => s.id === subId);
+                                    return (
+                                        <div
+                                            key={subId}
+                                            className="w-full p-4 text-left bg-slate-800/50 border border-white/10 rounded-lg"
+                                        >
+                                            <div className="flex justify-between items-center">
+                                                <div>
+                                                    <div className="font-bold text-white text-base">{subject?.name || mark.subjectName}</div>
+                                                    <div className="text-sm text-slate-400 mt-2 font-black">
+                                                        Score: <span className="text-indigo-400 text-lg">{mark.obtained}/{mark.max}</span>
+                                                    </div>
+                                                </div>
+                                                <div className="text-right space-y-1">
+                                                    <div className="text-2xl font-black text-indigo-400">{((mark.obtained/mark.max)*100).toFixed(1)}%</div>
+                                                    <div className="text-sm font-bold text-slate-300">{mark.grade || 'N/A'}</div>
+                                                    {mark.gpa && <div className="text-xs text-slate-400">GPA: {mark.gpa.toFixed(2)}</div>}
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-2 mt-4">
+                                                <button
+                                                    onClick={() => openEditModal(getSelectedMark(editingStudent, mark))}
+                                                    className="flex-1 px-3 py-2 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/20 rounded-lg transition-all text-xs font-black uppercase tracking-widest"
+                                                >
+                                                    Edit
+                                                </button>
+                                                <button
+                                                    onClick={() => setDeleteTarget(getSelectedMark(editingStudent, mark))}
+                                                    className="flex-1 px-3 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/20 rounded-lg transition-all text-xs font-black uppercase tracking-widest"
+                                                >
+                                                    Delete
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        <div className="flex">
+                            <button
+                                onClick={() => setEditingStudent(null)}
+                                className="flex-1 px-4 py-2.5 text-slate-400 hover:text-white border border-white/20 hover:border-white/40 rounded-lg transition-all font-semibold"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Mark Modal */}
+            {editingMark && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className="bg-slate-900 border border-white/10 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-6">
+                        <div className="flex items-center justify-between">
+                            <h3 className="text-lg font-bold text-white">Edit Mark</h3>
+                            <button
+                                onClick={() => {
+                                    setEditingMark(null);
+                                    setEditingStudent(null);
+                                }}
+                                className="p-1.5 text-slate-500 hover:text-white hover:bg-white/10 rounded-lg transition-all"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Subject</label>
+                                <input
+                                    type="text"
+                                    value={editingMark.subjectName || ''}
+                                    disabled
+                                    className="w-full bg-slate-800/50 border border-white/10 rounded-lg px-4 py-2.5 text-slate-400 text-sm"
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Marks Obtained</label>
+                                    <input
+                                        type="number"
+                                        value={editFormData.marksObtained}
+                                        onChange={(e) => setEditFormData({ ...editFormData, marksObtained: e.target.value })}
+                                        max={editingMark.max}
+                                        className="w-full bg-slate-800/50 border border-white/10 rounded-lg px-4 py-2.5 text-white text-sm focus:border-indigo-500 outline-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Max Marks</label>
+                                    <input
+                                        type="number"
+                                        value={editFormData.maxMarks}
+                                        onChange={(e) => setEditFormData({ ...editFormData, maxMarks: e.target.value })}
+                                        className="w-full bg-slate-800/50 border border-white/10 rounded-lg px-4 py-2.5 text-white text-sm focus:border-indigo-500 outline-none"
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">Remarks</label>
+                                <textarea
+                                    value={editFormData.remarks}
+                                    onChange={(e) => setEditFormData({ ...editFormData, remarks: e.target.value })}
+                                    className="w-full bg-slate-800/50 border border-white/10 rounded-lg px-4 py-2.5 text-white text-sm focus:border-indigo-500 outline-none resize-none"
+                                    rows={3}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setEditingMark(null)}
+                                className="flex-1 px-4 py-2.5 text-slate-400 hover:text-white border border-white/20 hover:border-white/40 rounded-lg transition-all font-semibold"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={saveEditedMark}
+                                disabled={updating}
+                                className="flex-1 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg transition-all font-semibold"
+                            >
+                                {updating ? 'Saving...' : 'Save Changes'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Delete Confirmation Modal */}
+            {deleteTarget && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className="bg-slate-900 border border-white/10 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-6">
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 bg-red-500/20 rounded-xl flex items-center justify-center">
+                                <Trash2 className="w-6 h-6 text-red-500" />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-bold text-white">Delete Mark</h3>
+                                <p className="text-sm text-slate-400">
+                                    {deleteTarget.subjectName} for {deleteTarget.studentName}
+                                </p>
+                                <p className="text-sm text-slate-500">This action cannot be undone.</p>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setDeleteTarget(null)}
+                                disabled={deleting}
+                                className="flex-1 px-4 py-2.5 text-slate-400 hover:text-white border border-white/20 hover:border-white/40 rounded-lg transition-all font-semibold"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={deleteMark}
+                                disabled={deleting}
+                                className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg transition-all font-semibold"
+                            >
+                                {deleting ? 'Deleting...' : 'Delete'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

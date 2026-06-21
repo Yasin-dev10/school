@@ -456,6 +456,99 @@ exports.promoteStudents = async (req, res) => {
     }
 };
 
+// @desc    Get promotion eligibility for students in a class
+exports.getPromotionEligibility = async (req, res) => {
+    try {
+        const { classId } = req.query;
+        const tenantId = req.user.tenantId;
+
+        if (!classId) return res.status(400).json({ message: 'classId query param is required' });
+
+        // Resolve class — same path as getStudents uses for ?class= param
+        const classDoc = await resolveClassReference(prisma, { tenantId, classRef: classId });
+        if (!classDoc) return res.status(404).json({ message: 'Class not found' });
+
+        // Build where exactly as getStudents does
+        const classFilter = studentWhereForClass(tenantId, classDoc);
+        // Merge: keep tenantId/role from base, add OR from classFilter
+        // Also add a name-only match for students with no section stored
+        const students = await prisma.user.findMany({
+            where: {
+                tenantId,
+                role: 'student',
+                OR: [
+                    ...classFilter.OR,
+                    // Students stored with class name but null section
+                    { profileClass: classDoc.name, profileSection: null }
+                ]
+            },
+            select: userSelect,
+            orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }]
+        });
+
+        // Fetch completed exams for this class
+        const exams = await prisma.exam.findMany({
+            where: { tenantId, status: 'completed', classes: { some: { classId: classDoc.id } } }
+        });
+
+        // Fetch grade system thresholds
+        const gradeSystem = await prisma.gradeSystem.findFirst({
+            where: { tenantId, isActive: true },
+            include: { grades: true }
+        });
+        // Pass threshold: lowest minPercentage among non-F grades, default 50
+        const passThreshold = gradeSystem?.grades?.length
+            ? Math.min(...gradeSystem.grades.filter(g => g.grade !== 'F').map(g => g.minPercentage))
+            : 50;
+
+        const result = [];
+        for (const student of students) {
+            let totalObtained = 0;
+            let totalMax = 0;
+            let eligible = true;
+            let reason = '';
+
+            if (exams.length === 0) {
+                eligible = false;
+                reason = 'No completed exams';
+            } else {
+                for (const exam of exams) {
+                    const marks = await prisma.mark.findMany({
+                        where: { studentId: student.id, examId: exam.id, tenantId }
+                    });
+                    if (marks.length === 0) {
+                        eligible = false;
+                        reason = reason || `Missing marks for ${exam.name}`;
+                        continue;
+                    }
+                    for (const m of marks) {
+                        totalObtained += m.marksObtained;
+                        totalMax += m.maxMarks;
+                        const pct = (m.marksObtained / m.maxMarks) * 100;
+                        if (pct < passThreshold) {
+                            eligible = false;
+                            reason = reason || `Failed subject in ${exam.name}`;
+                        }
+                    }
+                }
+            }
+
+            const finalPercentage = totalMax > 0 ? Math.round((totalObtained / totalMax) * 100) : null;
+
+            result.push({
+                ...formatUser(student, req.user),
+                finalGrade: finalPercentage,
+                eligible,
+                reason
+            });
+        }
+
+        res.status(200).json({ success: true, data: result, passThreshold });
+    } catch (error) {
+        sendError(res, error);
+    }
+};
+
 // @desc    Get all children for a parent
 exports.getChildren = async (req, res) => {
     try {

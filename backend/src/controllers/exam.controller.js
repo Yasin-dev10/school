@@ -117,7 +117,12 @@ exports.bulkMarkEntry = async (req, res) => {
                 return res.status(403).json({ success: false, message: 'Access denied.' });
         }
 
-        const filteredMarks = marks.filter(m => m.studentId && m.score !== undefined && m.score !== null && m.score !== '');
+        const filteredMarksByStudent = new Map();
+        marks
+            .filter(m => m.studentId && m.score !== undefined && m.score !== null && m.score !== '')
+            .forEach(m => filteredMarksByStudent.set(m.studentId, m));
+
+        const filteredMarks = [...filteredMarksByStudent.values()];
         if (!filteredMarks.length)
             return res.status(200).json({ success: true, message: 'No valid marks provided.' });
 
@@ -135,23 +140,58 @@ exports.bulkMarkEntry = async (req, res) => {
         });
         const gradeConfigs = gradeSystem?.grades || [];
 
-        for (const m of filteredMarks) {
+        const markRows = filteredMarks.map((m) => {
             const marksObtained = Number(m.score);
             const mMax = Number(m.maxMarks) || Number(globalMaxMarks) || 100;
             const percentage = (marksObtained / mMax) * 100;
             const { grade, gpa } = calculateGrade(percentage, gradeConfigs);
             const gradeConfig = gradeConfigs.find(g => percentage >= g.minPercentage && percentage <= g.maxPercentage);
 
-            await prisma.mark.upsert({
-                where: { studentId_examId_subjectId_tenantId: { studentId: m.studentId, examId, subjectId, tenantId } },
-                update: { marksObtained, maxMarks: mMax, remarks: m.remarks || '', grade, gpa, gradeRemarks: gradeConfig?.remarks || null, classId, gradedById: req.user.id },
-                create: { studentId: m.studentId, examId, subjectId, classId, tenantId, marksObtained, maxMarks: mMax, remarks: m.remarks || '', grade, gpa, gradeRemarks: gradeConfig?.remarks || null, gradedById: req.user.id }
-            });
-        }
+            return {
+                studentId: m.studentId,
+                examId,
+                subjectId,
+                classId,
+                tenantId,
+                marksObtained,
+                maxMarks: mMax,
+                remarks: m.remarks || '',
+                grade,
+                gpa,
+                gradeRemarks: gradeConfig?.remarks || null,
+                gradedById: req.user.id
+            };
+        });
+
+        await prisma.$transaction(
+            markRows.map((markRow) =>
+                prisma.mark.upsert({
+                    where: {
+                        studentId_examId_subjectId_tenantId: {
+                            studentId: markRow.studentId,
+                            examId,
+                            subjectId,
+                            tenantId
+                        }
+                    },
+                    update: {
+                        marksObtained: markRow.marksObtained,
+                        maxMarks: markRow.maxMarks,
+                        remarks: markRow.remarks,
+                        grade: markRow.grade,
+                        gpa: markRow.gpa,
+                        gradeRemarks: markRow.gradeRemarks,
+                        classId,
+                        gradedById: req.user.id
+                    },
+                    create: markRow
+                })
+            )
+        );
 
         await logAction({ action: 'UPDATE', module: 'TENANT', details: `Entered marks for Exam ${examId}, Subject ${subjectId}`, userId: req.user._id, tenantId });
         emitToTenant(tenantId, 'marks:updated', { examId, subjectId, classId });
-        res.status(200).json({ success: true, message: 'Marks updated successfully' });
+        res.status(200).json({ success: true, message: 'Marks updated successfully', count: markRows.length });
     } catch (error) {
         console.error('Bulk Mark Entry Error:', error);
         res.status(500).json({ success: false, message: 'Internal server error while saving marks' });
@@ -227,7 +267,7 @@ exports.getMarks = async (req, res) => {
         const marks = await prisma.mark.findMany({
             where,
             include: {
-                student: { select: { id: true, firstName: true, lastName: true, rollNo: true } },
+                student: { select: { id: true, firstName: true, lastName: true, rollNo: true, admissionNo: true } },
                 subject: { select: { id: true, name: true, code: true } },
                 exam: { select: { id: true, name: true, term: true, isApproved: true, startDate: true, endDate: true } }
             }

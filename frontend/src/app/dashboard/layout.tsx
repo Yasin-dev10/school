@@ -33,7 +33,9 @@ import {
     Info,
     Menu,
     X,
-    Layers
+    Layers,
+    Search,
+    HelpCircle,
 } from 'lucide-react';
 
 export default function DashboardLayout({
@@ -43,8 +45,12 @@ export default function DashboardLayout({
 }) {
     const router = useRouter();
     const pathname = usePathname();
+
+    // Read synchronously so the first render already has user data —
+    // this prevents the logo/sidebar from going blank on refresh.
     const [isAuthorized, setIsAuthorized] = useState(false);
     const [user, setUser] = useState<any>(null);
+    const [mounted, setMounted] = useState(false);
     const [tenant, setTenant] = useState<any>(null);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
@@ -59,6 +65,7 @@ export default function DashboardLayout({
     };
 
     useEffect(() => {
+        setMounted(true);
         const token = localStorage.getItem('token');
         const userStr = localStorage.getItem('user');
 
@@ -73,20 +80,24 @@ export default function DashboardLayout({
         setUser(userData);
         setIsAuthorized(true);
 
-        // Fetch unread count
         fetchUnreadCount();
 
-        // Fetch Branding
+        const handleTenantUpdate = (e: CustomEvent) => {
+            setTenant((prev: any) => ({
+                ...prev,
+                name: e.detail.name,
+                logoUrl: e.detail.logoUrl  // flat field, not nested under config
+            }));
+        };
+        window.addEventListener('tenant-updated', handleTenantUpdate as EventListener);
+
         api.get('/tenants/me').then(res => {
             const tenantData = res.data.data;
             setTenant(tenantData);
 
-            // Initialize Socket
             if (tenantData?._id) {
                 const { initSocket } = require('../utils/socket');
                 const socket = initSocket(tenantData._id);
-
-                // Listen for new notifications
                 if (socket) {
                     socket.on('notification-received', () => {
                         fetchUnreadCount();
@@ -96,12 +107,12 @@ export default function DashboardLayout({
         }).catch(() => { });
 
         return () => {
+            window.removeEventListener('tenant-updated', handleTenantUpdate as EventListener);
             const { disconnectSocket } = require('../utils/socket');
             disconnectSocket();
         };
     }, [router]);
 
-    // Close sidebar on route change
     useEffect(() => {
         setIsSidebarOpen(false);
     }, [pathname]);
@@ -112,97 +123,109 @@ export default function DashboardLayout({
         router.push('/login');
     };
 
-    if (!isAuthorized || !user) return null;
+    if (!mounted || !isAuthorized || !user) return (
+        <div className="flex h-screen items-center justify-center bg-[#f0f4f8] dark:bg-slate-950">
+            <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+    );
 
-    // Role-based navigation
+    // Get current page name from pathname
+    const getPageTitle = () => {
+        const segments = pathname.split('/').filter(Boolean);
+        const last = segments[segments.length - 1];
+        if (!last || last === 'dashboard') return 'Dashboard';
+        return last
+            .split('-')
+            .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(' ');
+    };
+
     const getNavItems = () => {
         const common: any[] = [];
 
         if (user.role === 'school-admin' || user.role === 'receptionist') {
             common.push(
-                { name: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
-                { name: 'School Grades', href: '/dashboard/school-grades', icon: <Layers className="w-5 h-5 text-teal-400" /> },
-                { name: 'Students', href: '/dashboard/students', icon: <GraduationCap className="w-5 h-5" /> },
-                { name: 'Teachers', href: '/dashboard/teachers', icon: <Users className="w-5 h-5" /> },
-                { name: 'Classes', href: '/dashboard/classes', icon: <Building2 className="w-5 h-5" /> },
-                { name: 'Subjects', href: '/dashboard/subjects', icon: <BookOpen className="w-5 h-5" /> },
-                { name: 'Attendance', href: '/dashboard/attendance', icon: <CalendarCheck className="w-5 h-5" /> },
-                { name: 'Grades', href: '/dashboard/grades', icon: <BarChart3 className="w-5 h-5" /> },
-                { name: 'Fees', href: '/dashboard/finance', icon: <DollarSign className="w-5 h-5" /> },
-                { name: 'Payroll', href: '/dashboard/payroll', icon: <Banknote className="w-5 h-5" /> },
-                { name: 'Timetable', href: '/dashboard/timetable', icon: <CalendarDays className="w-5 h-5" /> },
-                { name: 'Assignments', href: '/dashboard/assignments', icon: <FileText className="w-5 h-5" /> },
-                { name: 'Exams', href: '/dashboard/exams', icon: <FileText className="w-5 h-5" /> },
-                { name: 'Exam Results', href: '/dashboard/exam-results', icon: <TrendingUp className="w-5 h-5" /> },
-                { name: 'Promote Students', href: '/dashboard/students/promote', icon: <ArrowUpCircle className="w-5 h-5" /> },
-                // Extra Modules
-                { name: 'Human Resources', href: '/dashboard/hr', icon: <Users2 className="w-5 h-5" /> },
-                { name: 'Library', href: '/dashboard/materials', icon: <BookCopy className="w-5 h-5" /> },
-                { name: 'Inventory', href: '/dashboard/inventory', icon: <Package className="w-5 h-5" /> },
-                { name: 'Reports', href: '/dashboard/reports', icon: <BarChart3 className="w-5 h-5" /> },
-                { name: 'Certificates', href: '/dashboard/certificates', icon: <FileBadge className="w-5 h-5" /> },
-                { name: 'Logs & Security', href: '/dashboard/logs', icon: <ShieldAlert className="w-5 h-5" /> },
-                { name: 'Settings', href: '/dashboard/settings', icon: <Settings className="w-5 h-5" /> },
+                { name: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
+                { name: 'School Grades', href: '/dashboard/school-grades', icon: <Layers className="w-4 h-4" /> },
+                { name: 'Students', href: '/dashboard/students', icon: <GraduationCap className="w-4 h-4" /> },
+                { name: 'Teachers', href: '/dashboard/teachers', icon: <Users className="w-4 h-4" /> },
+                { name: 'Classes', href: '/dashboard/classes', icon: <Building2 className="w-4 h-4" /> },
+                { name: 'Subjects', href: '/dashboard/subjects', icon: <BookOpen className="w-4 h-4" /> },
+                { name: 'Subject Allocation', href: '/dashboard/subject-allocation', icon: <Layers className="w-4 h-4" /> },
+                { name: 'Attendance', href: '/dashboard/attendance', icon: <CalendarCheck className="w-4 h-4" /> },
+                { name: 'Grades', href: '/dashboard/grades', icon: <BarChart3 className="w-4 h-4" /> },
+                { name: 'Grade Entry', href: '/dashboard/grade-entry', icon: <FileText className="w-4 h-4" /> },
+                { name: 'Fees', href: '/dashboard/finance', icon: <DollarSign className="w-4 h-4" /> },
+                { name: 'Fee & Payment Hub', href: '/dashboard/fee-hub', icon: <DollarSign className="w-4 h-4" /> },
+                { name: 'Invoice Generator', href: '/dashboard/fee-generator', icon: <FileText className="w-4 h-4" /> },
+                { name: 'Payroll', href: '/dashboard/payroll', icon: <Banknote className="w-4 h-4" /> },
+                { name: 'Timetable', href: '/dashboard/timetable', icon: <CalendarDays className="w-4 h-4" /> },
+                { name: 'Assignments', href: '/dashboard/assignments', icon: <FileText className="w-4 h-4" /> },
+                { name: 'Exams', href: '/dashboard/exams', icon: <FileText className="w-4 h-4" /> },
+                { name: 'Exam Results', href: '/dashboard/exam-results', icon: <TrendingUp className="w-4 h-4" /> },
+                { name: 'Promote Students', href: '/dashboard/students/promote', icon: <ArrowUpCircle className="w-4 h-4" /> },
+                { name: 'Human Resources', href: '/dashboard/hr', icon: <Users2 className="w-4 h-4" /> },
+                { name: 'Library', href: '/dashboard/materials', icon: <BookCopy className="w-4 h-4" /> },
+                { name: 'Inventory', href: '/dashboard/inventory', icon: <Package className="w-4 h-4" /> },
+                { name: 'Reports', href: '/dashboard/reports', icon: <BarChart3 className="w-4 h-4" /> },
+                { name: 'Certificates', href: '/dashboard/certificates', icon: <FileBadge className="w-4 h-4" /> },
+                { name: 'Logs & Security', href: '/dashboard/logs', icon: <ShieldAlert className="w-4 h-4" /> },
+                { name: 'Settings', href: '/dashboard/settings', icon: <Settings className="w-4 h-4" /> },
             );
         }
 
-        // Super-admin specific items
         if (user.role === 'super-admin') {
             common.push(
-                { name: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
-                { name: 'Contact Messages', href: '/dashboard/contact-messages', icon: <MessageSquare className="w-5 h-5" /> },
-                { name: 'Settings', href: '/dashboard/settings', icon: <Settings className="w-5 h-5" /> },
+                { name: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
+                { name: 'Contact Messages', href: '/dashboard/contact-messages', icon: <MessageSquare className="w-4 h-4" /> },
+                { name: 'Settings', href: '/dashboard/settings', icon: <Settings className="w-4 h-4" /> },
             );
         }
 
         if (user.role === 'teacher') {
             common.push(
-                { name: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
-                { name: 'Students', href: '/dashboard/students', icon: <GraduationCap className="w-5 h-5" /> },
-                { name: 'Classes', href: '/dashboard/classes', icon: <Building2 className="w-5 h-5" /> },
-                { name: 'Subjects', href: '/dashboard/subjects', icon: <BookOpen className="w-5 h-5" /> },
-                { name: 'Timetable', href: '/dashboard/timetable', icon: <CalendarDays className="w-5 h-5" /> },
-                { name: 'Assignments', href: '/dashboard/assignments', icon: <FileText className="w-5 h-5" /> },
-                { name: 'Exams', href: '/dashboard/exams', icon: <FileText className="w-5 h-5" /> },
-                { name: 'Exam Results', href: '/dashboard/exam-results', icon: <TrendingUp className="w-5 h-5" /> },
-                { name: 'Attendance', href: '/dashboard/attendance', icon: <CalendarCheck className="w-5 h-5" /> },
-                { name: 'Grades', href: '/dashboard/grades', icon: <BarChart3 className="w-5 h-5" /> },
-                { name: 'Materials', href: '/dashboard/materials', icon: <FolderOpen className="w-5 h-5" /> },
-                { name: 'Communication', href: '/dashboard/communication', icon: <MessageSquare className="w-5 h-5" /> },
-                { name: 'Payslips', href: '/dashboard/payslips', icon: <Receipt className="w-5 h-5" /> },
-                { name: 'Certificates', href: '/dashboard/certificates', icon: <FileBadge className="w-5 h-5" /> },
-                { name: 'Reports', href: '/dashboard/reports', icon: <BarChart3 className="w-5 h-5" /> },
+                { name: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
+                { name: 'Students', href: '/dashboard/students', icon: <GraduationCap className="w-4 h-4" /> },
+                { name: 'Classes', href: '/dashboard/classes', icon: <Building2 className="w-4 h-4" /> },
+                { name: 'Subjects', href: '/dashboard/subjects', icon: <BookOpen className="w-4 h-4" /> },
+                { name: 'Timetable', href: '/dashboard/timetable', icon: <CalendarDays className="w-4 h-4" /> },
+                { name: 'Assignments', href: '/dashboard/assignments', icon: <FileText className="w-4 h-4" /> },
+                { name: 'Exams', href: '/dashboard/exams', icon: <FileText className="w-4 h-4" /> },
+                { name: 'Exam Results', href: '/dashboard/exam-results', icon: <TrendingUp className="w-4 h-4" /> },
+                { name: 'Attendance', href: '/dashboard/attendance', icon: <CalendarCheck className="w-4 h-4" /> },
+                { name: 'Grades', href: '/dashboard/grades', icon: <BarChart3 className="w-4 h-4" /> },
+                { name: 'Materials', href: '/dashboard/materials', icon: <FolderOpen className="w-4 h-4" /> },
+                { name: 'Communication', href: '/dashboard/communication', icon: <MessageSquare className="w-4 h-4" /> },
+                { name: 'Payslips', href: '/dashboard/payslips', icon: <Receipt className="w-4 h-4" /> },
+                { name: 'Certificates', href: '/dashboard/certificates', icon: <FileBadge className="w-4 h-4" /> },
+                { name: 'Reports', href: '/dashboard/reports', icon: <BarChart3 className="w-4 h-4" /> },
             );
         }
 
-        if (['school-admin', 'accountant'].includes(user.role)) {
-            // Already handled in school-admin block mostly, but for accountant:
-            if (user.role === 'accountant') {
-                common.push({ name: 'Fees & Finance', href: '/dashboard/finance', icon: <DollarSign className="w-5 h-5" /> });
-            }
+        if (user.role === 'accountant') {
+            common.push({ name: 'Fees & Finance', href: '/dashboard/finance', icon: <DollarSign className="w-4 h-4" /> });
         }
 
         if (user.role === 'student' || user.role === 'parent') {
             common.push(
-                { name: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
-                { name: 'My Profile', href: '/dashboard/profile', icon: <Users className="w-5 h-5" /> }, // Profile
-                { name: 'Timetable', href: '/dashboard/timetable', icon: <CalendarDays className="w-5 h-5" /> },
-                { name: 'Attendance', href: '/dashboard/attendance', icon: <CalendarCheck className="w-5 h-5" /> },
-                { name: 'Assignments', href: '/dashboard/assignments', icon: <FileText className="w-5 h-5" /> },
-                { name: 'Exams', href: '/dashboard/exams', icon: <FileText className="w-5 h-5" /> },
-                { name: 'My Grades', href: '/dashboard/grades', icon: <TrendingUp className="w-5 h-5" /> },
-                { name: 'Certificates', href: '/dashboard/certificates', icon: <FileBadge className="w-5 h-5" /> },
-                { name: 'Materials', href: '/dashboard/materials', icon: <FolderOpen className="w-5 h-5" /> },
-                { name: 'Fees', href: '/dashboard/student-finance', icon: <DollarSign className="w-5 h-5" /> },
+                { name: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
+                { name: 'My Profile', href: '/dashboard/profile', icon: <Users className="w-4 h-4" /> },
+                { name: 'Timetable', href: '/dashboard/timetable', icon: <CalendarDays className="w-4 h-4" /> },
+                { name: 'Attendance', href: '/dashboard/attendance', icon: <CalendarCheck className="w-4 h-4" /> },
+                { name: 'Assignments', href: '/dashboard/assignments', icon: <FileText className="w-4 h-4" /> },
+                { name: 'Exams', href: '/dashboard/exams', icon: <FileText className="w-4 h-4" /> },
+                { name: 'My Grades', href: '/dashboard/grades', icon: <TrendingUp className="w-4 h-4" /> },
+                { name: 'Certificates', href: '/dashboard/certificates', icon: <FileBadge className="w-4 h-4" /> },
+                { name: 'Materials', href: '/dashboard/materials', icon: <FolderOpen className="w-4 h-4" /> },
+                { name: 'Fees', href: '/dashboard/student-finance', icon: <DollarSign className="w-4 h-4" /> },
             );
         }
 
-        common.push({ name: 'Notifications', href: '/dashboard/notifications', icon: <Bell className="w-5 h-5" /> });
+        common.push(
+            { name: 'Notifications', href: '/dashboard/notifications', icon: <Bell className="w-4 h-4" /> },
+            { name: 'About School', href: '/dashboard/about', icon: <Info className="w-4 h-4" /> },
+        );
 
-
-        common.push({ name: 'About School', href: '/dashboard/about', icon: <Info className="w-5 h-5" /> });
-
-        // Deduplicate logic just in case
         const unique: any[] = [];
         const seen = new Set();
         for (const item of common) {
@@ -217,8 +240,8 @@ export default function DashboardLayout({
     const navItems = getNavItems();
 
     return (
-        <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-300">
-            {/* Mobile Sidebar Overlay */}
+        <div className="flex h-screen overflow-hidden bg-[#f0f4f8] dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+            {/* Mobile Overlay */}
             {isSidebarOpen && (
                 <div
                     className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-40 lg:hidden"
@@ -228,65 +251,92 @@ export default function DashboardLayout({
 
             {/* Sidebar */}
             <aside className={`
-                fixed inset-y-0 left-0 w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col z-50 shadow-xl
-                transition-transform duration-300 transform lg:translate-x-0 lg:static lg:h-full lg:shadow-sm
+                fixed inset-y-0 left-0 w-60 bg-[#1a2744] dark:bg-[#1a2744] flex flex-col z-50 shadow-xl
+                transition-transform duration-300 transform lg:translate-x-0 lg:static lg:h-full
                 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
             `}>
-                <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-                    <Link href="/dashboard" className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
-                        <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20 overflow-hidden shrink-0 border border-white/10">
-                            {tenant?.config?.logoUrl ? (
-                                <img src={tenant.config.logoUrl} alt="Logo" className="w-full h-full object-cover" />
+                {/* Sidebar Header — Logo banner + school name */}
+                <div className="flex flex-col items-center px-4 pt-4 pb-3 border-b border-white/10">
+                    <div className="flex items-center justify-between w-full mb-3">
+                        <div className="flex-1" />
+                        <button
+                            className="lg:hidden p-1 text-white/50 hover:text-white transition-colors"
+                            onClick={() => setIsSidebarOpen(false)}
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                    </div>
+                    {/* Logo */}
+                    <Link href="/dashboard" className="flex flex-col items-center gap-2 w-full">
+                        <div className="w-full rounded-xl overflow-hidden border border-white/20 bg-white" style={{aspectRatio: '3/1'}}>
+                            {tenant?.logoUrl ? (
+                                <img
+                                    src={tenant.logoUrl}
+                                    alt="School Logo"
+                                    className="w-full h-full object-cover"
+                                />
                             ) : (
-                                <span className="text-white font-serif italic text-lg">{tenant?.name?.charAt(0) || 'S'}</span>
+                                <div className="w-full h-full flex items-center justify-center bg-[#1a2744]">
+                                    <span className="text-white font-serif italic text-3xl font-bold">
+                                        {tenant?.name?.charAt(0) || 'S'}
+                                    </span>
+                                </div>
                             )}
                         </div>
-                        <span className="tracking-tight truncate">{tenant?.name || 'SchoolOS'}</span>
+                        {/* School name + subtitle */}
+                        <div className="text-center mt-1">
+                            <p className="text-white font-bold text-sm leading-tight">
+                                {tenant?.name || 'SchoolOS'}
+                            </p>
+                            {tenant?.config?.mission && (
+                                <p className="text-white/50 text-[10px] mt-0.5 leading-tight line-clamp-1">
+                                    {tenant.config.mission}
+                                </p>
+                            )}
+                           
+                        </div>
                     </Link>
-                    <button
-                        className="lg:hidden p-2 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
-                        onClick={() => setIsSidebarOpen(false)}
-                    >
-                        <X className="w-6 h-6" />
-                    </button>
                 </div>
 
-                <nav className="flex-1 p-4 space-y-1 overflow-y-auto mt-2 custom-scrollbar scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800 scrollbar-track-transparent">
+                {/* Nav */}
+                <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto custom-scrollbar scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
                     {navItems.map((item) => {
                         const isActive = pathname === item.href || (pathname.startsWith(item.href + '/') && item.href !== '/dashboard');
                         return (
                             <Link
                                 key={item.href}
                                 href={item.href}
-                                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group ${isActive
-                                    ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400 font-medium'
-                                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/50'
-                                    }`}
+                                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 group text-sm ${
+                                    isActive
+                                        ? 'bg-[#f5c842] text-[#1a2744] font-semibold'
+                                        : 'text-white/70 hover:text-white hover:bg-white/10'
+                                }`}
                             >
-                                <span className={`transition-colors duration-200 ${isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-600 dark:group-hover:text-slate-300'}`}>
+                                <span className={`${isActive ? 'text-[#1a2744]' : 'text-white/50 group-hover:text-white/80'} transition-colors`}>
                                     {item.icon}
                                 </span>
-                                <span className="text-sm">{item.name}</span>
+                                <span>{item.name}</span>
                             </Link>
                         );
                     })}
                 </nav>
 
-                <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
-                    <div className="flex items-center gap-3 px-2 py-2 mb-2">
-                        <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold shrink-0">
+                {/* User footer */}
+                <div className="px-3 py-3 border-t border-white/10">
+                    <div className="flex items-center gap-2 px-2 py-2 mb-1">
+                        <div className="w-8 h-8 rounded-full bg-indigo-500/30 border border-indigo-400/30 flex items-center justify-center text-indigo-300 font-bold text-sm shrink-0">
                             {user.firstName.charAt(0)}
                         </div>
-                        <div className="overflow-hidden">
-                            <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{user.firstName} {user.lastName}</p>
-                            <p className="text-xs text-slate-500 dark:text-slate-500 capitalize truncate">{user.role.replace('-', ' ')}</p>
+                        <div className="overflow-hidden flex-1">
+                            <p className="text-sm font-semibold text-white truncate">{user.firstName} {user.lastName}</p>
+                            <p className="text-[10px] text-white/40 capitalize truncate">{user.role.replace('-', ' ')}</p>
                         </div>
                     </div>
                     <button
                         onClick={handleLogout}
-                        className="w-full flex items-center gap-3 px-4 py-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors duration-200 font-medium text-sm"
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-white/50 hover:text-red-400 hover:bg-red-500/10 transition-colors text-sm"
                     >
-                        <LogOut className="w-5 h-5" />
+                        <LogOut className="w-4 h-4" />
                         <span>Logout</span>
                     </button>
                 </div>
@@ -294,35 +344,71 @@ export default function DashboardLayout({
 
             {/* Main Content */}
             <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                <header className="h-16 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-4 lg:px-8 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md sticky top-0 z-30">
-                    <div className="flex items-center gap-4">
+                {/* Topbar */}
+                <header className="h-14 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-4 lg:px-6 bg-white dark:bg-slate-900 sticky top-0 z-30 gap-3">
+                    {/* Left: hamburger + page title */}
+                    <div className="flex items-center gap-3 shrink-0">
                         <button
-                            className="lg:hidden p-2 -ml-2 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
+                            className="lg:hidden p-1.5 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
                             onClick={() => setIsSidebarOpen(true)}
                         >
-                            <Menu className="w-6 h-6" />
+                            <Menu className="w-5 h-5" />
                         </button>
-                        <div className="text-slate-500 dark:text-slate-400 text-sm font-medium hidden sm:block">
-                            Welcome back, <span className="text-indigo-600 dark:text-indigo-400 font-semibold">{user.firstName}</span>
-                        </div>
+                        <h1 className="text-base font-bold text-slate-800 dark:text-white">
+                            {getPageTitle()}
+                        </h1>
                     </div>
-                    <div className="flex items-center gap-3">
-                        <ThemeToggle />
-                        <div className="w-px h-6 bg-slate-200 dark:bg-slate-800 mx-1"></div>
-                        <Link href="/dashboard/notifications" className="w-10 h-10 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400 transition-colors relative">
-                            <Bell className="w-5 h-5" />
+
+                    {/* Center: Search */}
+                    <div className="flex-1 max-w-sm hidden sm:flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+                        <Search className="w-4 h-4 text-slate-400 shrink-0" />
+                        <input
+                            type="text"
+                            placeholder="Search students, records, or files..."
+                            className="bg-transparent text-sm text-slate-600 dark:text-slate-300 placeholder-slate-400 outline-none flex-1 min-w-0"
+                        />
+                    </div>
+
+                    {/* Right: actions */}
+                    <div className="flex items-center gap-2 shrink-0">
+                        {/* Notifications */}
+                        <Link
+                            href="/dashboard/notifications"
+                            className="relative w-9 h-9 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400 transition-colors"
+                        >
+                            <Bell className="w-4 h-4" />
                             {unreadCount > 0 && (
-                                <span className="absolute top-2 right-2.5 min-w-[18px] h-[18px] bg-indigo-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white dark:border-slate-950">
+                                <span className="absolute top-1.5 right-1.5 min-w-[16px] h-[16px] bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center border-2 border-white dark:border-slate-900">
                                     {unreadCount > 9 ? '9+' : unreadCount}
                                 </span>
                             )}
                         </Link>
+
+                        {/* Help */}
+                        <button className="w-9 h-9 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400 transition-colors">
+                            <HelpCircle className="w-4 h-4" />
+                        </button>
+
+                        <div className="w-px h-5 bg-slate-200 dark:bg-slate-700" />
+
+                        {/* Academic Year */}
+                        {tenant?.academicYear && (
+                            <div className="hidden md:flex flex-col items-end">
+                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Academic Year</span>
+                                <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{tenant.academicYear}</span>
+                            </div>
+                        )}
+
+                        <ThemeToggle />
                     </div>
                 </header>
-                <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-8">
+
+                <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6">
                     {children}
                 </div>
             </main>
         </div>
     );
 }
+
+

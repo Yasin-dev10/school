@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '../../../utils/api';
 import Link from 'next/link';
+import LogoUpload from '../../../components/LogoUpload';
 
 export default function AddTenantPage() {
     const router = useRouter();
@@ -18,7 +19,8 @@ export default function AddTenantPage() {
         adminFirstName: '',
         adminLastName: '',
         adminPassword: '',
-        plan: 'basic'
+        plan: 'basic',
+        logoUrl: ''
     });
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -41,7 +43,8 @@ export default function AddTenantPage() {
                     lastName: formData.adminLastName,
                     password: formData.adminPassword
                 },
-                subscription: { plan: formData.plan }
+                subscription: { plan: formData.plan },
+                config: { logoUrl: formData.logoUrl }
             });
 
             alert('School created successfully!');
@@ -90,6 +93,14 @@ export default function AddTenantPage() {
                                 className="w-full px-4 py-3 bg-slate-950 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                             />
                         </div>
+                    </div>
+                    <LogoUpload
+                        logo={formData.logoUrl}
+                        onLogoChange={(logo) => setFormData({ ...formData, logoUrl: logo })}
+                        label="School Logo"
+                        containerSize="large"
+                    />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-2">
                             <label className="text-sm font-medium text-slate-400 ml-1">Custom Domain (Optional)</label>
                             <input

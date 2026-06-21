@@ -1,514 +1,669 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import api from '../../utils/api';
 import {
-    BarChart3,
-    Printer,
-    Calendar,
-    CheckCircle2,
-    XCircle,
-    TrendingUp,
-    School,
-    Save,
-    Download,
-    Users,
+    Calendar, CheckCircle2, XCircle, TrendingUp, BarChart3,
+    Printer, Loader2, Check, X, Pencil, Search, RefreshCw,
     ChevronDown,
-    Clock,
-    AlertCircle
 } from 'lucide-react';
-import { PermissionGuard } from '../../../components/PermissionGuard';
 import { usePermission, RESOURCES, ACTIONS, normalizeRole } from '../../../hooks/usePermission';
 
+/* ─── constants ─────────────────────────────────────────────────────────── */
+const STATUSES = ['present', 'absent', 'late', 'excused'] as const;
+type Status = typeof STATUSES[number];
 
+const STATUS_PILL: Record<Status, string> = {
+    present: 'bg-green-500/15 text-green-400 border border-green-500/20',
+    absent:  'bg-red-500/15 text-red-400 border border-red-500/20',
+    late:    'bg-amber-500/15 text-amber-400 border border-amber-500/20',
+    excused: 'bg-slate-500/15 text-slate-400 border border-slate-500/20',
+};
+const STATUS_BTN: Record<Status, string> = {
+    present: 'bg-green-500 text-white',
+    absent:  'bg-red-500 text-white',
+    late:    'bg-amber-500 text-white',
+    excused: 'bg-slate-500 text-white',
+};
+
+/* ─── editable row used in history ──────────────────────────────────────── */
+function HistoryRow({ rec, canEdit, onSaved }: {
+    rec: any; canEdit: boolean; onSaved: (updated: any) => void;
+}) {
+    const [editing, setEditing] = useState(false);
+    const [status, setStatus]   = useState<Status>(rec.status);
+    const [remarks, setRemarks] = useState(rec.remarks || '');
+    const [saving, setSaving]   = useState(false);
+    const [err, setErr]         = useState('');
+
+    const save = async () => {
+        const recordId = rec._id ?? rec.id;
+        if (!recordId) { setErr('Record ID missing'); return; }
+        setSaving(true); setErr('');
+        try {
+            const { data } = await api.put(`/attendance/${recordId}`, { status, remarks });
+            onSaved(data.data);
+            setEditing(false);
+        } catch (e: any) {
+            setErr(e?.response?.data?.message || 'Update failed');
+        } finally { setSaving(false); }
+    };
+
+    const cancel = () => {
+        setStatus(rec.status); setRemarks(rec.remarks || '');
+        setEditing(false); setErr('');
+    };
+
+    return (
+        <tr className="border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors group">
+            {/* date */}
+            <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400 font-mono whitespace-nowrap">
+                {new Date(rec.date).toLocaleDateString()}
+            </td>
+            {/* student */}
+            <td className="px-4 py-3 font-semibold text-sm text-slate-800 dark:text-white whitespace-nowrap">
+                {rec.student?.firstName} {rec.student?.lastName}
+            </td>
+            {/* subject */}
+            <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                {rec.subject?.name || '—'}
+            </td>
+            {/* status */}
+            <td className="px-4 py-3">
+                {editing ? (
+                    <div className="flex gap-1">
+                        {STATUSES.map(s => (
+                            <button key={s} onClick={() => setStatus(s)}
+                                className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase transition ${status === s ? STATUS_BTN[s] : 'text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600'}`}>
+                                {s.slice(0, 3)}
+                            </button>
+                        ))}
+                    </div>
+                ) : (
+                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${STATUS_PILL[rec.status as Status] ?? ''}`}>
+                        {rec.status}
+                    </span>
+                )}
+            </td>
+            {/* remarks */}
+            <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400 max-w-[160px]">
+                {editing ? (
+                    <input value={remarks} onChange={e => setRemarks(e.target.value)}
+                        className="w-full bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg px-2 py-1 text-xs text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500"
+                        placeholder="Remark…" />
+                ) : (
+                    <span className="italic">{rec.remarks || '—'}</span>
+                )}
+            </td>
+            {/* marked by */}
+            <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">
+                {rec.markedBy ? `${rec.markedBy.firstName} ${rec.markedBy.lastName}` : '—'}
+            </td>
+            {/* actions */}
+            {canEdit && (
+                <td className="px-4 py-3">
+                    {editing ? (
+                        <div className="flex items-center gap-1.5">
+                            {saving ? <Loader2 className="w-4 h-4 animate-spin text-indigo-400" /> : (
+                                <>
+                                    <button onClick={save}
+                                        className="w-7 h-7 rounded-lg bg-emerald-500/15 text-emerald-500 hover:bg-emerald-500/30 flex items-center justify-center transition" title="Save">
+                                        <Check className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button onClick={cancel}
+                                        className="w-7 h-7 rounded-lg bg-red-500/15 text-red-400 hover:bg-red-500/30 flex items-center justify-center transition" title="Cancel">
+                                        <X className="w-3.5 h-3.5" />
+                                    </button>
+                                </>
+                            )}
+                            {err && <span className="text-red-400 text-[10px]">{err}</span>}
+                        </div>
+                    ) : (
+                        <button onClick={() => setEditing(true)}
+                            className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-400 hover:bg-indigo-500/15 hover:text-indigo-500 flex items-center justify-center transition opacity-0 group-hover:opacity-100">
+                            <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                    )}
+                </td>
+            )}
+        </tr>
+    );
+}
+
+/* ─── main page ─────────────────────────────────────────────────────────── */
 export default function AttendancePage() {
-    const [classes, setClasses] = useState([]);
-    const [selectedClass, setSelectedClass] = useState<any>(null);
-    const [subjects, setSubjects] = useState([]);
+    /* ── state ─────────────────────────────────────────────────────────── */
+    const [user, setUser]                       = useState<any>(null);
+    const [classes, setClasses]                 = useState<any[]>([]);
+    const [subjects, setSubjects]               = useState<any[]>([]);
+    const [selectedClass, setSelectedClass]     = useState<any>(null);
     const [selectedSubject, setSelectedSubject] = useState<any>(null);
-    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-    const [students, setStudents] = useState([]);
-    const [attendanceRecords, setAttendanceRecords] = useState<any>({}); // { studentId: { status, remarks } }
-    const [loading, setLoading] = useState(false);
-    const [saving, setSaving] = useState(false);
-    const [view, setView] = useState('mark'); // 'mark' or 'history'
-    const [history, setHistory] = useState([]);
-    const [user, setUser] = useState<any>(null);
-    const [studentStats, setStudentStats] = useState<any>(null);
+    const [date, setDate]                       = useState(new Date().toISOString().split('T')[0]);
+
+    /* mark-view */
+    const [students, setStudents]   = useState<any[]>([]);
+    const [records, setRecords]     = useState<Record<string, { status: Status; remarks: string }>>({});
+    const [markLoading, setMarkLoading] = useState(false);
+    const [saving, setSaving]       = useState(false);
+    const [saveMsg, setSaveMsg]     = useState('');
+
+    /* history-view */
+    const [view, setView]               = useState<'mark' | 'history'>('mark');
+    const [history, setHistory]         = useState<any[]>([]);
+    const [histLoading, setHistLoading] = useState(false);
+    const [histSearch, setHistSearch]   = useState('');
+    const [histDateFrom, setHistDateFrom] = useState('');
+    const [histDateTo, setHistDateTo]     = useState('');
+    const [histStatus, setHistStatus]     = useState('');
+
+    /* student own view */
+    const [myRecords, setMyRecords]   = useState<any[]>([]);
+    const [myStats, setMyStats]       = useState<any>(null);
+    const [myLoading, setMyLoading]   = useState(false);
 
     const { hasPermission } = usePermission();
     const canMark = hasPermission(RESOURCES.ATTENDANCE, ACTIONS.CREATE) || hasPermission(RESOURCES.ATTENDANCE, ACTIONS.UPDATE);
 
+    /* ── init ──────────────────────────────────────────────────────────── */
     useEffect(() => {
         const u = JSON.parse(localStorage.getItem('user') || '{}');
-        setUser({ ...u, role: normalizeRole(u.role) });
+        const parsed = { ...u, role: normalizeRole(u.role) };
+        setUser(parsed);
+
+        if (parsed.role === 'student') return; // student gets own data below
+
+        Promise.all([api.get('/classes'), api.get('/subjects')])
+            .then(([cr, sr]) => {
+                setClasses(cr.data.data ?? []);
+                setSubjects(sr.data.data ?? []);
+            }).catch(() => {});
     }, []);
 
-    // Fetch school classes
-    useEffect(() => {
-        const fetchClasses = async () => {
-            try {
-                const [classRes, subjectRes] = await Promise.all([
-                    api.get('/classes'),
-                    api.get('/subjects')
-                ]);
-                setClasses(classRes.data.data);
-                setSubjects(subjectRes.data.data || []);
-            } catch (err) {
-                console.error("Failed to fetch classes");
-            }
-        };
-        fetchClasses();
-    }, []);
+    /* student: my attendance */
+    const fetchMyAtt = useCallback(async () => {
+        if (!user || user.role !== 'student') return;
+        setMyLoading(true);
+        try {
+            const { data } = await api.get('/attendance/my');
+            setMyRecords(data.data.records ?? []);
+            setMyStats(data.data.stats);
+        } catch { /* ignore */ }
+        finally { setMyLoading(false); }
+    }, [user]);
 
-    // Real-time listener
-    useEffect(() => {
-        const { getSocket } = require('../../utils/socket');
-        const socket = getSocket();
+    useEffect(() => { fetchMyAtt(); }, [fetchMyAtt]);
 
-        if (socket) {
-            socket.on('attendance-updated', (data: any) => {
-                // If it's for the currently viewed class and date, refresh
-                if (data.classId === selectedClass?._id) {
-                    // Logic to optionally refresh data
-                    console.log("Attendance updated in real-time", data);
-                    // fetchClassData() // This is inside another useEffect, need to refactor
-                }
-            });
-        }
+    /* subjects available for the selected class */
+    const subjectOptions = selectedClass?.subjects?.length
+        ? selectedClass.subjects
+            .map((e: any) => ({ ...e.subject, _id: e.subject?._id || e.subject?.id }))
+            .filter((s: any) => s?._id)
+        : subjects;
 
-        return () => {
-            if (socket) socket.off('attendance-updated');
-        };
-    }, [selectedClass]);
-
-    const fetchClassData = async () => {
+    /* ── fetch today's mark data ───────────────────────────────────────── */
+    const fetchMarkData = useCallback(async () => {
         if (!selectedClass || view !== 'mark') return;
         if (user?.role === 'teacher' && !selectedSubject) return;
-        setLoading(true);
+        setMarkLoading(true);
         try {
-            // 1. Fetch all students in this class/section
-            const { data: studentRes } = await api.get('/students');
-            const classStudents = studentRes.data.filter((s: any) =>
-                String(s.profile?.class || '').trim() === String(selectedClass.name || '').trim() &&
-                String(s.profile?.section || '').trim() === String(selectedClass.section || '').trim()
+            const subQ = selectedSubject ? `&subjectId=${selectedSubject._id}` : '';
+            const [stuRes, attRes] = await Promise.all([
+                api.get('/students'),
+                api.get(`/attendance/class/${selectedClass._id}?date=${date}${subQ}`),
+            ]);
+
+            /* filter students that belong to this class */
+            const classStudents = (stuRes.data.data ?? []).filter((s: any) =>
+                String(s.profile?.class ?? '').trim() === String(selectedClass.name ?? '').trim() &&
+                String(s.profile?.section ?? '').trim() === String(selectedClass.section ?? '').trim()
             );
             setStudents(classStudents);
 
-            // 2. Fetch existing attendance for this date
-            const subjectQuery = selectedSubject?._id ? `&subjectId=${selectedSubject._id}` : '';
-            const { data: attendanceRes } = await api.get(`/attendance/class/${selectedClass._id}?date=${date}${subjectQuery}`);
-
-            const existingRecords: any = {};
-            // Initialize with 'present' for all students
-            classStudents.forEach((s: any) => {
-                existingRecords[s._id] = { status: 'present', remarks: '' };
+            /* build records map — existing DB records take priority */
+            const init: Record<string, { status: Status; remarks: string }> = {};
+            classStudents.forEach((s: any) => { init[s._id] = { status: 'present', remarks: '' }; });
+            (attRes.data.data ?? []).forEach((rec: any) => {
+                if (rec.student?._id) {
+                    init[rec.student._id] = { status: rec.status as Status, remarks: rec.remarks || '' };
+                }
             });
-
-            // Override with existing data from DB
-            attendanceRes.data.forEach((rec: any) => {
-                if (existingRecords[rec.student._id]?.loaded) return;
-                existingRecords[rec.student._id] = {
-                    status: rec.status,
-                    remarks: rec.remarks || '',
-                    loaded: true
-                };
-            });
-
-            setAttendanceRecords(existingRecords);
-        } catch (err) {
-            console.error("Failed to fetch attendance data");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const fetchHistory = async () => {
-        if (!selectedClass || view !== 'history') return;
-        if (user?.role === 'teacher' && !selectedSubject) return;
-        setLoading(true);
-        try {
-            const subjectQuery = selectedSubject?._id ? `?subjectId=${selectedSubject._id}` : '';
-            const { data } = await api.get(`/attendance/history/${selectedClass._id}${subjectQuery}`);
-            setHistory(data.data);
-        } catch (err) {
-            console.error("Failed to fetch history");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const fetchStudentAttendance = async () => {
-        if (user?.role !== 'student') return;
-        setLoading(true);
-        try {
-            const { data } = await api.get('/attendance/my');
-            setHistory(data.data.records);
-            setStudentStats(data.data.stats);
-        } catch (err) {
-            console.error("Failed to fetch student attendance");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    // When class or date changes, fetch students and existing attendance
-    useEffect(() => {
-        fetchClassData();
+            setRecords(init);
+        } catch (e) { console.error(e); }
+        finally { setMarkLoading(false); }
     }, [selectedClass, selectedSubject, date, view, user]);
 
-    // Fetch history
-    useEffect(() => {
-        fetchHistory();
+    useEffect(() => { fetchMarkData(); }, [fetchMarkData]);
+
+    /* ── fetch history ─────────────────────────────────────────────────── */
+    const fetchHistory = useCallback(async () => {
+        if (!selectedClass || view !== 'history') return;
+        if (user?.role === 'teacher' && !selectedSubject) return;
+        setHistLoading(true);
+        try {
+            const subQ = selectedSubject ? `?subjectId=${selectedSubject._id}` : '';
+            const { data } = await api.get(`/attendance/history/${selectedClass._id}${subQ}`);
+            setHistory(data.data ?? []);
+        } catch { /* ignore */ }
+        finally { setHistLoading(false); }
     }, [selectedClass, selectedSubject, view, user]);
 
-    // Fetch student specific history
-    useEffect(() => {
-        fetchStudentAttendance();
-    }, [user]);
+    useEffect(() => { fetchHistory(); }, [fetchHistory]);
 
-    const handleStatusChange = (studentId: string, status: string) => {
-        setAttendanceRecords({
-            ...attendanceRecords,
-            [studentId]: { ...attendanceRecords[studentId], status }
-        });
-    };
-
+    /* ── save attendance ───────────────────────────────────────────────── */
     const handleSave = async () => {
         if (!selectedClass) return;
         if (user?.role === 'teacher' && !selectedSubject) {
-            alert("Please select a subject first");
-            return;
+            setSaveMsg('Please select a subject first'); return;
         }
-        setSaving(true);
+        setSaving(true); setSaveMsg('');
         try {
-            const records = Object.keys(attendanceRecords).map(studentId => ({
-                studentId,
-                status: attendanceRecords[studentId].status,
-                remarks: attendanceRecords[studentId].remarks
+            const payload = Object.entries(records).map(([sid, r]) => ({
+                studentId: sid, status: r.status, remarks: r.remarks,
             }));
-
-            await api.post('/attendance/mark', {
+            const res = await api.post('/attendance/mark', {
                 classId: selectedClass._id,
-                subjectId: selectedSubject?._id,
+                subjectId: selectedSubject?._id ?? null,
                 date,
-                records
+                records: payload,
             });
-            alert("Attendance saved successfully!");
-        } catch (err) {
-            alert("Failed to save attendance");
-        } finally {
-            setSaving(false);
-        }
+            const results: any[] = res.data.results ?? [];
+            const created = results.filter(r => r.action === 'created').length;
+            const updated = results.filter(r => r.action === 'updated').length;
+            setSaveMsg(`✓ Saved — ${created} new, ${updated} updated`);
+            setTimeout(() => setSaveMsg(''), 5000);
+        } catch (e: any) {
+            setSaveMsg(e?.response?.data?.message || 'Failed to save');
+        } finally { setSaving(false); }
     };
 
-    const downloadAttendanceReport = async () => {
-        if (!selectedClass) return alert("Please select a class first");
-        if (user?.role === 'teacher' && !selectedSubject) return alert("Please select a subject first");
-        const subjectQuery = selectedSubject?._id ? `&subjectId=${selectedSubject._id}` : '';
-        window.open(`${api.defaults.baseURL}/attendance/report?classId=${selectedClass._id}${subjectQuery}&month=${new Date().getMonth() + 1}`, '_blank');
+    /* ── mark all helper ───────────────────────────────────────────────── */
+    const markAll = (status: Status) => {
+        setRecords(prev => {
+            const next = { ...prev };
+            Object.keys(next).forEach(sid => { next[sid] = { ...next[sid], status }; });
+            return next;
+        });
     };
 
-    const subjectOptions = selectedClass?.subjects?.length
-        ? selectedClass.subjects
-            .map((entry: any) => ({ ...entry.subject, _id: entry.subject?._id || entry.subject?.id }))
-            .filter((subject: any) => subjects.some((assigned: any) => assigned._id === subject?._id || assigned.id === subject?._id))
-        : subjects;
+    /* ── history: inline update callback ───────────────────────────────── */
+    const handleHistoryUpdate = (updated: any) => {
+        setHistory(prev => prev.map(r => r._id === updated._id ? updated : r));
+    };
 
-    return (
-        <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-6 sm:space-y-8">
-            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 sm:gap-6">
+    /* ── filtered history ───────────────────────────────────────────────── */
+    const filteredHistory = history.filter(r => {
+        const name = `${r.student?.firstName ?? ''} ${r.student?.lastName ?? ''}`.toLowerCase();
+        const q = histSearch.toLowerCase();
+        const matchSearch = !histSearch || name.includes(q) || r.subject?.name?.toLowerCase().includes(q) || r.status?.includes(q);
+        const rDate = r.date ? new Date(r.date) : null;
+        const matchFrom = !histDateFrom || (rDate && rDate >= new Date(histDateFrom));
+        const matchTo   = !histDateTo   || (rDate && rDate <= new Date(histDateTo + 'T23:59:59'));
+        const matchSt   = !histStatus   || r.status === histStatus;
+        return matchSearch && matchFrom && matchTo && matchSt;
+    });
+
+    /* ── counts summary ────────────────────────────────────────────────── */
+    const counts = {
+        present: Object.values(records).filter(r => r.status === 'present').length,
+        absent:  Object.values(records).filter(r => r.status === 'absent').length,
+        late:    Object.values(records).filter(r => r.status === 'late').length,
+        excused: Object.values(records).filter(r => r.status === 'excused').length,
+    };
+
+    const isStudent = user?.role === 'student';
+    const isTeacher = user?.role === 'teacher';
+
+    /* ══════════════════════════════════════════════════════════════════
+       STUDENT VIEW — own attendance history + stats
+    ══════════════════════════════════════════════════════════════════ */
+    if (isStudent) {
+        return (
+            <div className="max-w-5xl mx-auto space-y-6">
                 <div>
-                    <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">Attendance Management</h1>
-                    <p className="text-sm text-slate-500 mt-1">Monitor presence and track student reliability.</p>
+                    <h1 className="text-2xl font-black text-slate-800 dark:text-white">My Attendance</h1>
+                    <p className="text-sm text-slate-500 mt-1">Your full attendance history</p>
                 </div>
-                <div className="flex bg-slate-900/50 p-1 rounded-2xl border border-white/5 w-full lg:w-auto">
-                    <button
-                        onClick={() => setView('mark')}
-                        className={`flex-1 lg:flex-none px-4 sm:px-6 py-2 rounded-xl text-sm font-bold transition ${view === 'mark' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
-                    >
-                        Mark
-                    </button>
-                    <button
-                        onClick={() => setView('history')}
-                        className={`flex-1 lg:flex-none px-4 sm:px-6 py-2 rounded-xl text-sm font-bold transition ${view === 'history' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'}`}
-                    >
-                        History
-                    </button>
-                </div>
-                {view === 'history' && (
-                    <div className="flex gap-2 sm:gap-3 w-full lg:w-auto">
-                        <button
-                            onClick={downloadAttendanceReport}
-                            className="flex-1 lg:flex-none px-4 sm:px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black uppercase tracking-widest transition shadow-lg shadow-emerald-500/20 active:scale-95 flex items-center justify-center gap-2"
-                        >
-                            <BarChart3 className="w-4 h-4" />
-                            <span className="hidden sm:inline">Excel Report</span>
-                            <span className="sm:hidden">Excel</span>
-                        </button>
 
-                        <button
-                            onClick={() => window.print()}
-                            className="flex-1 lg:flex-none px-4 sm:px-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition border border-white/5 print:hidden flex items-center justify-center gap-2"
-                        >
-                            <Printer className="w-4 h-4" />
-                            <span className="hidden sm:inline">Print</span>
-                        </button>
-                    </div>
+                {/* stat cards */}
+                {myLoading ? (
+                    <div className="flex items-center justify-center h-32"><Loader2 className="w-6 h-6 animate-spin text-indigo-400" /></div>
+                ) : (
+                    <>
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                            {[
+                                { label: 'Total Days',  value: myStats?.total      ?? 0,       icon: <Calendar className="w-5 h-5" />,     color: 'text-indigo-500',  bg: 'bg-indigo-500/10' },
+                                { label: 'Present',     value: myStats?.present    ?? 0,       icon: <CheckCircle2 className="w-5 h-5" />, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+                                { label: 'Absent',      value: myStats?.absent     ?? 0,       icon: <XCircle className="w-5 h-5" />,     color: 'text-red-500',     bg: 'bg-red-500/10' },
+                                { label: 'Attendance',  value: `${myStats?.percentage ?? 0}%`, icon: <TrendingUp className="w-5 h-5" />,  color: 'text-purple-500',  bg: 'bg-purple-500/10' },
+                            ].map((c, i) => (
+                                <div key={i} className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-5">
+                                    <div className={`${c.bg} ${c.color} w-10 h-10 rounded-xl flex items-center justify-center mb-3`}>{c.icon}</div>
+                                    <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">{c.label}</p>
+                                    <p className={`text-2xl font-black mt-1 ${c.color}`}>{c.value}</p>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* history table */}
+                        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                            <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-700">
+                                <h2 className="font-bold text-slate-800 dark:text-white text-sm">Attendance Records</h2>
+                            </div>
+                            {myRecords.length === 0 ? (
+                                <div className="py-16 text-center text-slate-400 text-sm italic">No attendance records found.</div>
+                            ) : (
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-slate-50 dark:bg-slate-700/50">
+                                            <tr className="text-xs text-slate-400 uppercase tracking-wide">
+                                                <th className="px-4 py-3 text-left font-semibold">Date</th>
+                                                <th className="px-4 py-3 text-left font-semibold">Subject</th>
+                                                <th className="px-4 py-3 text-left font-semibold">Status</th>
+                                                <th className="px-4 py-3 text-left font-semibold">Remarks</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {myRecords.map((r, i) => (
+                                                <tr key={i} className="border-t border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                                                    <td className="px-4 py-3 text-xs font-mono text-slate-500 dark:text-slate-400">{new Date(r.date).toLocaleDateString()}</td>
+                                                    <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400">{r.subject?.name || '—'}</td>
+                                                    <td className="px-4 py-3">
+                                                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${STATUS_PILL[r.status as Status] ?? ''}`}>{r.status}</span>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-xs text-slate-400 italic">{r.remarks || '—'}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    </>
                 )}
             </div>
+        );
+    }
 
-            {/* Selectors or Stats */}
-            {user?.role === 'student' ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 animate-in fade-in slide-in-from-bottom-4">
-                    {[
-                        { label: 'Total Days', value: studentStats?.total || 0, icon: <Calendar className="w-5 h-5" />, color: 'text-indigo-400', bg: 'bg-indigo-400/10' },
-                        { label: 'Present', value: studentStats?.present || 0, icon: <CheckCircle2 className="w-5 h-5" />, color: 'text-green-400', bg: 'bg-green-400/10' },
-                        { label: 'Absent', value: studentStats?.absent || 0, icon: <XCircle className="w-5 h-5" />, color: 'text-red-400', bg: 'bg-red-400/10' },
-                        { label: 'Percentage', value: `${studentStats?.percentage || 0}%`, icon: <TrendingUp className="w-5 h-5" />, color: 'text-purple-400', bg: 'bg-purple-400/10' },
-                    ].map((item, i) => (
+    /* ══════════════════════════════════════════════════════════════════
+       ADMIN / TEACHER VIEW
+    ══════════════════════════════════════════════════════════════════ */
+    return (
+        <div className="max-w-7xl mx-auto space-y-6">
 
-                        <div key={i} className="glass-dark p-6 rounded-3xl border border-white/5 relative overflow-hidden group hover:border-white/10 transition-all duration-300">
-                            <div className={`${item.bg} w-12 h-12 rounded-2xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform`}>
-                                {item.icon}
-                            </div>
-
-                            <p className="text-slate-500 text-xs font-bold uppercase tracking-widest">{item.label}</p>
-                            <p className={`text-3xl font-black mt-1 ${item.color}`}>{item.value}</p>
-                        </div>
-                    ))}
+            {/* header */}
+            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                <div>
+                    <h1 className="text-2xl font-black text-slate-800 dark:text-white">Attendance Management</h1>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Mark attendance and view full history per class</p>
                 </div>
-            ) : (
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 bg-slate-900/40 p-6 rounded-[2rem] border border-white/5 shadow-xl">
-                    <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Select Class</label>
+                <div className="flex items-center gap-3">
+                    {/* view toggle */}
+                    <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+                        {(['mark', 'history'] as const).map(v => (
+                            <button key={v} onClick={() => setView(v)}
+                                className={`px-5 py-2 rounded-lg text-sm font-bold capitalize transition ${view === v ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white'}`}>
+                                {v}
+                            </button>
+                        ))}
+                    </div>
+                    {/* export buttons (history only) */}
+                    {view === 'history' && (
+                        <>
+                            <a href={`${api.defaults.baseURL}/attendance/report?classId=${selectedClass?._id}&month=${new Date().getMonth() + 1}`}
+                                target="_blank" rel="noreferrer"
+                                className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded-xl hover:bg-emerald-500/20 transition text-sm font-semibold">
+                                <BarChart3 className="w-4 h-4" /> CSV
+                            </a>
+                            <button onClick={() => window.print()}
+                                className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-600 transition text-sm font-semibold print:hidden">
+                                <Printer className="w-4 h-4" /> Print
+                            </button>
+                        </>
+                    )}
+                </div>
+            </div>
+
+            {/* selectors row */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-5 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700">
+                {/* class */}
+                <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Class</label>
+                    <div className="relative">
                         <select
-                            onChange={(e) => {
-                                setSelectedClass(classes.find((c: any) => c._id === e.target.value));
+                            value={selectedClass?._id ?? ''}
+                            onChange={e => {
+                                setSelectedClass(classes.find(c => c._id === e.target.value) || null);
                                 setSelectedSubject(null);
                             }}
-                            className="w-full px-5 py-3 bg-slate-950 border border-white/10 rounded-2xl text-white outline-none focus:ring-2 focus:ring-indigo-500/50"
-                        >
-                            <option value="">Choose a Class...</option>
-                            {classes.map((c: any) => (
-                                <option key={c._id} value={c._id}>{c.name} - {c.section}</option>
-                            ))}
+                            className="w-full px-3 py-2.5 pr-8 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-sm text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 appearance-none">
+                            <option value="">— Select class —</option>
+                            {classes.map(c => <option key={c._id} value={c._id}>{c.name} — {c.section}</option>)}
                         </select>
-                    </div>
-                    <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Subject</label>
-                        <select
-                            value={selectedSubject?._id || ''}
-                            onChange={(e) => setSelectedSubject(subjectOptions.find((s: any) => s._id === e.target.value) || null)}
-                            className="w-full px-5 py-3 bg-slate-950 border border-white/10 rounded-2xl text-white outline-none focus:ring-2 focus:ring-indigo-500/50"
-                        >
-                            <option value="">Choose a Subject...</option>
-                            {subjectOptions.map((s: any) => (
-                                <option key={s._id} value={s._id}>{s.name}</option>
-                            ))}
-                        </select>
-                    </div>
-                    <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Target Date</label>
-                        <input
-                            type="date"
-                            value={date}
-                            onChange={(e) => setDate(e.target.value)}
-                            className="w-full px-5 py-3 bg-slate-950 border border-white/10 rounded-2xl text-white outline-none focus:ring-2 focus:ring-indigo-500/50"
-                        />
-                    </div>
-                    <div className="flex items-end">
-                        <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl w-full flex justify-between items-center">
-                            <span className="text-xs text-indigo-400 font-bold">Students Found</span>
-                            <span className="text-lg font-black text-white">{students.length}</span>
-                        </div>
+                        <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
                     </div>
                 </div>
+
+                {/* subject */}
+                <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                        Subject {isTeacher && <span className="text-red-400">*</span>}
+                    </label>
+                    <div className="relative">
+                        <select
+                            value={selectedSubject?._id ?? ''}
+                            onChange={e => setSelectedSubject(subjectOptions.find((s: any) => s._id === e.target.value) || null)}
+                            className="w-full px-3 py-2.5 pr-8 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-sm text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 appearance-none">
+                            <option value="">All Subjects</option>
+                            {subjectOptions.map((s: any) => <option key={s._id} value={s._id}>{s.name}</option>)}
+                        </select>
+                        <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                    </div>
+                </div>
+
+                {/* date (mark view only) */}
+                {view === 'mark' && (
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Date</label>
+                        <input type="date" value={date} onChange={e => setDate(e.target.value)}
+                            className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-sm text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500" />
+                    </div>
+                )}
+
+                {/* summary count */}
+                <div className="flex items-end">
+                    <div className="w-full p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl flex justify-between items-center">
+                        <span className="text-xs text-indigo-500 font-bold">
+                            {view === 'mark' ? 'Students' : 'Records'}
+                        </span>
+                        <span className="text-xl font-black text-slate-800 dark:text-white">
+                            {view === 'mark' ? students.length : filteredHistory.length}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            {/* ── MARK VIEW ─────────────────────────────────────────────────── */}
+            {view === 'mark' && (
+                <>
+                    {!selectedClass ? (
+                        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 py-20 text-center">
+                            <p className="text-slate-400 text-sm italic">Select a class to mark attendance.</p>
+                        </div>
+                    ) : markLoading ? (
+                        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 py-20 flex items-center justify-center">
+                            <Loader2 className="w-6 h-6 animate-spin text-indigo-400" />
+                        </div>
+                    ) : (
+                        <>
+                            {/* summary stat row */}
+                            <div className="grid grid-cols-4 gap-3">
+                                {(Object.entries(counts) as [Status, number][]).map(([s, n]) => (
+                                    <div key={s} className={`rounded-xl p-3 border text-center ${STATUS_PILL[s]}`}>
+                                        <p className="text-lg font-black">{n}</p>
+                                        <p className="text-[10px] font-bold uppercase tracking-wide capitalize">{s}</p>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* mark-all row */}
+                            <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-xs text-slate-400 font-semibold mr-1">Mark all:</span>
+                                {STATUSES.map(s => (
+                                    <button key={s} onClick={() => markAll(s)}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition ${STATUS_BTN[s]} opacity-80 hover:opacity-100`}>
+                                        All {s}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* students table */}
+                            <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                                {students.length === 0 ? (
+                                    <div className="py-16 text-center text-slate-400 text-sm italic">No students found for this class.</div>
+                                ) : (
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-sm">
+                                            <thead className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-100 dark:border-slate-700">
+                                                <tr className="text-xs text-slate-400 uppercase tracking-wide">
+                                                    <th className="px-4 py-3 text-left font-semibold">#</th>
+                                                    <th className="px-4 py-3 text-left font-semibold">Student</th>
+                                                    <th className="px-4 py-3 text-left font-semibold">Status</th>
+                                                    <th className="px-4 py-3 text-left font-semibold">Remarks</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {students.map((s, i) => {
+                                                    const rec = records[s._id] ?? { status: 'present' as Status, remarks: '' };
+                                                    return (
+                                                        <tr key={s._id} className="border-t border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
+                                                            <td className="px-4 py-3 text-xs text-slate-400">{i + 1}</td>
+                                                            <td className="px-4 py-3 font-semibold text-slate-800 dark:text-white">
+                                                                {s.firstName} {s.lastName}
+                                                                {s.profile?.rollNo && (
+                                                                    <span className="ml-2 text-[10px] text-slate-400 font-mono">{s.profile.rollNo}</span>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                <div className="flex gap-1.5">
+                                                                    {STATUSES.map(st => (
+                                                                        <button key={st}
+                                                                            onClick={() => setRecords(prev => ({ ...prev, [s._id]: { ...prev[s._id], status: st } }))}
+                                                                            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wide transition ${rec.status === st ? STATUS_BTN[st] : 'bg-slate-100 dark:bg-slate-700 text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600'}`}>
+                                                                            {st.slice(0, 3)}
+                                                                        </button>
+                                                                    ))}
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                <input
+                                                                    value={rec.remarks}
+                                                                    onChange={e => setRecords(prev => ({ ...prev, [s._id]: { ...prev[s._id], remarks: e.target.value } }))}
+                                                                    placeholder="Optional remark…"
+                                                                    className="w-full max-w-[220px] px-3 py-1.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-xs text-slate-800 dark:text-white placeholder-slate-400 outline-none focus:ring-2 focus:ring-indigo-500"
+                                                                />
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* save bar */}
+                            {canMark && students.length > 0 && (
+                                <div className="sticky bottom-4 flex items-center gap-4 justify-between bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-5 py-3 shadow-lg">
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 italic">All changes are saved directly to the database.</p>
+                                    <div className="flex items-center gap-3">
+                                        {saveMsg && (
+                                            <span className={`text-xs font-semibold ${saveMsg.startsWith('✓') ? 'text-emerald-500' : 'text-red-400'}`}>{saveMsg}</span>
+                                        )}
+                                        <button onClick={handleSave} disabled={saving}
+                                            className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-sm transition disabled:opacity-60 shadow-lg shadow-indigo-500/20">
+                                            {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</> : 'Save Attendance'}
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </>
+                    )}
+                </>
             )}
 
-            {/* List */}
-            {/* Data View Section */}
-            {user?.role === 'student' ? (
-                <div className="glass-dark rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl overflow-x-auto custom-scrollbar">
-                    <table className="w-full text-left min-w-[600px]">
-                        <thead className="text-[10px] uppercase bg-slate-950/50 text-slate-500 font-black tracking-widest border-b border-white/5">
-                            <tr>
-                                <th className="px-8 py-5">Date</th>
-                                <th className="px-8 py-5">Status</th>
-                                <th className="px-8 py-5">Remarks</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-white/5">
-                            {loading ? (
-                                <tr><td colSpan={3} className="py-20 text-center text-slate-600 animate-pulse">Loading your history...</td></tr>
-                            ) : history.length > 0 ? history.map((rec: any) => (
-                                <tr key={rec._id} className="hover:bg-white/5 transition-colors">
-                                    <td className="px-8 py-4 text-slate-400 text-xs font-mono">{new Date(rec.date).toLocaleDateString()}</td>
-                                    <td className="px-8 py-4">
-                                        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter ${rec.status === 'present' ? 'text-green-400 bg-green-400/10 border border-green-400/20' :
-                                            rec.status === 'absent' ? 'text-red-400 bg-red-400/10 border border-red-400/20' :
-                                                'text-orange-400 bg-orange-400/10 border border-orange-400/20'
-                                            }`}>
-                                            {rec.status}
-                                        </span>
-                                    </td>
-                                    <td className="px-8 py-4 text-slate-500 text-xs italic">{rec.remarks || '---'}</td>
-                                </tr>
-                            )) : (
-                                <tr><td colSpan={3} className="py-20 text-center text-slate-500 italic">No attendance records found yet. Keep participating!</td></tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
-            ) : view === 'mark' ? (
-                /* Mark Attendance View */
-                !selectedClass ? (
-                    <div className="glass-dark p-20 rounded-[3rem] border border-white/5 text-center space-y-4">
-                        <div className="w-20 h-20 bg-indigo-500/10 rounded-full flex items-center justify-center mx-auto shadow-inner text-indigo-400">
-                            <School className="w-10 h-10" />
+            {/* ── HISTORY VIEW ──────────────────────────────────────────────── */}
+            {view === 'history' && (
+                <>
+                    {!selectedClass ? (
+                        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 py-20 text-center">
+                            <p className="text-slate-400 text-sm italic">Select a class to view attendance history.</p>
                         </div>
-                        <h3 className="text-xl font-bold text-white">Select a class to begin</h3>
-                        <p className="text-slate-500 max-w-xs mx-auto text-sm">Choose a class and section from the selectors above to load the student registry for today.</p>
-                    </div>
-                ) : (
-                    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            {[
-                                { label: 'Present', val: Object.values(attendanceRecords).filter((r: any) => r.status === 'present').length, color: 'text-green-400' },
-                                { label: 'Absent', val: Object.values(attendanceRecords).filter((r: any) => r.status === 'absent').length, color: 'text-red-400' },
-                                { label: 'Late', val: Object.values(attendanceRecords).filter((r: any) => r.status === 'late').length, color: 'text-amber-400' },
-                                { label: 'Excused', val: Object.values(attendanceRecords).filter((r: any) => r.status === 'excused').length, color: 'text-slate-400' }
-                            ].map((stat, i) => (
-                                <div key={i} className="glass-dark p-4 rounded-3xl border border-white/5">
-                                    <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">{stat.label}</p>
-                                    <p className={`text-2xl font-black ${stat.color}`}>{stat.val}</p>
+                    ) : (
+                        <>
+                            {/* filters */}
+                            <div className="flex flex-wrap gap-3 items-center">
+                                <div className="relative flex-1 min-w-[180px]">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                                    <input value={histSearch} onChange={e => setHistSearch(e.target.value)}
+                                        placeholder="Search name, subject, status…"
+                                        className="w-full pl-9 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-800 dark:text-white placeholder-slate-400 outline-none focus:ring-2 focus:ring-indigo-500" />
                                 </div>
-                            ))}
-                        </div>
-
-                        <div className="glass-dark rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl">
-                            <div className="overflow-x-auto custom-scrollbar">
-                                <table className="w-full text-left min-w-[800px]">
-                                    <thead className="text-[10px] uppercase bg-slate-950/50 text-slate-500 font-black tracking-widest border-b border-white/5">
-                                        <tr>
-                                            <th className="px-8 py-5">Student Information</th>
-                                            <th className="px-8 py-5">Attendance Status</th>
-                                            <th className="px-8 py-5">Observations / Remarks</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-white/5">
-                                        {loading ? (
-                                            <tr><td colSpan={3} className="py-20 text-center text-slate-600 animate-pulse">Synchronizing roster...</td></tr>
-                                        ) : students.length > 0 ? students.map((s: any) => (
-                                            <tr key={s._id} className="hover:bg-white/5 transition-colors group">
-                                                <td className="px-8 py-5">
-                                                    <div className="flex items-center gap-4">
-                                                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-white/10 flex items-center justify-center text-indigo-400 font-black text-xs">
-                                                            {s.firstName.charAt(0)}{s.lastName.charAt(0)}
-                                                        </div>
-                                                        <div className="flex flex-col">
-                                                            <span className="text-white font-bold text-sm">{s.firstName} {s.lastName}</span>
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="text-[9px] text-indigo-400 font-mono font-black uppercase">Roll: {s.profile?.rollNo || '--'}</span>
-                                                                <span className="w-1 h-1 rounded-full bg-slate-700" />
-                                                                <span className="text-[9px] text-slate-500 uppercase font-black">{s.profile?.gender || 'N/A'}</span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td className="px-8 py-5">
-                                                    <div className="flex gap-2 p-1.5 bg-slate-950/50 rounded-2xl border border-white/5 w-fit">
-                                                        {[
-                                                            { id: 'present', label: 'Present', color: 'bg-green-500' },
-                                                            { id: 'absent', label: 'Absent', color: 'bg-red-500' },
-                                                            { id: 'late', label: 'Late', color: 'bg-amber-500' },
-                                                            { id: 'excused', label: 'Excused', color: 'bg-slate-500' }
-                                                        ].map((st) => (
-                                                            <button
-                                                                key={st.id}
-                                                                onClick={() => canMark && handleStatusChange(s._id, st.id)}
-                                                                disabled={!canMark}
-                                                                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${attendanceRecords[s._id]?.status === st.id
-                                                                    ? `${st.color} text-white shadow-lg`
-                                                                    : 'text-slate-500 hover:text-slate-300'
-                                                                    } ${!canMark ? 'cursor-not-allowed opacity-70' : ''}`}
-                                                            >
-                                                                {st.label.slice(0, 3)}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                </td>
-                                                <td className="px-8 py-5">
-                                                    <input
-                                                        placeholder="Note..."
-                                                        value={attendanceRecords[s._id]?.remarks || ''}
-                                                        onChange={(e) => setAttendanceRecords({
-                                                            ...attendanceRecords,
-                                                            [s._id]: { ...attendanceRecords[s._id], remarks: e.target.value }
-                                                        })}
-                                                        disabled={!canMark}
-                                                        className={`bg-slate-950/30 border border-white/5 rounded-xl px-4 py-2 text-xs text-slate-400 outline-none focus:border-indigo-500/50 transition-all w-full ${!canMark ? 'cursor-not-allowed opacity-50' : ''}`}
-                                                    />
-                                                </td>
-                                            </tr>
-                                        )) : (
-                                            <tr><td colSpan={3} className="py-20 text-center text-slate-500 italic">No students found in this class.</td></tr>
-                                        )}
-                                    </tbody>
-                                </table>
+                                <div className="flex items-center gap-2 text-xs text-slate-400 font-semibold">From</div>
+                                <input type="date" value={histDateFrom} onChange={e => setHistDateFrom(e.target.value)}
+                                    className="px-3 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500" />
+                                <div className="flex items-center gap-2 text-xs text-slate-400 font-semibold">To</div>
+                                <input type="date" value={histDateTo} onChange={e => setHistDateTo(e.target.value)}
+                                    className="px-3 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500" />
+                                <div className="relative">
+                                    <select value={histStatus} onChange={e => setHistStatus(e.target.value)}
+                                        className="px-3 py-2.5 pr-8 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 appearance-none">
+                                        <option value="">All Statuses</option>
+                                        {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                                    </select>
+                                    <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                                </div>
+                                <button onClick={fetchHistory}
+                                    className="flex items-center gap-2 px-3 py-2.5 bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition font-semibold">
+                                    <RefreshCw className="w-3.5 h-3.5" /> Refresh
+                                </button>
                             </div>
-                            {students.length > 0 && (
-                                <div className="p-4 sm:p-8 bg-slate-950/80 border-t border-white/5 flex flex-col sm:row justify-between items-center gap-4">
-                                    <span className="text-slate-500 text-xs italic text-center sm:text-left">All changes are auto-saved locally before submission.</span>
-                                    <PermissionGuard resource={RESOURCES.ATTENDANCE} action={ACTIONS.CREATE}>
-                                        <button
-                                            onClick={handleSave}
-                                            disabled={saving}
-                                            className="w-full sm:w-auto px-8 sm:px-12 py-3 sm:py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-black shadow-lg shadow-indigo-500/20 transition-all flex items-center justify-center gap-2"
-                                        >
-                                            <Save className="w-5 h-5" />
-                                            <span>{saving ? 'Saving...' : 'Finalize & Save'}</span>
-                                        </button>
-                                    </PermissionGuard>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                )
-            ) : (
-                /* History Log View */
-                <div className="glass-dark rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl overflow-x-auto custom-scrollbar">
-                    <table className="w-full text-left min-w-[600px]">
-                        <thead className="text-[10px] uppercase bg-slate-950/50 text-slate-500 font-black tracking-widest border-b border-white/5">
-                            <tr>
-                                <th className="px-8 py-5">Date</th>
-                                <th className="px-8 py-5">Student</th>
-                                <th className="px-8 py-5">Status</th>
-                                <th className="px-8 py-5">Remarks</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-white/5">
-                            {loading ? (
-                                <tr><td colSpan={4} className="py-20 text-center text-slate-600 animate-pulse">Loading history...</td></tr>
-                            ) : history.length > 0 ? history.map((rec: any) => (
-                                <tr key={rec._id}>
-                                    <td className="px-8 py-4 text-slate-400 text-xs font-mono">{new Date(rec.date).toLocaleDateString()}</td>
-                                    <td className="px-8 py-4 text-white font-bold text-sm">{rec.student?.firstName} {rec.student?.lastName}</td>
-                                    <td className="px-8 py-4">
-                                        <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-tighter ${rec.status === 'present' ? 'text-green-400 bg-green-400/10' :
-                                            rec.status === 'absent' ? 'text-red-400 bg-red-400/10' :
-                                                'text-orange-400 bg-orange-400/10'
-                                            }`}>
-                                            {rec.status}
-                                        </span>
-                                    </td>
-                                    <td className="px-8 py-4 text-slate-500 text-xs italic">{rec.remarks || '---'}</td>
-                                </tr>
-                            )) : (
-                                <tr><td colSpan={4} className="py-20 text-center text-slate-500">No attendance records found.</td></tr>
-                            )}
-                        </tbody>
-                    </table>
-                </div>
+
+                            {/* table */}
+                            <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                                {histLoading ? (
+                                    <div className="py-20 flex items-center justify-center">
+                                        <Loader2 className="w-6 h-6 animate-spin text-indigo-400" />
+                                    </div>
+                                ) : filteredHistory.length === 0 ? (
+                                    <div className="py-16 text-center text-slate-400 text-sm italic">No attendance records found.</div>
+                                ) : (
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-sm">
+                                            <thead className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-100 dark:border-slate-700">
+                                                <tr className="text-xs text-slate-400 uppercase tracking-wide">
+                                                    <th className="px-4 py-3 text-left font-semibold">Date</th>
+                                                    <th className="px-4 py-3 text-left font-semibold">Student</th>
+                                                    <th className="px-4 py-3 text-left font-semibold">Subject</th>
+                                                    <th className="px-4 py-3 text-left font-semibold">Status</th>
+                                                    <th className="px-4 py-3 text-left font-semibold">Remarks</th>
+                                                    <th className="px-4 py-3 text-left font-semibold">Marked By</th>
+                                                    {canMark && <th className="px-4 py-3 text-left font-semibold">Edit</th>}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {filteredHistory.map((rec, i) => (
+                                                    <HistoryRow key={rec._id ?? i} rec={rec} canEdit={canMark} onSaved={handleHistoryUpdate} />
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                        <div className="px-4 py-3 border-t border-slate-100 dark:border-slate-700 text-xs text-slate-400">
+                                            Showing {filteredHistory.length} of {history.length} records
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </>
+                    )}
+                </>
             )}
         </div>
     );

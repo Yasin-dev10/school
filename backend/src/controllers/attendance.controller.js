@@ -77,20 +77,45 @@ exports.markAttendance = async (req, res) => {
 
                 if (!student) throw new Error('Student not found in this school');
 
-                const att = await prisma.attendance.create({
-                    data: {
+                // Find existing record for this student/class/subject/date
+                const existing = await prisma.attendance.findFirst({
+                    where: {
                         studentId: rec.studentId,
                         classId,
                         subjectId: subjectId || null,
                         date: attendanceDate,
-                        status: rec.status || 'present',
-                        markedById: req.user.id,
-                        tenantId,
-                        remarks: rec.remarks || null
+                        tenantId
                     }
                 });
 
-                results.push({ studentId: rec.studentId, status: 'success', data: att });
+                let att;
+                if (existing) {
+                    // Update existing record
+                    att = await prisma.attendance.update({
+                        where: { id: existing.id },
+                        data: {
+                            status: rec.status || 'present',
+                            markedById: req.user.id,
+                            remarks: rec.remarks || null
+                        }
+                    });
+                } else {
+                    // Create new record
+                    att = await prisma.attendance.create({
+                        data: {
+                            studentId: rec.studentId,
+                            classId,
+                            subjectId: subjectId || null,
+                            date: attendanceDate,
+                            status: rec.status || 'present',
+                            markedById: req.user.id,
+                            tenantId,
+                            remarks: rec.remarks || null
+                        }
+                    });
+                }
+
+                results.push({ studentId: rec.studentId, status: 'success', action: existing ? 'updated' : 'created', data: att });
             } catch (err) {
                 results.push({ studentId: rec.studentId, status: 'failed', reason: err.message });
             }
@@ -224,6 +249,36 @@ exports.getStudentAttendance = async (req, res) => {
                 stats: buildStats(records)
             }
         });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// @desc    Update a single attendance record
+exports.updateAttendance = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status, remarks } = req.body;
+        const tenantId = req.user.tenantId;
+
+        // Find by id only first, then verify tenant ownership
+        const existing = await prisma.attendance.findUnique({ where: { id } });
+        if (!existing) return res.status(404).json({ success: false, message: 'Attendance record not found' });
+        if (existing.tenantId !== tenantId) return res.status(403).json({ success: false, message: 'Access denied' });
+
+        if (req.user.role === 'teacher') {
+            const allowed = await canTeacherAccessClassSubject(req.user.id, existing.classId, existing.subjectId, tenantId);
+            if (!allowed) return res.status(403).json({ success: false, message: 'You are not assigned to this class subject' });
+        }
+
+        const updated = await prisma.attendance.update({
+            where: { id },
+            data: { status, remarks: remarks || null, markedById: req.user.id },
+            include: includeAttendanceRelations
+        });
+
+        await logAction({ action: 'UPDATE', module: 'USER', details: `Updated attendance record ${id}`, userId: req.user.id, tenantId });
+        res.status(200).json({ success: true, data: formatAttendance(updated) });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }

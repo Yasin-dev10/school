@@ -5,10 +5,16 @@ import api from '../../../utils/api';
 import { validateStudent } from '@/utils/validation';
 import Link from 'next/link';
 
+interface SchoolClass {
+    _id: string;
+    name: string;
+    section?: string;
+}
+
 export default function AddStudentPage() {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
-    const [classes, setClasses] = useState([]);
+    const [classes, setClasses] = useState<SchoolClass[]>([]);
     const [error, setError] = useState('');
 
     const [formData, setFormData] = useState({
@@ -58,15 +64,15 @@ export default function AddStudentPage() {
         }).catch(err => console.error("Failed to fetch classes", err));
     }, []);
 
-    const handleChange = (e: any) => {
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
 
     const getSectionsForClass = (className: string) => {
-        return classes.filter((c: any) => c.name === className);
+        return classes.filter((c) => c.name === className);
     };
 
-    const handleClassChange = (e: any) => {
+    const handleClassChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const className = e.target.value;
         const firstSection = getSectionsForClass(className)[0]?.section || 'A';
         setFormData({ ...formData, class: className, section: firstSection });
@@ -279,8 +285,8 @@ export default function AddStudentPage() {
                                 className="w-full px-5 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500/50 outline-none"
                             >
                                 <option value="">Select Class</option>
-                                {Array.from(new Set(classes.map((c: any) => c.name))).map(name => (
-                                    <option key={name as string} value={name as string}>{name as string}</option>
+                                {Array.from(new Set(classes.map((c) => c.name))).map(name => (
+                                    <option key={name} value={name}>{name}</option>
                                 ))}
                             </select>
                         </div>
@@ -290,7 +296,7 @@ export default function AddStudentPage() {
                                 name="section" required value={formData.section} onChange={handleChange}
                                 className="w-full px-5 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500/50 outline-none"
                             >
-                                {getSectionsForClass(formData.class).map((c: any) => (
+                                {getSectionsForClass(formData.class).map((c) => (
                                     <option key={c._id} value={c.section}>{c.section}</option>
                                 ))}
                                 {getSectionsForClass(formData.class).length === 0 && <option value="A">A</option>}

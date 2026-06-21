@@ -4,81 +4,66 @@ import { Check, Loader2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import api from '../../utils/api';
 
-interface GradeLevel {
-    id: string;
-    name: string;
-    grades: string[];
-}
+/* ─── Data ───────────────────────────────────────────────────────────────── */
+interface GradeLevel { id: string; name: string; grades: string[]; emoji: string; color: string }
 
 const GRADE_LEVELS: GradeLevel[] = [
     {
         id: 'elementary',
         name: 'Elementary School',
-        grades: ['Kindergarten', '1st Grade', '2nd Grade', '3rd Grade', '4th Grade', '5th Grade']
+        grades: ['Kindergarten', '1st Grade', '2nd Grade', '3rd Grade', '4th Grade', '5th Grade'],
+        emoji: '🧸',
+        color: 'from-pink-500/20 to-orange-500/20',
     },
     {
         id: 'middle',
         name: 'Middle School',
-        grades: ['6th Grade', '7th Grade', '8th Grade']
+        grades: ['6th Grade', '7th Grade', '8th Grade'],
+        emoji: '📚',
+        color: 'from-cyan-500/20 to-blue-500/20',
     },
     {
         id: 'high',
         name: 'High School',
-        grades: ['9th Grade', '10th Grade', '11th Grade', '12th Grade']
-    }
+        grades: ['9th Grade', '10th Grade', '11th Grade', '12th Grade'],
+        emoji: '🎓',
+        color: 'from-violet-500/20 to-indigo-500/20',
+    },
 ];
 
+const TOTAL_STEPS = 4;
+const CURRENT_STEP = 2;
+
+/* ─── Page ───────────────────────────────────────────────────────────────── */
 export default function SchoolGradesPage() {
-    const [selectedLevels, setSelectedLevels] = useState<string[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [saving, setSaving] = useState(false);
+    const [selected, setSelected] = useState<string[]>([]);
+    const [loading, setLoading]   = useState(true);
+    const [saving,  setSaving]    = useState(false);
 
     useEffect(() => {
-        const fetchSettings = async () => {
+        (async () => {
             try {
                 const res = await api.get('/tenants/me');
-                if (res.data.data?.config?.gradeLevels) {
-                    setSelectedLevels(res.data.data.config.gradeLevels);
-                } else {
-                    setSelectedLevels(['elementary', 'middle', 'high']);
-                }
-            } catch (error) {
-                console.error('Failed to fetch settings:', error);
+                setSelected(res.data.data?.config?.gradeLevels || ['elementary', 'middle', 'high']);
+            } catch {
+                setSelected(['elementary', 'middle', 'high']);
                 toast.error('Failed to load grade settings');
             } finally {
                 setLoading(false);
             }
-        };
-
-        fetchSettings();
+        })();
     }, []);
 
-    const toggleGradeLevel = (levelId: string) => {
-        setSelectedLevels(prev => {
-            if (prev.includes(levelId)) {
-                return prev.filter(id => id !== levelId);
-            } else {
-                return [...prev, levelId];
-            }
-        });
-    };
+    const toggle = (id: string) =>
+        setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
 
     const handleSave = async () => {
-        if (selectedLevels.length === 0) {
-            toast.error('Please select at least one grade level');
-            return;
-        }
-
+        if (!selected.length) { toast.error('Select at least one grade level'); return; }
         setSaving(true);
         try {
-            await api.put('/tenants/me', {
-                config: {
-                    gradeLevels: selectedLevels
-                }
-            });
-            toast.success('School grades updated successfully!');
-        } catch (error) {
-            console.error('Failed to save settings:', error);
+            await api.put('/tenants/me', { config: { gradeLevels: selected } });
+            toast.success('School grades updated!');
+        } catch {
             toast.error('Failed to save changes');
         } finally {
             setSaving(false);
@@ -87,111 +72,131 @@ export default function SchoolGradesPage() {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center min-h-[60vh]">
-                <Loader2 className="w-12 h-12 text-teal-500 animate-spin" />
+            <div className="flex items-center justify-center min-h-[70vh]">
+                <Loader2 className="w-10 h-10 text-cyan-400 animate-spin" />
             </div>
         );
     }
 
+    const progressPct = (CURRENT_STEP / TOTAL_STEPS) * 100;
+
     return (
-        <div className="min-h-[80vh] p-4 sm:p-8">
-            <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                {/* Header */}
-                <div className="text-center space-y-4">
-                    <h1 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white tracking-tight">
-                        Choose the School Grades you'll be managing
+        <div className="relative min-h-[80vh] flex flex-col items-center py-8 px-4 overflow-hidden">
+            {/* Background glow blobs */}
+            <div className="pointer-events-none absolute inset-0 overflow-hidden -z-10">
+                <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl" />
+                <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl" />
+            </div>
+
+            <div className="w-full max-w-2xl space-y-8">
+                {/* Step indicator */}
+                <div className="space-y-2">
+                    <p className="text-center text-sm font-semibold text-slate-400 dark:text-slate-400">
+                        Setup Stage: {CURRENT_STEP} of {TOTAL_STEPS} — Select Grades
+                    </p>
+                    <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                        <div
+                            className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-teal-500 transition-all duration-500"
+                            style={{ width: `${progressPct}%` }}
+                        />
+                    </div>
+                </div>
+
+                {/* Heading */}
+                <div className="text-center space-y-3">
+                    <h1 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white tracking-tight leading-tight">
+                        Choose the School Grades<br className="hidden sm:block" /> you'll be managing
                     </h1>
-                    <p className="text-slate-500 dark:text-slate-400 text-sm sm:text-base max-w-2xl mx-auto font-medium">
+                    <p className="text-slate-500 dark:text-slate-400 text-sm sm:text-base max-w-lg mx-auto">
                         Select the grade levels that apply to your institution. This will customize the options available in classes and subjects.
                     </p>
                 </div>
 
-                {/* Grade Level Cards */}
+                {/* Cards */}
                 <div className="space-y-4">
-                    {GRADE_LEVELS.map((level) => {
-                        const isSelected = selectedLevels.includes(level.id);
-
+                    {GRADE_LEVELS.map(level => {
+                        const isOn = selected.includes(level.id);
                         return (
-                            <div
+                            <button
                                 key={level.id}
-                                onClick={() => toggleGradeLevel(level.id)}
+                                type="button"
+                                onClick={() => toggle(level.id)}
                                 className={`
-                                    relative p-8 rounded-[2rem] border-2 cursor-pointer transition-all duration-300 transform hover:scale-[1.01]
-                                    ${isSelected
-                                        ? 'bg-teal-500/10 border-teal-500 shadow-xl shadow-teal-500/10'
-                                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 shadow-sm'
+                                    w-full text-left relative flex items-center gap-5 px-6 py-5 rounded-2xl border-2
+                                    transition-all duration-200 cursor-pointer overflow-hidden
+                                    ${isOn
+                                        ? 'border-cyan-400 dark:border-cyan-500 bg-white/5 dark:bg-white/5 shadow-lg shadow-cyan-500/10'
+                                        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 hover:border-slate-300 dark:hover:border-slate-600'
                                     }
                                 `}
                             >
-                                <div className="flex items-start gap-6">
-                                    {/* Checkbox */}
-                                    <div className={`
-                                        flex-shrink-0 w-10 h-10 rounded-2xl flex items-center justify-center transition-all duration-300
-                                        ${isSelected
-                                            ? 'bg-teal-600 shadow-lg shadow-teal-500/30'
-                                            : 'bg-slate-100 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700'
-                                        }
-                                    `}>
-                                        {isSelected && <Check className="w-6 h-6 text-white" strokeWidth={3} />}
-                                    </div>
+                                {/* Gradient glow when selected */}
+                                {isOn && (
+                                    <div className={`absolute inset-0 bg-gradient-to-r ${level.color} opacity-40 pointer-events-none`} />
+                                )}
 
-                                    {/* Content */}
-                                    <div className="flex-1">
-                                        <h3 className="text-2xl font-black text-slate-900 dark:text-white mb-2">
-                                            {level.name}
-                                        </h3>
-                                        <div className="flex flex-wrap items-center gap-2">
-                                            <span className="text-xs text-slate-500 dark:text-slate-500 font-bold uppercase tracking-wider">Included Grades:</span>
-                                            <div className="flex flex-wrap gap-1.5">
-                                                {level.grades.map((grade, idx) => (
-                                                    <span key={idx} className="text-xs px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-md font-semibold border border-slate-200 dark:border-slate-700">
-                                                        {grade}
-                                                    </span>
-                                                ))}
-                                            </div>
+                                {/* Teal circle checkbox */}
+                                <div className={`
+                                    relative z-10 shrink-0 w-11 h-11 rounded-full border-2 flex items-center justify-center transition-all duration-200
+                                    ${isOn
+                                        ? 'bg-cyan-500 border-cyan-400 shadow-lg shadow-cyan-500/40'
+                                        : 'bg-transparent border-slate-300 dark:border-slate-600'
+                                    }
+                                `}>
+                                    {isOn && <Check className="w-5 h-5 text-white" strokeWidth={3} />}
+                                </div>
+
+                                {/* Text */}
+                                <div className="relative z-10 flex-1 min-w-0">
+                                    <h3 className={`text-lg font-black mb-1.5 ${isOn ? 'text-white' : 'text-slate-800 dark:text-white'}`}>
+                                        {level.name}
+                                    </h3>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                                            Included Grades:
+                                        </span>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {level.grades.map(g => (
+                                                <span key={g} className={`
+                                                    text-xs px-2.5 py-0.5 rounded-md font-semibold border transition-colors
+                                                    ${isOn
+                                                        ? 'bg-white/10 border-white/20 text-white/80'
+                                                        : 'bg-slate-100 dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300'
+                                                    }
+                                                `}>
+                                                    {g}
+                                                </span>
+                                            ))}
                                         </div>
                                     </div>
                                 </div>
-                            </div>
+
+                                {/* Emoji icon */}
+                                <div className="relative z-10 shrink-0 text-5xl leading-none select-none hidden sm:block">
+                                    {level.emoji}
+                                </div>
+                            </button>
                         );
                     })}
                 </div>
 
-                {/* Save Button */}
-                <div className="flex flex-col items-center gap-6 pt-8">
+                {/* Save */}
+                <div className="flex flex-col items-center gap-4 pt-4">
                     <button
                         onClick={handleSave}
-                        disabled={saving}
-                        className="
-                            px-16 py-4 bg-teal-600 hover:bg-teal-700 
-                            text-white font-black text-lg rounded-2xl 
-                            shadow-2xl shadow-teal-600/30 hover:shadow-teal-600/50
-                            transition-all duration-300 transform hover:scale-105 active:scale-95
-                            disabled:opacity-50 disabled:pointer-events-none
-                            flex items-center gap-3
-                        "
+                        disabled={saving || selected.length === 0}
+                        className="px-14 py-3.5 bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50 disabled:pointer-events-none text-white font-black text-base rounded-2xl shadow-xl shadow-cyan-500/25 transition-all duration-200 hover:scale-105 active:scale-95 flex items-center gap-2.5"
                     >
-                        {saving ? (
-                            <>
-                                <Loader2 className="w-5 h-5 animate-spin" />
-                                <span>Saving Changes...</span>
-                            </>
-                        ) : (
-                            <span>Save & Continue</span>
-                        )}
+                        {saving ? <><Loader2 className="w-5 h-5 animate-spin" /> Saving...</> : 'Save & Continue'}
                     </button>
 
-                    {/* Selected Summary */}
-                    {selectedLevels.length > 0 && (
-                        <div className="animate-in fade-in zoom-in duration-300">
-                            <p className="text-sm text-slate-500 font-medium">
-                                Selected: <span className="text-teal-600 dark:text-teal-400 font-bold">
-                                    {selectedLevels.map(id =>
-                                        GRADE_LEVELS.find(l => l.id === id)?.name
-                                    ).join(', ')}
-                                </span>
-                            </p>
-                        </div>
+                    {selected.length > 0 && (
+                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                            Selected:{' '}
+                            <span className="text-cyan-500 font-bold">
+                                {selected.map(id => GRADE_LEVELS.find(l => l.id === id)?.name).filter(Boolean).join(', ')}
+                            </span>
+                        </p>
                     )}
                 </div>
             </div>

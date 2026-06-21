@@ -1,0 +1,289 @@
+"use client";
+import { useState, useEffect } from 'react';
+import api from '../../utils/api';
+import { ChevronDown, Loader2, Check, ToggleLeft, ToggleRight, Zap } from 'lucide-react';
+
+/* ─── Types ───────────────────────────────────────────────────────────────── */
+type FeeType = { _id: string; name: string; amount: number; description?: string };
+type AClass  = { _id: string; name: string; section?: string };
+type Template = { id: string; label: string; color: string; accent: string; items: { name: string; amount: number }[] };
+
+const TEMPLATES: Template[] = [
+    {
+        id: 'standard',
+        label: 'Standard Academic',
+        color: 'from-slate-700 to-slate-800',
+        accent: '#818cf8',
+        items: [{ name: 'Tuition (Term 1)', amount: 3500 }, { name: 'Lab Fees', amount: 250 }],
+    },
+    {
+        id: 'arts',
+        label: 'Music & Arts',
+        color: 'from-purple-900 to-slate-800',
+        accent: '#c084fc',
+        items: [{ name: 'Tuition (Term 1)', amount: 3500 }, { name: 'Arts Materials', amount: 400 }, { name: 'Instrument Hire', amount: 600 }],
+    },
+    {
+        id: 'special',
+        label: 'Special Programs',
+        color: 'from-rose-900 to-slate-800',
+        accent: '#fb7185',
+        items: [{ name: 'Tuition (Term 1)', amount: 3500 }, { name: 'Program Fee', amount: 750 }, { name: 'Transport', amount: 300 }],
+    },
+];
+
+const BILLING_CYCLES = ['Monthly', 'Termly', 'Annual'];
+
+/* ─── Mini invoice preview ───────────────────────────────────────────────── */
+function InvoicePreview({ template, cycle, tenant }: { template: Template; cycle: string; tenant: any }) {
+    const total = template.items.reduce((s, i) => s + i.amount, 0);
+    const today = new Date();
+    const dateStr = today.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+    return (
+        <div className="bg-white rounded-xl p-5 text-slate-800 shadow-xl text-sm">
+            <div className="text-center mb-4 border-b border-slate-200 pb-3">
+                <p className="font-black text-base">{tenant?.name || 'Springfield Academy'}</p>
+                <p className="text-xs text-slate-400">Automated Invoice · {dateStr}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-1 text-xs mb-4">
+                <div><p className="text-slate-400">Student</p><p className="font-bold">Leo Carter</p><p className="text-slate-400">Class 10-A</p></div>
+                <div className="text-right"><p className="text-slate-400">Date of Issue</p><p className="font-bold">{today.toLocaleDateString()}</p></div>
+            </div>
+            <table className="w-full text-xs mb-3">
+                <thead><tr className="border-b border-slate-200"><th className="text-left py-1 text-slate-500">Breakdown</th><th className="text-right py-1 text-slate-500">Fees</th></tr></thead>
+                <tbody>
+                    {template.items.map((item, i) => (
+                        <tr key={i}><td className="py-1">{item.name}</td><td className="py-1 text-right">${item.amount.toLocaleString()}</td></tr>
+                    ))}
+                </tbody>
+                <tfoot><tr className="border-t border-slate-800 font-black"><td className="pt-2">Total</td><td className="pt-2 text-right">${total.toLocaleString()}</td></tr></tfoot>
+            </table>
+            <div className="flex flex-col items-center mt-3 pt-3 border-t border-slate-100">
+                <p className="text-[10px] text-slate-400 mb-1">Scan to Pay</p>
+                {/* QR placeholder */}
+                <div className="w-16 h-16 bg-slate-100 rounded grid grid-cols-4 gap-0.5 p-1">
+                    {Array.from({ length: 16 }).map((_, i) => (
+                        <div key={i} className={`rounded-sm ${Math.random() > 0.4 ? 'bg-slate-800' : 'bg-white'}`} />
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/* ─── Page ────────────────────────────────────────────────────────────────── */
+export default function FeeGeneratorPage() {
+    const [feeTypes,   setFeeTypes]   = useState<FeeType[]>([]);
+    const [classes,    setClasses]    = useState<AClass[]>([]);
+    const [tenant,     setTenant]     = useState<any>(null);
+    const [loading,    setLoading]    = useState(true);
+    const [saving,     setSaving]     = useState(false);
+    const [saved,      setSaved]      = useState(false);
+
+    const [template,   setTemplate]   = useState<Template>(TEMPLATES[0]);
+    const [cycle,      setCycle]      = useState('Monthly');
+    const [triggerDay, setTriggerDay] = useState('1st of month');
+    const [notifyPar,  setNotifyPar]  = useState(true);
+    const [autoGen,    setAutoGen]    = useState(true);
+    const [classId,    setClassId]    = useState('');
+    const [selFees,    setSelFees]    = useState<string[]>([]);
+    const [dueDate,    setDueDate]    = useState('');
+
+    useEffect(() => {
+        (async () => {
+            try {
+                const [ftRes, clRes, tenRes] = await Promise.all([
+                    api.get('/fees/types'),
+                    api.get('/classes'),
+                    api.get('/tenants/me'),
+                ]);
+                setFeeTypes(ftRes.data.data || []);
+                setClasses(clRes.data.data || []);
+                setTenant(tenRes.data.data);
+            } catch (e) { console.error(e); }
+            finally { setLoading(false); }
+        })();
+    }, []);
+
+    const handleSaveActivate = async () => {
+        if (!classId || !selFees.length || !dueDate) {
+            alert('Please select a class, at least one fee type, and a due date.');
+            return;
+        }
+        setSaving(true);
+        try {
+            await api.post('/fees/generate-invoices', { classId, feeTypeIds: selFees, dueDate });
+            setSaved(true);
+            setTimeout(() => setSaved(false), 3000);
+        } catch (err: any) { alert(err.response?.data?.message || 'Failed to generate invoices'); }
+        finally { setSaving(false); }
+    };
+
+    const previewItems = selFees.length > 0
+        ? feeTypes.filter(f => selFees.includes(f._id)).map(f => ({ name: f.name, amount: f.amount }))
+        : template.items;
+
+    const previewTemplate: Template = { ...template, items: previewItems };
+
+    if (loading) return (
+        <div className="flex items-center justify-center min-h-[60vh]">
+            <Loader2 className="w-8 h-8 animate-spin text-teal-400" />
+        </div>
+    );
+
+    return (
+        <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-5">
+            {/* Header */}
+            <div>
+                <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Automated Fee Invoice Generator</h1>
+                <p className="text-sm text-slate-500 mt-0.5">Configure templates, billing cycles, and automation rules.</p>
+            </div>
+
+            <div className="flex flex-col lg:flex-row gap-5 items-start">
+                {/* ── Left panel ───────────────────────────────────────────── */}
+                <div className="flex-1 space-y-4">
+
+                    {/* Invoice Templates */}
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-5">
+                        <h2 className="text-sm font-bold text-slate-700 dark:text-white mb-4">Invoice Templates</h2>
+                        <div className="grid grid-cols-3 gap-3">
+                            {TEMPLATES.map(t => (
+                                <button key={t.id} onClick={() => setTemplate(t)}
+                                    className={`rounded-xl overflow-hidden border-2 transition ${template.id === t.id ? 'border-teal-500 shadow-lg shadow-teal-500/20' : 'border-slate-200 dark:border-slate-700 hover:border-slate-400'}`}>
+                                    {/* Mini template card */}
+                                    <div className={`bg-gradient-to-br ${t.color} p-3 min-h-[80px] flex flex-col gap-1`}>
+                                        <div className="h-1.5 w-12 rounded-full bg-white/30" />
+                                        <div className="h-1 w-8 rounded-full bg-white/20" />
+                                        {t.items.slice(0, 3).map((item, i) => (
+                                            <div key={i} className="flex justify-between">
+                                                <div className="h-1 rounded-full bg-white/20" style={{ width: `${30 + i * 8}%` }} />
+                                                <div className="h-1 w-8 rounded-full bg-white/30" />
+                                            </div>
+                                        ))}
+                                        <div className="mt-1 flex justify-between border-t border-white/10 pt-1">
+                                            <div className="h-1.5 w-8 rounded-full bg-white/40" />
+                                            <div className="h-1.5 w-10 rounded-full" style={{ backgroundColor: t.accent + '99' }} />
+                                        </div>
+                                    </div>
+                                    <div className="px-2 py-1.5 bg-white dark:bg-slate-700 text-center">
+                                        <p className="text-[10px] font-semibold text-slate-600 dark:text-slate-300">{t.label}</p>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Billing Cycles */}
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-5">
+                        <h2 className="text-sm font-bold text-slate-700 dark:text-white mb-3">Billing Cycles</h2>
+                        <div className="flex bg-slate-100 dark:bg-slate-700 rounded-xl p-1 gap-1">
+                            {BILLING_CYCLES.map(c => (
+                                <button key={c} onClick={() => setCycle(c)}
+                                    className={`flex-1 py-2 rounded-lg text-sm font-semibold transition ${cycle === c ? 'bg-teal-500 text-white shadow-sm' : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'}`}>
+                                    {c}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Class + Fee Selection */}
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-5 space-y-4">
+                        <h2 className="text-sm font-bold text-slate-700 dark:text-white">Target Class & Fees</h2>
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Class</label>
+                            <div className="relative">
+                                <select value={classId} onChange={e => setClassId(e.target.value)}
+                                    className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-teal-500 appearance-none pr-8">
+                                    <option value="">Select class…</option>
+                                    {classes.map(c => <option key={c._id} value={c._id}>{c.name}{c.section ? ` - ${c.section}` : ''}</option>)}
+                                </select>
+                                <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Fee Components</label>
+                            <div className="space-y-1.5 max-h-40 overflow-y-auto p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg border border-slate-200 dark:border-slate-600">
+                                {feeTypes.length === 0 ? (
+                                    <p className="text-xs text-slate-400 italic">No fee types defined. Go to Finance → Structure.</p>
+                                ) : feeTypes.map(ft => (
+                                    <label key={ft._id} className="flex items-center justify-between gap-2 cursor-pointer">
+                                        <div className="flex items-center gap-2">
+                                            <input type="checkbox" checked={selFees.includes(ft._id)}
+                                                onChange={e => setSelFees(e.target.checked ? [...selFees, ft._id] : selFees.filter(id => id !== ft._id))}
+                                                className="accent-teal-500 w-4 h-4" />
+                                            <span className="text-sm text-slate-700 dark:text-slate-200">{ft.name}</span>
+                                        </div>
+                                        <span className="text-xs font-semibold text-teal-600 dark:text-teal-400">${ft.amount.toLocaleString()}</span>
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Due Date</label>
+                            <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
+                                className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-teal-500" />
+                        </div>
+                    </div>
+
+                    {/* Automation Rules */}
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-5 space-y-4">
+                        <h2 className="text-sm font-bold text-slate-700 dark:text-white">Automation Rules</h2>
+                        <div className="relative">
+                            <select value={triggerDay} onChange={e => setTriggerDay(e.target.value)}
+                                className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-teal-500 appearance-none pr-8">
+                                <option>Trigger Date</option>
+                                <option>1st of month</option>
+                                <option>5th of month</option>
+                                <option>15th of month</option>
+                                <option>Start of term</option>
+                            </select>
+                            <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                        </div>
+                        <div className="space-y-3">
+                            {[
+                                { label: 'Generate on', sub: triggerDay, val: autoGen, set: setAutoGen },
+                                { label: 'Notify Parents', sub: 'via email & SMS', val: notifyPar, set: setNotifyPar },
+                            ].map((row, i) => (
+                                <div key={i} className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{row.label}</p>
+                                        <p className="text-[10px] text-slate-400">{row.sub}</p>
+                                    </div>
+                                    <button onClick={() => row.set(!row.val)} className="transition">
+                                        {row.val
+                                            ? <div className="w-12 h-6 bg-teal-500 rounded-full flex items-center px-1 justify-end"><div className="w-4 h-4 bg-white rounded-full shadow" /></div>
+                                            : <div className="w-12 h-6 bg-slate-300 dark:bg-slate-600 rounded-full flex items-center px-1"><div className="w-4 h-4 bg-white rounded-full shadow" /></div>
+                                        }
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                {/* ── Right panel: Live Preview ─────────────────────────────── */}
+                <div className="w-full lg:w-80 shrink-0 space-y-4">
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-5">
+                        <h2 className="text-sm font-bold text-slate-700 dark:text-white mb-4">Live Preview</h2>
+                        <InvoicePreview template={previewTemplate} cycle={cycle} tenant={tenant} />
+                    </div>
+
+                    {/* Active automation banner */}
+                    <div className="bg-teal-600 rounded-2xl p-4 text-center text-white">
+                        <Zap className="w-5 h-5 mx-auto mb-1 opacity-80" />
+                        <p className="text-sm font-bold">Active Automation:</p>
+                        <p className="text-base font-black">{cycle} on {triggerDay.replace('of month', '').trim()}</p>
+                    </div>
+
+                    {/* Save & Activate */}
+                    <button onClick={handleSaveActivate} disabled={saving}
+                        className="w-full py-3.5 bg-teal-500 hover:bg-teal-400 disabled:opacity-60 text-white rounded-2xl font-bold text-sm transition flex items-center justify-center gap-2 shadow-lg shadow-teal-500/25">
+                        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <Check className="w-4 h-4" /> : null}
+                        {saved ? 'Invoices Generated!' : 'Save & Activate'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}

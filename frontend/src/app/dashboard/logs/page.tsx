@@ -54,8 +54,8 @@ export default function LogsPage() {
                         <tbody className="divide-y divide-white/5 text-sm">
                             {loading ? (
                                 <tr><td colSpan={5} className="px-6 py-20 text-center text-slate-600 animate-pulse font-medium italic">Scanning audit database...</td></tr>
-                            ) : logs.map((log: any) => (
-                                <tr key={log._id} className="hover:bg-white/5 transition-colors group">
+                            ) : logs.map((log: any, i: number) => (
+                                <tr key={log._id ?? log.id ?? i} className="hover:bg-white/5 transition-colors group">
                                     <td className="px-6 py-4 font-mono text-slate-500 text-xs">
                                         {new Date(log.createdAt).toLocaleString()}
                                     </td>

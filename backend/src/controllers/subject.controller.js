@@ -2,6 +2,33 @@ const prisma = require('../config/prismaClient');
 const { logAction } = require('../utils/logger');
 const { canTeacherAccessSubject } = require('../utils/teacherScope');
 
+const VALID_GRADE_LEVELS = new Set(['elementary', 'middle', 'high']);
+const VALID_SUBJECT_TYPES = new Set(['theory', 'practical', 'both']);
+
+const normalizeTeacherIds = (teachers) => {
+    if (teachers === undefined) return undefined;
+    if (!Array.isArray(teachers)) return null;
+
+    const ids = teachers
+        .map(t => {
+            if (typeof t === 'string') return t;
+            if (t && typeof t === 'object') return t._id || t.id;
+            return null;
+        })
+        .filter(Boolean);
+
+    return [...new Set(ids)];
+};
+
+const normalizeGradeLevels = (body) => {
+    const gradeLevels = body.gradeLevels ?? body.gradeLevel;
+    if (gradeLevels === undefined) return undefined;
+    if (!Array.isArray(gradeLevels)) return null;
+
+    const levels = [...new Set(gradeLevels)].filter(level => VALID_GRADE_LEVELS.has(level));
+    return levels.length > 0 ? levels : null;
+};
+
 const teacherSubjectWhere = (teacherId, tenantId) => ({
     tenantId,
     OR: [
@@ -14,21 +41,36 @@ const teacherSubjectWhere = (teacherId, tenantId) => ({
 // @desc    Create subject
 exports.createSubject = async (req, res) => {
     try {
-        const { name, code, gradeLevels, type, credits, description, teachers } = req.body;
+        const { name, code, type, credits, description } = req.body;
         const tenantId = req.user.tenantId;
+        const normalizedGradeLevels = normalizeGradeLevels(req.body);
+        const gradeLevels = normalizedGradeLevels === undefined ? ['elementary', 'middle', 'high'] : normalizedGradeLevels;
+        const teacherIds = normalizeTeacherIds(req.body.teachers);
+
+        if (!name || !code) return res.status(400).json({ success: false, message: 'Name and code are required' });
+        if (gradeLevels === null) return res.status(400).json({ success: false, message: 'Grade levels must include elementary, middle, or high' });
+        if (type && !VALID_SUBJECT_TYPES.has(type)) return res.status(400).json({ success: false, message: 'Invalid subject type' });
+        if (teacherIds === null) return res.status(400).json({ success: false, message: 'Teachers must be an array of teacher IDs' });
 
         const exists = await prisma.subject.findFirst({ where: { name, code, tenantId } });
         if (exists) return res.status(400).json({ message: 'Subject already exists' });
 
+        if (teacherIds?.length > 0) {
+            const foundTeachers = await prisma.user.count({
+                where: { id: { in: teacherIds }, tenantId, role: 'teacher' }
+            });
+            if (foundTeachers !== teacherIds.length) return res.status(400).json({ success: false, message: 'One or more selected teachers were not found' });
+        }
+
         const subject = await prisma.subject.create({
             data: {
                 name, code, tenantId,
-                gradeLevels: gradeLevels || ['elementary', 'middle', 'high'],
+                gradeLevels,
                 type: type || 'theory',
                 credits: credits || 3,
                 description: description || null,
-                ...(teachers?.length > 0 && {
-                    teachers: { create: teachers.map(tId => ({ teacher: { connect: { id: tId } } })) }
+                ...(teacherIds?.length > 0 && {
+                    teachers: { create: teacherIds.map(tId => ({ teacher: { connect: { id: tId } } })) }
                 })
             },
             include: { teachers: { include: { teacher: { select: { id: true, firstName: true, lastName: true } } } }, resources: true }
@@ -84,26 +126,41 @@ exports.updateSubject = async (req, res) => {
         const exists = await prisma.subject.findFirst({ where: { id: req.params.id, tenantId: req.user.tenantId } });
         if (!exists) return res.status(404).json({ message: 'Subject not found' });
 
-        const { name, code, gradeLevels, type, credits, description, teachers } = req.body;
+        const { name, code, type, credits, description } = req.body;
+        const gradeLevels = normalizeGradeLevels(req.body);
+        const teacherIds = normalizeTeacherIds(req.body.teachers);
 
-        if (teachers !== undefined) {
-            await prisma.subjectTeacher.deleteMany({ where: { subjectId: req.params.id } });
+        if (gradeLevels === null) return res.status(400).json({ success: false, message: 'Grade levels must include elementary, middle, or high' });
+        if (type && !VALID_SUBJECT_TYPES.has(type)) return res.status(400).json({ success: false, message: 'Invalid subject type' });
+        if (teacherIds === null) return res.status(400).json({ success: false, message: 'Teachers must be an array of teacher IDs' });
+
+        if (teacherIds?.length > 0) {
+            const foundTeachers = await prisma.user.count({
+                where: { id: { in: teacherIds }, tenantId: req.user.tenantId, role: 'teacher' }
+            });
+            if (foundTeachers !== teacherIds.length) return res.status(400).json({ success: false, message: 'One or more selected teachers were not found' });
         }
 
-        const updated = await prisma.subject.update({
-            where: { id: req.params.id },
-            data: {
-                ...(name && { name }),
-                ...(code && { code }),
-                ...(gradeLevels && { gradeLevels }),
-                ...(type && { type }),
-                ...(credits !== undefined && { credits }),
-                ...(description !== undefined && { description }),
-                ...(teachers !== undefined && teachers.length > 0 && {
-                    teachers: { create: teachers.map(tId => ({ teacher: { connect: { id: tId } } })) }
-                })
-            },
-            include: { teachers: { include: { teacher: { select: { id: true, firstName: true, lastName: true } } } }, resources: true }
+        const updated = await prisma.$transaction(async (tx) => {
+            if (teacherIds !== undefined) {
+                await tx.subjectTeacher.deleteMany({ where: { subjectId: req.params.id } });
+            }
+
+            return tx.subject.update({
+                where: { id: req.params.id },
+                data: {
+                    ...(name && { name }),
+                    ...(code && { code }),
+                    ...(gradeLevels && { gradeLevels }),
+                    ...(type && { type }),
+                    ...(credits !== undefined && { credits }),
+                    ...(description !== undefined && { description }),
+                    ...(teacherIds !== undefined && teacherIds.length > 0 && {
+                        teachers: { create: teacherIds.map(tId => ({ teacher: { connect: { id: tId } } })) }
+                    })
+                },
+                include: { teachers: { include: { teacher: { select: { id: true, firstName: true, lastName: true } } } }, resources: true }
+            });
         });
 
         res.status(200).json({ success: true, data: formatSubject(updated) });

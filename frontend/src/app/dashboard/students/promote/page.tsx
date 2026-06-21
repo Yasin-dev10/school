@@ -2,58 +2,178 @@
 import { useState, useEffect } from 'react';
 import api from '@/app/utils/api';
 import { toast } from 'react-hot-toast';
-import { ArrowRight, CheckSquare, Square, Users, GraduationCap } from 'lucide-react';
+import { CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+
+interface RawStudent {
+    _id: string;
+    firstName: string;
+    lastName: string;
+    profile: { studentId?: string; admissionNo?: string; class?: string; section?: string };
+}
+
+interface StudentRow extends RawStudent {
+    finalGrade: number | null;
+    eligible: boolean;
+    reason: string;
+}
+
+interface ClassOption {
+    _id: string;
+    name: string;
+    section?: string;
+}
+
+interface Mark {
+    studentId: string;
+    examId: string;
+    marksObtained: number;
+    maxMarks: number;
+}
+
+interface Exam {
+    _id: string;
+    name: string;
+    status: string;
+    classes?: { _id?: string; id?: string }[];
+}
+
+const PASS_THRESHOLD = 50; // fallback; ideally fetched from grade system
 
 export default function PromoteStudentsPage() {
-    const [classes, setClasses] = useState<any[]>([]);
-    const [fromClass, setFromClass] = useState('');
-    const [toClass, setToClass] = useState('');
-    const [toSection, setToSection] = useState('A');
-    const [students, setStudents] = useState<any[]>([]);
+    const [academicYear, setAcademicYear] = useState<string>('');
+    const [classes, setClasses] = useState<ClassOption[]>([]);
+    const [fromClassId, setFromClassId] = useState('');
+    const [toClassId, setToClassId] = useState('');
+    const [students, setStudents] = useState<StudentRow[]>([]);
     const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
-    const [loading, setLoading] = useState(false);
+    const [loadingStudents, setLoadingStudents] = useState(false);
     const [promoting, setPromoting] = useState(false);
-    const [promotionType, setPromotionType] = useState<'manual' | 'auto'>('manual');
-    const [promotionResult, setPromotionResult] = useState<any>(null);
 
     useEffect(() => {
         fetchClasses();
+        fetchAcademicYear();
     }, []);
 
     useEffect(() => {
-        if (fromClass) {
-            fetchStudents();
+        if (fromClassId) {
+            loadStudentsWithEligibility(fromClassId);
         } else {
             setStudents([]);
             setSelectedStudents([]);
-            setPromotionResult(null);
         }
-    }, [fromClass]);
+    }, [fromClassId]);
+
+    const fetchAcademicYear = async () => {
+        try {
+            const res = await api.get('/tenants/me');
+            setAcademicYear(
+                res.data.data?.config?.academicYear ||
+                res.data.data?.academicYear || ''
+            );
+        } catch { /* silent */ }
+    };
 
     const fetchClasses = async () => {
         try {
             const res = await api.get('/classes');
-            setClasses(res.data.data);
-        } catch (error) {
-            console.error(error);
+            setClasses(res.data.data || []);
+        } catch {
+            toast.error('Failed to load classes');
         }
     };
 
-    const fetchStudents = async () => {
-        setLoading(true);
+    const loadStudentsWithEligibility = async (classId: string) => {
+        setLoadingStudents(true);
+        setStudents([]);
+        setSelectedStudents([]);
         try {
-            const res = await api.get(`/students?class=${fromClass}`);
-            setStudents(res.data.data);
-            // Default select all for manual, but for auto we don't really use this selection for logic
-            setSelectedStudents(res.data.data.map((s: any) => s._id));
-        } catch (error) {
-            toast.error('Failed to fetch students');
+            // 1. Fetch students in this class (existing endpoint, always deployed)
+            const studentsRes = await api.get(`/students?class=${classId}`);
+            const rawStudents: RawStudent[] = studentsRes.data.data || [];
+
+            if (rawStudents.length === 0) {
+                toast('No students found in this class', { icon: 'ℹ️' });
+                setLoadingStudents(false);
+                return;
+            }
+
+            // 2. Fetch all completed exams (existing endpoint)
+            const examsRes = await api.get('/exams');
+            const allExams: Exam[] = examsRes.data.data || [];
+
+            // Filter to completed exams that include this class
+            const completedExams = allExams.filter(e =>
+                e.status === 'completed' &&
+                e.classes?.some(c => (c._id || c.id) === classId)
+            );
+
+            // 3. Fetch marks for each student across completed exams
+            //    Use GET /exams/:id/marks or build from existing marks endpoints
+            //    We'll fetch marks per exam using the exam results endpoint
+            type MarksMap = Record<string, Mark[]>; // key: studentId
+            const marksByStudent: MarksMap = {};
+
+            for (const exam of completedExams) {
+                try {
+                    const marksRes = await api.get(`/exams/${exam._id}/marks?classId=${classId}`);
+                    const marks: Mark[] = marksRes.data.data || marksRes.data.marks || [];
+                    for (const m of marks) {
+                        if (!marksByStudent[m.studentId]) marksByStudent[m.studentId] = [];
+                        marksByStudent[m.studentId].push(m);
+                    }
+                } catch { /* skip if marks endpoint unavailable */ }
+            }
+
+            // 4. Compute eligibility per student
+            const rows: StudentRow[] = rawStudents.map(student => {
+                const marks = marksByStudent[student._id] || [];
+                let eligible = true;
+                let reason = '';
+                let totalObtained = 0;
+                let totalMax = 0;
+
+                if (completedExams.length === 0) {
+                    eligible = false;
+                    reason = 'No completed exams';
+                } else if (marks.length === 0) {
+                    eligible = false;
+                    reason = 'No marks recorded';
+                } else {
+                    for (const m of marks) {
+                        totalObtained += m.marksObtained;
+                        totalMax += m.maxMarks;
+                        const pct = m.maxMarks > 0 ? (m.marksObtained / m.maxMarks) * 100 : 0;
+                        if (pct < PASS_THRESHOLD) {
+                            eligible = false;
+                            reason = reason || 'Failed one or more subjects';
+                        }
+                    }
+                }
+
+                const finalGrade = totalMax > 0
+                    ? Math.round((totalObtained / totalMax) * 100)
+                    : null;
+
+                return { ...student, finalGrade, eligible, reason };
+            });
+
+            setStudents(rows);
+            // Pre-select all eligible students
+            setSelectedStudents(rows.filter(s => s.eligible).map(s => s._id));
+        } catch (err: any) {
+            toast.error(err.response?.data?.message || 'Failed to load students');
         } finally {
-            setLoading(false);
+            setLoadingStudents(false);
         }
     };
 
-    const toggleSelectAll = () => {
+    const toggleStudent = (id: string) => {
+        setSelectedStudents(prev =>
+            prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
+        );
+    };
+
+    const toggleAll = () => {
         if (selectedStudents.length === students.length) {
             setSelectedStudents([]);
         } else {
@@ -61,310 +181,213 @@ export default function PromoteStudentsPage() {
         }
     };
 
-    const toggleStudent = (id: string) => {
-        if (selectedStudents.includes(id)) {
-            setSelectedStudents(selectedStudents.filter(s => s !== id));
-        } else {
-            setSelectedStudents([...selectedStudents, id]);
-        }
-    };
+    const handleConfirmPromotion = async () => {
+        if (!fromClassId) { toast.error('Please select a current class'); return; }
+        if (!toClassId) { toast.error('Please select a destination class'); return; }
+        if (selectedStudents.length === 0) { toast.error('No students selected for promotion'); return; }
 
-    const handlePromote = async () => {
-        if (!toClass) {
-            toast.error('Please select a destination class');
-            return;
-        }
+        const srcClass = classes.find(c => c._id === fromClassId);
+        const dstClass = classes.find(c => c._id === toClassId);
 
-        if (promotionType === 'manual' && selectedStudents.length === 0) {
-            toast.error('Please select students to promote');
-            return;
-        }
-
-        const sourceClassObj = classes.find(c => c._id === fromClass);
-        const targetClassObj = classes.find(c => c._id === toClass);
-        const fromClassName = sourceClassObj?.name;
-        const toClassName = targetClassObj?.name;
-
-        if (!confirm(`Are you sure you want to ${promotionType === 'auto' ? 'AUTO ' : ''}promote students from ${fromClassName} to ${toClassName}?`)) {
-            return;
-        }
+        if (!window.confirm(
+            `Promote ${selectedStudents.length} student(s) from ${classLabel(srcClass!)} to ${classLabel(dstClass!)}?`
+        )) return;
 
         setPromoting(true);
-        setPromotionResult(null); // Clear previous results
-
         try {
-            const payload: any = {
-                currentClass: sourceClassObj?._id || fromClass,
-                currentSection: sourceClassObj?.section,
-                nextClass: targetClassObj?._id || toClass,
-                nextSection: targetClassObj?.section || toSection,
-                type: promotionType
-            };
-
-            if (promotionType === 'manual') {
-                payload.studentIds = selectedStudents;
-            }
-
-            const res = await api.post('/students/promote', payload);
-
+            const res = await api.post('/students/promote', {
+                studentIds: selectedStudents,
+                currentClass: srcClass?._id,
+                currentSection: srcClass?.section,
+                nextClass: dstClass?._id,
+                nextSection: dstClass?.section,
+                type: 'manual'
+            });
             if (res.data.success) {
-                toast.success(res.data.message);
-                if (promotionType === 'auto') {
-                    setPromotionResult(res.data);
-                } else {
-                    // Manual success usually just clears
-                    setStudents([]);
-                    setSelectedStudents([]);
-                    setFromClass('');
-                    setToClass('');
-                }
+                toast.success(res.data.message || `Promoted ${selectedStudents.length} student(s) successfully`);
+                setFromClassId('');
+                setToClassId('');
+                setStudents([]);
+                setSelectedStudents([]);
             }
-        } catch (error: any) {
-            toast.error(error.response?.data?.message || 'Failed to promote students');
+        } catch (err: any) {
+            toast.error(err.response?.data?.message || 'Promotion failed');
         } finally {
             setPromoting(false);
         }
     };
 
+    const classLabel = (c: ClassOption) =>
+        c.section ? `${c.name} - ${c.section}` : c.name;
+
+    const allSelected = students.length > 0 && selectedStudents.length === students.length;
+
     return (
-        <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-6 sm:space-y-8">
-            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
-                <div className="flex items-center gap-4">
-                    <div className="p-3.5 bg-indigo-600 rounded-2xl shadow-xl shadow-indigo-500/20">
-                        <GraduationCap className="w-6 h-6 text-white" />
-                    </div>
-                    <div>
-                        <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">Academic Promotion</h1>
-                        <p className="text-sm text-slate-500 mt-1 font-medium">Orchestrate student advancement to the next academic tier.</p>
-                    </div>
-                </div>
+        <div className="min-h-screen bg-[#0f172a] text-white p-6">
+            <h1 className="text-2xl font-bold mb-6">Student Promotion Management</h1>
 
-                {/* Mode Toggle */}
-                <div className="bg-slate-900/50 p-1 rounded-xl border border-white/5 flex gap-1">
-                    <button
-                        onClick={() => { setPromotionType('manual'); setPromotionResult(null); }}
-                        className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${promotionType === 'manual'
-                                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20'
-                                : 'text-slate-500 hover:text-white hover:bg-white/5'
-                            }`}
-                    >
-                        Manual Select
-                    </button>
-                    <button
-                        onClick={() => { setPromotionType('auto'); setPromotionResult(null); }}
-                        className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${promotionType === 'auto'
-                                ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/20'
-                                : 'text-slate-500 hover:text-white hover:bg-white/5'
-                            }`}
-                    >
-                        Auto (Exam Based)
-                    </button>
-                </div>
-            </div>
-
-            {/* Results Display for Auto Promotion */}
-            {promotionResult && (
-                <div className="p-6 sm:p-8 glass-dark rounded-[2.5rem] border border-white/5 shadow-2xl space-y-6 animate-in fade-in slide-in-from-top-4">
-                    <div className="flex items-center gap-3 text-emerald-400">
-                        <CheckSquare className="w-6 h-6" />
-                        <h3 className="font-bold text-lg text-white">Promotion Results</h3>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
-                            <div className="text-xs font-black text-emerald-500 uppercase tracking-widest">Promoted</div>
-                            <div className="text-2xl font-black text-white mt-1">{promotionResult.promotedCount}</div>
-                        </div>
-                        <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20">
-                            <div className="text-xs font-black text-rose-500 uppercase tracking-widest">Retained</div>
-                            <div className="text-2xl font-black text-white mt-1">{promotionResult.retainedCount}</div>
-                        </div>
-                        <div className="p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/20">
-                            <div className="text-xs font-black text-indigo-500 uppercase tracking-widest">Total Processed</div>
-                            <div className="text-2xl font-black text-white mt-1">
-                                {(promotionResult.promotedCount || 0) + (promotionResult.retainedCount || 0)}
-                            </div>
+            <div className="flex flex-col lg:flex-row gap-6">
+                {/* Left panel */}
+                <div className="w-full lg:w-64 shrink-0 space-y-4">
+                    {/* Academic Year */}
+                    <div className="bg-[#1e293b] rounded-xl p-4 space-y-2">
+                        <label className="text-sm text-slate-400 font-medium">Current Academic Year:</label>
+                        <div className="relative">
+                            <select
+                                value={academicYear}
+                                onChange={e => setAcademicYear(e.target.value)}
+                                className="w-full bg-[#0f172a] border border-slate-700 text-white rounded-lg px-3 py-2 text-sm appearance-none pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                                {academicYear
+                                    ? <option value={academicYear}>{academicYear}</option>
+                                    : <option value="">No year configured</option>
+                                }
+                            </select>
+                            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs">▾</span>
                         </div>
                     </div>
 
-                    {promotionResult.failures && promotionResult.failures.length > 0 && (
-                        <div className="space-y-3">
-                            <h4 className="text-sm font-bold text-rose-400 uppercase tracking-widest">Retention Details</h4>
-                            <div className="max-h-60 overflow-y-auto custom-scrollbar space-y-2 pr-2">
-                                {promotionResult.failures.map((fail: any, idx: number) => (
-                                    <div key={idx} className="flex justify-between items-center p-3 rounded-xl bg-white/5 border border-white/5 text-xs">
-                                        <span className="font-bold text-white">{fail.student}</span>
-                                        <span className="text-rose-400 font-mono">{fail.reason}</span>
-                                    </div>
+                    {/* Current Class */}
+                    <div className="bg-[#1e293b] rounded-xl p-4 space-y-2">
+                        <label className="text-sm text-slate-400 font-medium">Select Current Class:</label>
+                        <div className="relative">
+                            <select
+                                value={fromClassId}
+                                onChange={e => setFromClassId(e.target.value)}
+                                className="w-full bg-[#0f172a] border border-slate-700 text-white rounded-lg px-3 py-2 text-sm appearance-none pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                                <option value="">-- Select Class --</option>
+                                {classes.map(c => (
+                                    <option key={c._id} value={c._id}>{classLabel(c)}</option>
                                 ))}
-                            </div>
-                        </div>
-                    )}
-                </div>
-            )}
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Source Selection */}
-                <div className="p-6 sm:p-8 glass-dark rounded-[2.5rem] border border-white/5 shadow-2xl space-y-6">
-                    <h3 className="font-bold text-lg text-white flex items-center gap-2">
-                        <span className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-xs">A</span>
-                        Source Context
-                    </h3>
-                    <div className="space-y-4">
-                        <div className="space-y-1.5">
-                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Current Class Group</label>
-                            <div className="bg-slate-900/50 p-1 rounded-2xl border border-white/5 shadow-inner">
-                                <select
-                                    value={fromClass}
-                                    onChange={(e) => setFromClass(e.target.value)}
-                                    className="w-full bg-transparent text-white text-xs font-black outline-none px-4 py-2.5 cursor-pointer"
-                                >
-                                    <option value="" className="bg-slate-900">Select Source...</option>
-                                    {classes.map((c) => (
-                                        <option key={c._id} value={c._id} className="bg-slate-900">{c.name} {c.section && `(${c.section})`}</option>
-                                    ))}
-                                </select>
-                            </div>
+                            </select>
+                            <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs">▾</span>
                         </div>
                     </div>
                 </div>
 
-                {/* Destination Selection */}
-                <div className="p-6 sm:p-8 glass-dark rounded-[2.5rem] border border-white/5 shadow-2xl space-y-6">
-                    <h3 className="font-bold text-lg text-white flex items-center gap-2">
-                        <span className="w-8 h-8 rounded-lg bg-indigo-600/10 flex items-center justify-center text-xs text-indigo-400">B</span>
-                        Destination Target
-                    </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-                        <div className="space-y-1.5">
-                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Target Tier</label>
-                            <div className="bg-slate-900/50 p-1 rounded-2xl border border-white/5 shadow-inner">
-                                <select
-                                    value={toClass}
-                                    onChange={(e) => {
-                                        const selected = classes.find(c => c._id === e.target.value);
-                                        setToClass(e.target.value);
-                                        setToSection(selected?.section || 'A');
-                                    }}
-                                    className="w-full bg-transparent text-white text-xs font-black outline-none px-4 py-2.5 cursor-pointer"
-                                >
-                                    <option value="" className="bg-slate-900">Select Target...</option>
-                                    {classes.map((c) => (
-                                        <option key={c._id} value={c._id} className="bg-slate-900">{c.name} {c.section && `(${c.section})`}</option>
-                                    ))}
-                                </select>
+                {/* Right panel */}
+                <div className="flex-1 space-y-4">
+                    <div className="bg-[#1e293b] rounded-xl overflow-hidden">
+                        {loadingStudents ? (
+                            <div className="flex items-center justify-center py-16 gap-2 text-slate-400">
+                                <Loader2 className="w-5 h-5 animate-spin" />
+                                <span>Loading students...</span>
                             </div>
-                        </div>
-                        <div className="space-y-1.5">
-                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Assigned Section</label>
-                            <input
-                                type="text"
-                                value={toSection}
-                                onChange={(e) => setToSection(e.target.value)}
-                                className="w-full px-5 py-3.5 bg-slate-900/50 border border-white/10 rounded-2xl text-white outline-none focus:ring-2 focus:ring-indigo-500/50 font-black text-xs"
-                                placeholder="e.g. A"
-                            />
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* Student List (Only show in Manual Mode or for reference) */}
-            {fromClass && promotionType === 'manual' && (
-                <div className="glass-dark rounded-[2.5rem] border border-white/5 shadow-2xl overflow-hidden">
-                    <div className="p-6 sm:p-8 border-b border-white/5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-950/20">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-2xl bg-indigo-500/10 flex items-center justify-center text-indigo-400">
-                                <Users className="w-5 h-5" />
+                        ) : !fromClassId ? (
+                            <div className="py-16 text-center text-slate-500 text-sm">
+                                Select a class to view students and their promotion eligibility.
                             </div>
-                            <div>
-                                <h3 className="font-bold text-white">Enrollment Register</h3>
-                                <div className="text-[10px] text-slate-500 font-black uppercase tracking-widest">{selectedStudents.length} / {students.length} Selected</div>
+                        ) : students.length === 0 ? (
+                            <div className="py-16 text-center text-slate-500 text-sm">
+                                No students found in this class.
                             </div>
-                        </div>
-                        <button
-                            onClick={toggleSelectAll}
-                            className="w-full sm:w-auto px-6 py-2 bg-white/5 hover:bg-white/10 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border border-white/5"
-                        >
-                            {selectedStudents.length === students.length ? 'Deselect Global' : 'Select All Personnel'}
-                        </button>
-                    </div>
-
-                    {loading ? (
-                        <div className="p-8 text-center text-slate-500">Loading students...</div>
-                    ) : students.length === 0 ? (
-                        <div className="p-8 text-center text-slate-500">No students found in selected class.</div>
-                    ) : (
-                        <div className="overflow-x-auto custom-scrollbar">
-                            <table className="w-full text-left min-w-[700px]">
-                                <thead className="text-[10px] uppercase bg-slate-950/50 text-slate-500 font-black tracking-widest border-b border-white/5">
-                                    <tr>
-                                        <th className="px-8 py-5 w-16">
-                                            <input
-                                                type="checkbox"
-                                                checked={selectedStudents.length === students.length && students.length > 0}
-                                                onChange={toggleSelectAll}
-                                                className="w-4 h-4 rounded-lg bg-slate-900 border-white/10 text-indigo-600 focus:ring-indigo-500/50 focus:ring-offset-0"
-                                            />
+                        ) : (
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="border-b border-slate-700 text-slate-400 text-left text-xs uppercase tracking-wide">
+                                        <th className="px-4 py-3 font-medium">Student Name</th>
+                                        <th className="px-4 py-3 font-medium">Student ID</th>
+                                        <th className="px-4 py-3 font-medium">Final Grade</th>
+                                        <th className="px-4 py-3 font-medium">Promotion Eligibility</th>
+                                        <th className="px-4 py-3 font-medium text-center">
+                                            <label className="flex items-center justify-center gap-2 cursor-pointer select-none">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={allSelected}
+                                                    onChange={toggleAll}
+                                                    className="w-4 h-4 rounded border-slate-600 bg-slate-800 accent-blue-500 cursor-pointer"
+                                                />
+                                                Promote to Next Level
+                                            </label>
                                         </th>
-                                        <th className="px-8 py-5">Register #</th>
-                                        <th className="px-8 py-5 font-black uppercase tracking-widest">Student Personnel</th>
-                                        <th className="px-8 py-5 text-center">Reference Roll</th>
-                                        <th className="px-8 py-5 text-right">Condition</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-white/5">
-                                    {students.map((student) => (
-                                        <tr key={student._id} className={`${selectedStudents.includes(student._id) ? 'bg-indigo-600/5' : ''} hover:bg-white/5 transition-colors group`}>
-                                            <td className="px-8 py-4">
+                                <tbody className="divide-y divide-slate-800">
+                                    {students.map(student => (
+                                        <tr key={student._id} className="hover:bg-slate-800/40 transition-colors">
+                                            <td className="px-4 py-3 font-medium text-white">
+                                                {student.firstName} {student.lastName}
+                                            </td>
+                                            <td className="px-4 py-3 text-slate-300 font-mono text-xs">
+                                                {student.profile?.studentId ||
+                                                    student.profile?.admissionNo ||
+                                                    student._id.slice(-8).toUpperCase()}
+                                            </td>
+                                            <td className="px-4 py-3 text-white font-semibold">
+                                                {student.finalGrade !== null
+                                                    ? student.finalGrade
+                                                    : <span className="text-slate-500 font-normal italic text-xs">N/A</span>
+                                                }
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                {student.eligible ? (
+                                                    <span className="inline-flex items-center gap-1.5 text-green-400 font-medium">
+                                                        <CheckCircle2 className="w-4 h-4 shrink-0" />
+                                                        Eligible
+                                                    </span>
+                                                ) : (
+                                                    <span
+                                                        className="inline-flex items-center gap-1.5 text-red-400 font-medium cursor-help"
+                                                        title={student.reason}
+                                                    >
+                                                        <XCircle className="w-4 h-4 shrink-0" />
+                                                        Not Eligible
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
                                                 <input
                                                     type="checkbox"
                                                     checked={selectedStudents.includes(student._id)}
                                                     onChange={() => toggleStudent(student._id)}
-                                                    className="w-4 h-4 rounded-lg bg-slate-900 border-white/10 text-indigo-600 focus:ring-indigo-500/50 focus:ring-offset-0"
+                                                    className="w-4 h-4 rounded border-slate-600 bg-slate-800 accent-blue-500 cursor-pointer"
                                                 />
-                                            </td>
-                                            <td className="px-8 py-4 font-mono text-indigo-400 text-xs font-black uppercase tracking-widest">{student.profile.admissionNo}</td>
-                                            <td className="px-8 py-4">
-                                                <div className="font-bold text-white group-hover:text-indigo-400 transition-colors">{student.firstName} {student.lastName}</div>
-                                            </td>
-                                            <td className="px-8 py-4 text-center text-slate-500 font-black">{student.profile.rollNo}</td>
-                                            <td className="px-8 py-4 text-right">
-                                                <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded text-[9px] font-black uppercase tracking-widest">Verified</span>
                                             </td>
                                         </tr>
                                     ))}
                                 </tbody>
                             </table>
+                        )}
+                    </div>
+
+                    {/* Destination + Confirm */}
+                    {fromClassId && students.length > 0 && (
+                        <div className="bg-[#1e293b] rounded-xl p-4 space-y-3">
+                            <label className="text-sm text-slate-400 font-medium">Destination Class:</label>
+                            <div className="relative">
+                                <select
+                                    value={toClassId}
+                                    onChange={e => setToClassId(e.target.value)}
+                                    className="w-full bg-[#0f172a] border border-slate-700 text-white rounded-lg px-3 py-2.5 text-sm appearance-none pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                    <option value="">-- Select Destination Class --</option>
+                                    {classes
+                                        .filter(c => c._id !== fromClassId)
+                                        .map(c => (
+                                            <option key={c._id} value={c._id}>{classLabel(c)}</option>
+                                        ))}
+                                </select>
+                                <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs">▾</span>
+                            </div>
+
+                            <button
+                                onClick={handleConfirmPromotion}
+                                disabled={promoting || !toClassId || selectedStudents.length === 0}
+                                className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
+                            >
+                                {promoting ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Promoting...
+                                    </>
+                                ) : (
+                                    `Confirm Promotion (${selectedStudents.length} student${selectedStudents.length !== 1 ? 's' : ''})`
+                                )}
+                            </button>
                         </div>
                     )}
                 </div>
-            )}
-
-            {/* Action Bar */}
-            <div className="p-6 sm:p-8 glass-dark rounded-[2.5rem] border border-white/5 shadow-2xl flex justify-between items-center bg-slate-950/40">
-                <div className="text-xs text-slate-500 font-medium">
-                    {promotionType === 'auto'
-                        ? 'System will evaluate exam scores to determine eligibility.'
-                        : 'Manually select students to bypass exam criteria.'}
-                </div>
-                <button
-                    onClick={handlePromote}
-                    disabled={promoting || (promotionType === 'manual' && selectedStudents.length === 0) || !toClass || !fromClass}
-                    className={`flex items-center justify-center gap-3 px-10 py-4 text-white rounded-[2rem] font-black text-sm disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-2xl ${promotionType === 'auto'
-                            ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/40'
-                            : 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-500/40'
-                        }`}
-                >
-                    {promoting ? (
-                        <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    ) : (
-                        <>
-                            <span>{promotionType === 'auto' ? 'Execute Auto-Promotion' : 'Initiate Manual Promotion'}</span>
-                            <ArrowRight className="w-4 h-4" />
-                        </>
-                    )}
-                </button>
             </div>
         </div>
     );

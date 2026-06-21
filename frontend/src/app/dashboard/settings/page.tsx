@@ -1,11 +1,14 @@
 "use client";
 import { useState, useEffect } from 'react';
 import api from '../../utils/api';
+import LogoUpload from '../../../components/LogoUpload';
 
 export default function SettingsPage() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [tenant, setTenant] = useState<any>(null);
+    const [error, setError] = useState('');
+    const [success, setSuccess] = useState('');
 
     const [form, setForm] = useState({
         name: '',
@@ -24,19 +27,20 @@ export default function SettingsPage() {
         const fetchTenant = async () => {
             try {
                 const { data } = await api.get('/tenants/me');
+                // The API returns flat fields (not nested under config)
                 const t = data.data;
                 setTenant(t);
                 setForm({
                     name: t.name || '',
-                    academicYear: t.config?.academicYear || '',
-                    primaryColor: t.config?.primaryColor || '#4f46e5',
-                    secondaryColor: t.config?.secondaryColor || '#1e293b',
-                    logoUrl: t.config?.logoUrl || '',
-                    address: t.config?.address || '',
-                    contactEmail: t.config?.contactEmail || '',
-                    contactPhone: t.config?.contactPhone || '',
-                    vision: t.config?.vision || '',
-                    mission: t.config?.mission || ''
+                    academicYear: t.academicYear || '',
+                    primaryColor: t.primaryColor || '#4f46e5',
+                    secondaryColor: t.secondaryColor || '#1e293b',
+                    logoUrl: t.logoUrl || '',
+                    address: t.address || '',
+                    contactEmail: t.contactEmail || '',
+                    contactPhone: t.contactPhone || '',
+                    vision: t.vision || '',
+                    mission: t.mission || ''
                 });
             } catch (err) {
                 console.error("Failed to fetch settings");
@@ -50,7 +54,12 @@ export default function SettingsPage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setSaving(true);
+        setError('');
+        setSuccess('');
+
         try {
+            console.log('Submitting form with logoUrl:', form.logoUrl ? 'Present' : 'Empty');
+            
             const payload = {
                 name: form.name,
                 config: {
@@ -65,10 +74,19 @@ export default function SettingsPage() {
                     mission: form.mission
                 }
             };
-            await api.put('/tenants/me', payload);
-            alert("Institutional settings updated successfully!");
-        } catch (err) {
-            alert("Failed to update settings");
+
+            const response = await api.put('/tenants/me', payload);
+            console.log('Update successful:', response.data);
+
+            // Update tenant name in layout/topbar by dispatching a custom event
+            window.dispatchEvent(new CustomEvent('tenant-updated', { detail: { name: form.name, logoUrl: form.logoUrl } }));
+
+            setSuccess("✅ Institutional settings updated successfully!");
+            setTimeout(() => setSuccess(''), 3000);
+        } catch (err: any) {
+            const errorMsg = err.response?.data?.message || err.message || "Failed to update settings";
+            console.error('Update error:', errorMsg);
+            setError(`❌ ${errorMsg}`);
         } finally {
             setSaving(false);
         }
@@ -93,6 +111,18 @@ export default function SettingsPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-8">
+                {/* Status Messages */}
+                {error && (
+                    <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl">
+                        {error}
+                    </div>
+                )}
+                {success && (
+                    <div className="p-4 bg-green-500/10 border border-green-500/20 text-green-400 rounded-xl">
+                        {success}
+                    </div>
+                )}
+
                 {/* General & Visual Section */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     <div className="lg:col-span-2 space-y-6">
@@ -111,24 +141,20 @@ export default function SettingsPage() {
                                         placeholder="e.g. Hogwarts School of Magic"
                                     />
                                 </div>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <div className="space-y-1.5">
-                                        <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Current Academic Year</label>
-                                        <input
-                                            value={form.academicYear} onChange={e => setForm({ ...form, academicYear: e.target.value })}
-                                            className="w-full px-5 py-3 bg-slate-900 border border-white/10 rounded-xl text-white outline-none"
-                                            placeholder="2024-2025"
-                                        />
-                                    </div>
-                                    <div className="space-y-1.5">
-                                        <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Logo URL (Icon)</label>
-                                        <input
-                                            value={form.logoUrl} onChange={e => setForm({ ...form, logoUrl: e.target.value })}
-                                            className="w-full px-5 py-3 bg-slate-900 border border-white/10 rounded-xl text-white outline-none"
-                                            placeholder="https://..."
-                                        />
-                                    </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Current Academic Year</label>
+                                    <input
+                                        value={form.academicYear} onChange={e => setForm({ ...form, academicYear: e.target.value })}
+                                        className="w-full px-5 py-3 bg-slate-900 border border-white/10 rounded-xl text-white outline-none"
+                                        placeholder="2024-2025"
+                                    />
                                 </div>
+                                <LogoUpload
+                                    logo={form.logoUrl}
+                                    onLogoChange={(logo) => setForm({ ...form, logoUrl: logo })}
+                                    label="School Logo"
+                                    containerSize="small"
+                                />
                             </div>
                         </div>
 

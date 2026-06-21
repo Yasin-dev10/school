@@ -1110,11 +1110,11 @@ export default function StudentDetailPage() {
                             <div className="absolute top-0 w-full h-40 bg-gradient-to-br from-[#4f46e5] via-[#4338ca] to-[#1e1b4b] -skew-y-6 -translate-y-12"></div>
 
                             <div className="absolute top-6 left-8 z-20 flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-white/15 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-lg overflow-hidden">
+                                <div className="w-12 h-12 rounded-xl bg-white/15 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-lg overflow-hidden">
                                     {tenantLogoUrl ? (
-                                        <img src={tenantLogoUrl} alt="Logo" className="w-full h-full object-cover" />
+                                        <img src={tenantLogoUrl} alt="Logo" className="w-full h-full object-contain p-1" />
                                     ) : (
-                                        <span className="text-white font-black text-xl italic">{tenant?.name?.charAt(0) || 'S'}</span>
+                                        <span className="text-white font-black text-2xl italic">{tenant?.name?.charAt(0) || 'S'}</span>
                                     )}
                                 </div>
                                 <div className="flex flex-col">

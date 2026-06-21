@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import api from '../../../../utils/api';
 import Link from 'next/link';
+import LogoUpload from '../../../../components/LogoUpload';
 
 export default function EditTenantPage() {
     const router = useRouter();
@@ -15,7 +16,8 @@ export default function EditTenantPage() {
         name: '',
         domain: '',
         status: 'active',
-        plan: 'basic'
+        plan: 'basic',
+        logoUrl: ''
     });
 
     useEffect(() => {
@@ -27,7 +29,8 @@ export default function EditTenantPage() {
                     name: tenant.name,
                     domain: tenant.domain || '',
                     status: tenant.status,
-                    plan: tenant.subscription?.plan || 'basic'
+                    plan: tenant.subscription?.plan || 'basic',
+                    logoUrl: tenant.config?.logoUrl || ''
                 });
             } catch (err) {
                 setError('Failed to load school details');
@@ -48,7 +51,8 @@ export default function EditTenantPage() {
                 name: formData.name,
                 domain: formData.domain,
                 status: formData.status,
-                subscription: { plan: formData.plan }
+                subscription: { plan: formData.plan },
+                config: { logoUrl: formData.logoUrl }
             });
             alert('School updated successfully');
             router.push('/super-admin/tenants');
@@ -81,6 +85,13 @@ export default function EditTenantPage() {
                             className="w-full px-4 py-3 bg-slate-950 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-indigo-500"
                         />
                     </div>
+
+                    <LogoUpload
+                        logo={formData.logoUrl}
+                        onLogoChange={(logo) => setFormData({ ...formData, logoUrl: logo })}
+                        label="School Logo"
+                        containerSize="large"
+                    />
 
                     <div className="space-y-2">
                         <label className="text-sm font-medium text-slate-400">Custom Domain</label>

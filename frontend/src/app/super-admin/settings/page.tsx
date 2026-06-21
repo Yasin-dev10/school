@@ -1,15 +1,74 @@
 "use client";
 import { useState } from 'react';
+import LogoUpload from '../../components/LogoUpload';
+import api from '../../utils/api';
 
 export default function GlobalSettingsPage() {
     const [activeTab, setActiveTab] = useState('general');
+    const [platformLogo, setPlatformLogo] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [message, setMessage] = useState('');
+
+    // Admin state
+    const [adminForm, setAdminForm] = useState({
+        firstName: '',
+        lastName: '',
+        email: '',
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+    });
 
     const tabs = [
         { id: 'general', label: 'General', icon: '🌍' },
+        { id: 'admin', label: 'Admin', icon: '👤' },
         { id: 'security', label: 'Security', icon: '🛡️' },
         { id: 'notifications', label: 'Email & SMS', icon: '✉️' },
         { id: 'backup', label: 'Data & Backup', icon: '💾' },
     ];
+
+    const handleAdminUpdate = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        setMessage('');
+
+        try {
+            if (adminForm.newPassword && adminForm.newPassword !== adminForm.confirmPassword) {
+                setMessage('❌ New passwords do not match');
+                setLoading(false);
+                return;
+            }
+
+            const payload: any = {
+                firstName: adminForm.firstName,
+                lastName: adminForm.lastName,
+                email: adminForm.email,
+                currentPassword: adminForm.currentPassword
+            };
+
+            if (adminForm.newPassword) {
+                payload.newPassword = adminForm.newPassword;
+            }
+
+            await api.put('/super-admin/profile', payload);
+            
+            setMessage('✅ Admin profile updated successfully');
+            setAdminForm({
+                firstName: '',
+                lastName: '',
+                email: '',
+                currentPassword: '',
+                newPassword: '',
+                confirmPassword: ''
+            });
+
+            setTimeout(() => setMessage(''), 3000);
+        } catch (error: any) {
+            setMessage('❌ ' + (error.response?.data?.message || 'Failed to update admin'));
+        } finally {
+            setLoading(false);
+        }
+    };
 
     return (
         <div className="p-8 max-w-5xl mx-auto">
@@ -47,6 +106,12 @@ export default function GlobalSettingsPage() {
                                         <label className="text-sm font-medium text-slate-500 ml-1">Platform Name</label>
                                         <input type="text" defaultValue="SchoolOS" className="w-full px-4 py-3 bg-slate-950 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-indigo-500 outline-none" />
                                     </div>
+                                    <LogoUpload
+                                        logo={platformLogo}
+                                        onLogoChange={setPlatformLogo}
+                                        label="Platform Logo"
+                                        containerSize="medium"
+                                    />
                                     <div className="space-y-2">
                                         <label className="text-sm font-medium text-slate-500 ml-1">Support Email</label>
                                         <input type="email" defaultValue="support@schoolos.com" className="w-full px-4 py-3 bg-slate-950 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-indigo-500 outline-none" />
@@ -80,7 +145,111 @@ export default function GlobalSettingsPage() {
                         </div>
                     )}
 
-                    {activeTab !== 'general' && activeTab !== 'security' && (
+                    {activeTab === 'admin' && (
+                        <div className="space-y-8 animate-in fade-in duration-300">
+                            <div>
+                                <h3 className="text-xl font-bold text-white mb-4">Admin Profile Settings</h3>
+                                <p className="text-slate-400 text-sm mb-6">Update your admin account information and change your password.</p>
+
+                                {message && (
+                                    <div className={`p-4 rounded-xl mb-6 border ${message.includes('✅')
+                                        ? 'bg-green-500/10 border-green-500/20 text-green-400'
+                                        : 'bg-red-500/10 border-red-500/20 text-red-400'
+                                        }`}>
+                                        {message}
+                                    </div>
+                                )}
+
+                                <form onSubmit={handleAdminUpdate} className="space-y-6">
+                                    {/* Personal Information */}
+                                    <div className="bg-slate-950/50 p-6 rounded-2xl border border-white/5 space-y-4">
+                                        <h4 className="text-sm font-bold text-slate-400 uppercase tracking-widest">Personal Information</h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-medium text-slate-500 ml-1">First Name</label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Enter first name"
+                                                    value={adminForm.firstName}
+                                                    onChange={(e) => setAdminForm({ ...adminForm, firstName: e.target.value })}
+                                                    className="w-full px-4 py-3 bg-slate-950 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-medium text-slate-500 ml-1">Last Name</label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Enter last name"
+                                                    value={adminForm.lastName}
+                                                    onChange={(e) => setAdminForm({ ...adminForm, lastName: e.target.value })}
+                                                    className="w-full px-4 py-3 bg-slate-950 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-medium text-slate-500 ml-1">Email Address</label>
+                                            <input
+                                                type="email"
+                                                placeholder="admin@example.com"
+                                                value={adminForm.email}
+                                                onChange={(e) => setAdminForm({ ...adminForm, email: e.target.value })}
+                                                className="w-full px-4 py-3 bg-slate-950 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Password Change */}
+                                    <div className="bg-slate-950/50 p-6 rounded-2xl border border-white/5 space-y-4">
+                                        <h4 className="text-sm font-bold text-slate-400 uppercase tracking-widest">Change Password</h4>
+                                        <p className="text-xs text-slate-500">Leave blank if you don't want to change your password</p>
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-medium text-slate-500 ml-1">Current Password *</label>
+                                            <input
+                                                type="password"
+                                                placeholder="Enter current password"
+                                                value={adminForm.currentPassword}
+                                                onChange={(e) => setAdminForm({ ...adminForm, currentPassword: e.target.value })}
+                                                required
+                                                className="w-full px-4 py-3 bg-slate-950 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-medium text-slate-500 ml-1">New Password</label>
+                                                <input
+                                                    type="password"
+                                                    placeholder="Leave blank to keep current"
+                                                    value={adminForm.newPassword}
+                                                    onChange={(e) => setAdminForm({ ...adminForm, newPassword: e.target.value })}
+                                                    className="w-full px-4 py-3 bg-slate-950 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-medium text-slate-500 ml-1">Confirm New Password</label>
+                                                <input
+                                                    type="password"
+                                                    placeholder="Confirm new password"
+                                                    value={adminForm.confirmPassword}
+                                                    onChange={(e) => setAdminForm({ ...adminForm, confirmPassword: e.target.value })}
+                                                    className="w-full px-4 py-3 bg-slate-950 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <button
+                                        type="submit"
+                                        disabled={loading}
+                                        className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-2xl font-bold transition shadow-xl shadow-indigo-500/20"
+                                    >
+                                        {loading ? 'Updating...' : 'Update Admin Profile'}
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab !== 'general' && activeTab !== 'security' && activeTab !== 'admin' && (
                         <div className="flex flex-col items-center justify-center h-full text-center space-y-4">
                             <span className="text-6xl">🛠️</span>
                             <h3 className="text-xl font-bold text-white">Module Under Construction</h3>

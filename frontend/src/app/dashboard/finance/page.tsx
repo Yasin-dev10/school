@@ -591,13 +591,18 @@ export default function FinancePage() {
                         <div className="flex justify-between items-start border-b-2 border-slate-200 pb-8 mb-8">
                             <div className="flex items-center gap-4">
                                 {tenant?.config?.logoUrl ? (
-                                    <img src={tenant.config.logoUrl} alt="Logo" className="w-16 h-16 object-contain" />
+                                    <img src={tenant.config.logoUrl} alt="School Logo" className="w-20 h-20 object-contain rounded-lg border border-slate-100" />
                                 ) : (
-                                    <div className="w-16 h-16 bg-slate-900 flex items-center justify-center text-white text-2xl font-serif italic">S</div>
+                                    <div className="w-20 h-20 bg-slate-900 rounded-xl flex items-center justify-center text-white text-3xl font-serif italic font-black shadow-lg">
+                                        {(tenant?.name || 'S').charAt(0)}
+                                    </div>
                                 )}
                                 <div>
-                                    <h1 className="text-2xl font-black uppercase tracking-tight text-slate-900">{tenant?.name}</h1>
+                                    <h1 className="text-2xl font-black uppercase tracking-tight text-slate-900">{tenant?.name || 'School'}</h1>
                                     <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest leading-tight">{tenant?.config?.address}</p>
+                                    {tenant?.config?.contactEmail && (
+                                        <p className="text-[10px] text-slate-400 mt-0.5">{tenant.config.contactEmail}</p>
+                                    )}
                                 </div>
                             </div>
                             <div className="text-right">
@@ -612,7 +617,7 @@ export default function FinancePage() {
                             <div className="space-y-1">
                                 <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Billed To</p>
                                 <p className="text-lg font-black text-slate-900">{receiptData.student?.firstName} {receiptData.student?.lastName}</p>
-                                <p className="text-xs font-bold text-slate-600">ID: {receiptData.student?._id.toString().slice(-8).toUpperCase()}</p>
+                                <p className="text-xs font-bold text-slate-600">ID: {(receiptData.student?._id || receiptData.student?.id || '')?.toString().slice(-8).toUpperCase()}</p>
                                 <p className="text-xs text-slate-500 italic mt-1">{receiptData.class?.name} - {receiptData.class?.section}</p>
                             </div>
                             <div className="text-right space-y-1">

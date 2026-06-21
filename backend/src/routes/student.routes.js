@@ -7,6 +7,7 @@ const {
     updateStudent,
     deleteStudent,
     promoteStudents,
+    getPromotionEligibility,
     getChildren,
     bulkImportStudents,
     resetStudentPassword
@@ -20,6 +21,7 @@ router.use(protect);
 
 router.get('/my-children', authorize('parent'), getChildren);
 router.post('/promote', authorize('school-admin'), promoteStudents);
+router.get('/promotion-eligibility', authorize('school-admin'), getPromotionEligibility);
 router.post('/bulk-import', authorize('school-admin'), validateBulkOperation(), bulkImportStudents);
 
 // Restricted to roles that can manage students
