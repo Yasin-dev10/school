@@ -363,10 +363,21 @@ exports.deleteStudent = async (req, res) => {
         const student = await prisma.user.findFirst({ where: { id: req.params.id, tenantId: req.user.tenantId, role: 'student' } });
         if (!student) return res.status(404).json({ message: 'Student not found' });
 
-        await prisma.user.delete({ where: { id: req.params.id } });
+        // Delete all related records first (no cascade in schema)
+        await prisma.$transaction([
+            prisma.studentParent.deleteMany({ where: { studentId: req.params.id } }),
+            prisma.attendance.deleteMany({ where: { studentId: req.params.id } }),
+            prisma.mark.deleteMany({ where: { studentId: req.params.id } }),
+            prisma.submission.deleteMany({ where: { studentId: req.params.id } }),
+            prisma.examComplaint.deleteMany({ where: { studentId: req.params.id } }),
+            prisma.certificate.deleteMany({ where: { studentId: req.params.id } }),
+            prisma.notificationRead.deleteMany({ where: { userId: req.params.id } }),
+            prisma.invoice.deleteMany({ where: { studentId: req.params.id } }),
+            prisma.user.delete({ where: { id: req.params.id } }),
+        ]);
 
         await logAction({ action: 'DELETE', module: 'USER', details: `Removed student: ${student.firstName} ${student.lastName}`, userId: req.user._id, tenantId: req.user.tenantId });
-        emitToTenant(req.user.tenantId, 'student:deleted', student);
+        emitToTenant(req.user.tenantId, 'student:deleted', { id: req.params.id });
         res.status(200).json({ success: true, message: 'Student record deleted' });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });

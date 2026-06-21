@@ -1,7 +1,8 @@
 "use client";
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import api from '../../utils/api';
-import { Save, Loader2, CheckCircle2, Lock, Unlock, Download, AlertCircle, ChevronDown } from 'lucide-react';
+import { Save, Loader2, CheckCircle2, Lock, Unlock, Download, Upload, FileSpreadsheet, AlertCircle, ChevronDown } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 /* ─── Types ─────────────────────────────────────────────────────────────── */
 type GradeConfig = { grade: string; minPercentage: number; maxPercentage: number; gpa: number; remarks?: string };
@@ -61,6 +62,9 @@ export default function GradeEntryPage() {
     const [approving, setApproving] = useState(false);
     const [userRole, setUserRole] = useState('');
     const [toast, setToast]       = useState<{ msg: string; ok: boolean } | null>(null);
+    const [importErrors, setImportErrors] = useState<string[]>([]);
+    const [search, setSearch]     = useState('');
+    const importInputRef = useRef<HTMLInputElement>(null);
 
     const showToast = (msg: string, ok = true) => {
         setToast({ msg, ok });
@@ -128,6 +132,17 @@ export default function GradeEntryPage() {
     const isLocked    = currentExam?.isApproved === true;
     const isAdmin     = ['school-admin', 'super-admin'].includes(userRole);
     const canEdit     = !isLocked || isAdmin;
+
+    const filteredStudents = useMemo(() => {
+        if (!search.trim()) return students;
+        const q = search.trim().toLowerCase();
+        return students.filter(s => {
+            const fullName = `${s.firstName} ${s.lastName}`.toLowerCase();
+            const rollNo = (s.rollNo || s.profile?.rollNo || '').toLowerCase();
+            const admNo  = (s.admissionNo || s.profile?.admissionNo || '').toLowerCase();
+            return fullName.includes(q) || rollNo.includes(q) || admNo.includes(q);
+        });
+    }, [students, search]);
 
     const stats = useMemo(() => {
         const rows = Object.values(marks).filter(m => m.score !== '');
@@ -216,6 +231,155 @@ export default function GradeEntryPage() {
         } catch { showToast('Export failed', false); }
     };
 
+    /* ── Download import template ─────────────────────────────────────── */
+    const handleDownloadTemplate = () => {
+        if (!students.length) { showToast('Select Class, Subject & Exam first', false); return; }
+        const examName = currentExam ? `${currentExam.name} - ${currentExam.term}` : 'Exam';
+        const subjectName = subjects.find(s => s._id === selSubject)?.name || 'Subject';
+        const className  = classes.find(c => c._id === selClass);
+        const classLabel = className ? (className.grade || className.name) + (className.section ? ` ${className.section}` : '') : 'Class';
+
+        const rows = students.map((s, idx) => {
+            const sid = s._id || s.id || '';
+            const rollNo = s.rollNo || s.profile?.rollNo || `S${String(idx + 1).padStart(4, '0')}`;
+            const existing = marks[sid];
+            return {
+                'Student ID': sid,
+                'Roll No': rollNo,
+                'First Name': s.firstName,
+                'Last Name': s.lastName,
+                [`Marks (Max: ${maxMarks})`]: existing?.score || '',
+                'Remarks': existing?.remarks || '',
+            };
+        });
+
+        const ws = XLSX.utils.json_to_sheet(rows);
+        // Column widths
+        ws['!cols'] = [
+            { wch: 28 }, // Student ID
+            { wch: 10 }, // Roll No
+            { wch: 16 }, // First Name
+            { wch: 16 }, // Last Name
+            { wch: 18 }, // Marks
+            { wch: 28 }, // Remarks
+        ];
+
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Marks Entry');
+
+        // Add a metadata sheet so import can validate context
+        const metaWs = XLSX.utils.json_to_sheet([{
+            examId: selExam,
+            classId: selClass,
+            subjectId: selSubject,
+            maxMarks,
+            examName,
+            subjectName,
+            classLabel,
+        }]);
+        XLSX.utils.book_append_sheet(wb, metaWs, '_meta');
+
+        const fileName = `marks-template_${classLabel}_${subjectName}_${examName}.xlsx`
+            .replace(/[/\\?%*:|"<>]/g, '-');
+        XLSX.writeFile(wb, fileName);
+        showToast('Template downloaded');
+    };
+
+    /* ── Import Excel marks ───────────────────────────────────────────── */
+    const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        // Reset input so same file can be re-imported
+        if (importInputRef.current) importInputRef.current.value = '';
+
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            try {
+                const data = new Uint8Array(ev.target?.result as ArrayBuffer);
+                const wb   = XLSX.read(data, { type: 'array' });
+
+                // Try to read metadata sheet for validation
+                const metaSheet = wb.Sheets['_meta'];
+                if (metaSheet) {
+                    const [meta] = XLSX.utils.sheet_to_json<any>(metaSheet);
+                    if (meta) {
+                        if (meta.examId && meta.examId !== selExam) {
+                            showToast('This template is for a different Exam', false); return;
+                        }
+                        if (meta.classId && meta.classId !== selClass) {
+                            showToast('This template is for a different Class', false); return;
+                        }
+                        if (meta.subjectId && meta.subjectId !== selSubject) {
+                            showToast('This template is for a different Subject', false); return;
+                        }
+                    }
+                }
+
+                const ws = wb.Sheets['Marks Entry'];
+                if (!ws) { showToast('Sheet "Marks Entry" not found in file', false); return; }
+
+                const rows = XLSX.utils.sheet_to_json<any>(ws);
+                if (!rows.length) { showToast('No rows found in the file', false); return; }
+
+                const errors: string[] = [];
+                let updated = 0;
+
+                // Find the marks column — it starts with "Marks"
+                const sampleRow = rows[0];
+                const marksCol  = Object.keys(sampleRow).find(k => k.toLowerCase().startsWith('marks'));
+
+                if (!marksCol) {
+                    showToast('Could not find Marks column in the file', false); return;
+                }
+
+                const newMarks = { ...marks };
+
+                rows.forEach((row: any, i: number) => {
+                    const sid = String(row['Student ID'] || '').trim();
+                    if (!sid) { errors.push(`Row ${i + 2}: Missing Student ID`); return; }
+                    if (!newMarks[sid]) { errors.push(`Row ${i + 2}: Student ID "${sid}" not found in this class`); return; }
+
+                    const rawScore = row[marksCol];
+                    if (rawScore === '' || rawScore === undefined || rawScore === null) {
+                        // blank — leave unchanged
+                        return;
+                    }
+
+                    const score = Number(rawScore);
+                    if (isNaN(score)) { errors.push(`Row ${i + 2}: Invalid score "${rawScore}" for ${row['First Name']} ${row['Last Name']}`); return; }
+                    if (score < 0 || score > maxMarks) {
+                        errors.push(`Row ${i + 2}: Score ${score} is out of range (0–${maxMarks}) for ${row['First Name']} ${row['Last Name']}`);
+                        return;
+                    }
+
+                    newMarks[sid] = {
+                        ...newMarks[sid],
+                        score: String(score),
+                        remarks: String(row['Remarks'] || newMarks[sid].remarks || ''),
+                        isDirty: true,
+                        grade: undefined,
+                        gpa: undefined,
+                        gradeRemarks: undefined,
+                    };
+                    updated++;
+                });
+
+                setMarks(newMarks);
+                setImportErrors(errors);
+
+                if (updated > 0) {
+                    showToast(`Imported ${updated} mark${updated > 1 ? 's' : ''}${errors.length ? ` (${errors.length} warning${errors.length > 1 ? 's' : ''})` : ''}`);
+                } else {
+                    showToast('No marks were imported — check the file', false);
+                }
+            } catch (err) {
+                console.error(err);
+                showToast('Failed to read file. Make sure it is a valid .xlsx file.', false);
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    };
+
     /* ── Render ─────────────────────────────────────────────────────────── */
     return (
         <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5">
@@ -234,10 +398,36 @@ export default function GradeEntryPage() {
                     <p className="text-sm text-slate-500 mt-0.5">Enter student marks — grades are calculated automatically.</p>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
+                    {/* Hidden file input for Excel import */}
+                    <input
+                        ref={importInputRef}
+                        type="file"
+                        accept=".xlsx,.xls"
+                        className="hidden"
+                        onChange={handleImportExcel}
+                    />
+                    {canEdit && selExam && selClass && selSubject && students.length > 0 && (
+                        <>
+                            <button
+                                onClick={handleDownloadTemplate}
+                                className="flex items-center gap-1.5 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-sm font-medium hover:border-slate-400 transition"
+                                title="Download Excel template with student list"
+                            >
+                                <FileSpreadsheet className="w-4 h-4 text-emerald-600" /> Template
+                            </button>
+                            <button
+                                onClick={() => importInputRef.current?.click()}
+                                className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium transition"
+                                title="Import marks from Excel file"
+                            >
+                                <Upload className="w-4 h-4" /> Import Excel
+                            </button>
+                        </>
+                    )}
                     {selExam && selClass && (
                         <button onClick={handleExportExcel}
                             className="flex items-center gap-1.5 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-sm font-medium hover:border-slate-400 transition">
-                            <Download className="w-4 h-4" /> Excel
+                            <Download className="w-4 h-4" /> Export
                         </button>
                     )}
                     {isAdmin && selExam && (
@@ -268,6 +458,29 @@ export default function GradeEntryPage() {
                 <div className="flex items-center gap-2 px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl text-amber-700 dark:text-amber-400 text-sm font-medium">
                     <Lock className="w-4 h-4 shrink-0" />
                     Results are approved and locked. {isAdmin ? 'Click "Unlock" to allow edits.' : 'Contact admin to unlock.'}
+                </div>
+            )}
+
+            {/* Import Errors */}
+            {importErrors.length > 0 && (
+                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl p-4">
+                    <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-semibold text-sm">
+                            <AlertCircle className="w-4 h-4" />
+                            Import Warnings ({importErrors.length})
+                        </div>
+                        <button
+                            onClick={() => setImportErrors([])}
+                            className="text-xs text-amber-600 dark:text-amber-400 hover:underline"
+                        >
+                            Dismiss
+                        </button>
+                    </div>
+                    <ul className="space-y-1">
+                        {importErrors.map((err, i) => (
+                            <li key={i} className="text-xs text-amber-700 dark:text-amber-300 font-mono">• {err}</li>
+                        ))}
+                    </ul>
                 </div>
             )}
 
@@ -315,6 +528,31 @@ export default function GradeEntryPage() {
 
             {/* Table */}
             <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                {/* Search bar */}
+                {students.length > 0 && (
+                    <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex items-center gap-2">
+                        <div className="relative flex-1 max-w-xs">
+                            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                            <input
+                                type="text"
+                                value={search}
+                                onChange={e => setSearch(e.target.value)}
+                                placeholder="Search student name or roll no..."
+                                className="w-full pl-9 pr-8 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 placeholder-slate-400"
+                            />
+                            {search && (
+                                <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                                </button>
+                            )}
+                        </div>
+                        {search && (
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                                {filteredStudents.length} / {students.length} students
+                            </span>
+                        )}
+                    </div>
+                )}
                 {loading ? (
                     <div className="flex items-center justify-center py-24 text-slate-400">
                         <Loader2 className="w-6 h-6 animate-spin mr-2" /> Loading students...
@@ -341,7 +579,13 @@ export default function GradeEntryPage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                                {students.map((s, idx) => {
+                                {filteredStudents.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={7} className="py-12 text-center text-slate-400 text-sm">
+                                            No students match &ldquo;{search}&rdquo;
+                                        </td>
+                                    </tr>
+                                ) : filteredStudents.map((s, idx) => {
                                     const sid = s._id || s.id || '';
                                     const row = marks[sid] || { studentId: sid, score: '', remarks: '', isDirty: false };
                                     const numScore = row.score !== '' ? Number(row.score) : null;

@@ -4,6 +4,7 @@ const {
     createExam,
     getExams,
     updateExam,
+    deleteExam,
     bulkMarkEntry,
     deleteMark,
     bulkDeleteMarks,
@@ -37,7 +38,8 @@ router.route('/')
     .post(authorize('school-admin'), validate(examSchema), createExam);
 
 router.route('/:id')
-    .put(authorize('school-admin'), validateObjectId('id'), updateExam);
+    .put(authorize('school-admin'), validateObjectId('id'), updateExam)
+    .delete(authorize('school-admin'), validateObjectId('id'), deleteExam);
 
 router.put('/:id/approve', authorize('school-admin'), validateObjectId('id'), approveResults);
 router.put('/:id/unapprove', authorize('school-admin'), validateObjectId('id'), unapproveResults);

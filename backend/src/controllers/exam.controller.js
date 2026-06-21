@@ -65,6 +65,32 @@ exports.getExams = async (req, res) => {
     }
 };
 
+// @desc    Delete exam
+exports.deleteExam = async (req, res) => {
+    try {
+        const tenantId = req.user.tenantId;
+        const exam = await prisma.exam.findFirst({ where: { id: req.params.id, tenantId } });
+        if (!exam) return res.status(404).json({ success: false, message: 'Exam not found' });
+
+        if (exam.isApproved) {
+            return res.status(400).json({ success: false, message: 'Cannot delete an approved/published exam. Unlock it first.' });
+        }
+
+        // Delete related marks and class assignments first
+        await prisma.$transaction([
+            prisma.mark.deleteMany({ where: { examId: req.params.id, tenantId } }),
+            prisma.examClass.deleteMany({ where: { examId: req.params.id } }),
+            prisma.exam.delete({ where: { id: req.params.id } }),
+        ]);
+
+        await logAction({ action: 'DELETE', module: 'TENANT', details: `Deleted exam: ${exam.name}`, userId: req.user._id, tenantId });
+        emitToTenant(tenantId, 'exam:deleted', { examId: req.params.id });
+        res.status(200).json({ success: true, message: 'Exam deleted successfully' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 // @desc    Update exam
 exports.updateExam = async (req, res) => {
     try {

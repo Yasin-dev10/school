@@ -37,6 +37,16 @@ export default function ExamsPage() {
     const [isExamModalOpen, setIsExamModalOpen] = useState(false);
     const [examForm, setExamForm] = useState<{ name: string; term: string; startDate: string; endDate: string; classes: string[] }>({ name: '', term: 'First_Term', startDate: '', endDate: '', classes: [] });
 
+    // Edit State
+    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [editingExam, setEditingExam] = useState<any>(null);
+    const [editForm, setEditForm] = useState<{ name: string; term: string; startDate: string; endDate: string; classes: string[] }>({ name: '', term: 'First_Term', startDate: '', endDate: '', classes: [] });
+    const [isEditSaving, setIsEditSaving] = useState(false);
+
+    // Delete State
+    const [deletingExamId, setDeletingExamId] = useState<string | null>(null);
+    const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
     // Grades State
     const [selectedExam, setSelectedExam] = useState<any>(null);
     const [selectedClass, setSelectedClass] = useState<any>(null);
@@ -290,6 +300,48 @@ export default function ExamsPage() {
         }
     };
 
+    const openEditModal = (exam: any) => {
+        setEditingExam(exam);
+        setEditForm({
+            name: exam.name,
+            term: exam.term,
+            startDate: exam.startDate ? exam.startDate.split('T')[0] : '',
+            endDate: exam.endDate ? exam.endDate.split('T')[0] : '',
+            classes: exam.classes?.map((ec: any) => ec._id || ec.classId || ec.class?._id) || [],
+        });
+        setIsEditModalOpen(true);
+    };
+
+    const handleEditExam = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingExam) return;
+        setIsEditSaving(true);
+        try {
+            await api.put(`/exams/${editingExam._id}`, editForm);
+            setIsEditModalOpen(false);
+            setEditingExam(null);
+            const { data } = await api.get('/exams');
+            setExams(data.data);
+        } catch (err: any) {
+            alert(err.response?.data?.message || "Failed to update exam");
+        } finally {
+            setIsEditSaving(false);
+        }
+    };
+
+    const handleDeleteExam = async (examId: string) => {
+        setDeletingExamId(examId);
+        try {
+            await api.delete(`/exams/${examId}`);
+            setExams(prev => prev.filter(e => e._id !== examId));
+            setConfirmDeleteId(null);
+        } catch (err: any) {
+            alert(err.response?.data?.message || "Failed to delete exam");
+        } finally {
+            setDeletingExamId(null);
+        }
+    };
+
     const handleSaveMarks = async () => {
         setSaving(true);
         try {
@@ -496,6 +548,40 @@ export default function ExamsPage() {
                                         <button onClick={() => handleUnapprove(exam._id)} className="flex-1 py-4 bg-amber-600 hover:bg-amber-700 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-amber-600/20 transition-all">🔓 Unlock</button>
                                     )}
                                     <button onClick={() => fetchAnalytics(exam._id)} className="w-full py-4 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border border-emerald-500/10">Academic Analytics</button>
+                                    {user?.role === 'school-admin' && (
+                                        <div className="w-full flex gap-2">
+                                            <button
+                                                onClick={() => openEditModal(exam)}
+                                                className="flex-1 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all"
+                                            >
+                                                ✏️ Edit
+                                            </button>
+                                            {confirmDeleteId === exam._id ? (
+                                                <div className="flex-1 flex gap-1">
+                                                    <button
+                                                        onClick={() => handleDeleteExam(exam._id)}
+                                                        disabled={deletingExamId === exam._id}
+                                                        className="flex-1 py-3 bg-red-600 hover:bg-red-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-50"
+                                                    >
+                                                        {deletingExamId === exam._id ? '...' : 'Sure?'}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setConfirmDeleteId(null)}
+                                                        className="flex-1 py-3 bg-slate-700 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all"
+                                                    >
+                                                        No
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <button
+                                                    onClick={() => setConfirmDeleteId(exam._id)}
+                                                    className="flex-1 py-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all"
+                                                >
+                                                    🗑 Delete
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         ))}
@@ -798,6 +884,87 @@ export default function ExamsPage() {
                             ))}
                         </div>
                         <div className="flex gap-4"><button type="button" onClick={() => setIsExamModalOpen(false)} className="flex-1 py-4 bg-slate-800 text-white rounded-2xl font-bold">Cancel</button><button type="submit" className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-bold">Create</button></div>
+                    </form>
+                </div>
+            )}
+
+            {/* Edit Exam Modal */}
+            {isEditModalOpen && editingExam && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
+                    <form onSubmit={handleEditExam} className="bg-slate-900 w-full max-w-md p-6 sm:p-8 rounded-[2.5rem] border border-white/10 space-y-6 my-8">
+                        <h2 className="text-xl sm:text-2xl font-bold text-white">Edit Exam</h2>
+                        <input
+                            placeholder="Exam Name"
+                            className="w-full p-4 bg-slate-950 border border-white/10 rounded-2xl text-white"
+                            value={editForm.name}
+                            onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                            required
+                        />
+                        <select
+                            className="w-full p-4 bg-slate-950 border border-white/10 rounded-2xl text-white"
+                            value={editForm.term}
+                            onChange={e => setEditForm({ ...editForm, term: e.target.value })}
+                        >
+                            <option value="First_Term">First Term</option>
+                            <option value="Mid_Term">Mid Term</option>
+                            <option value="Final_Term">Final Term</option>
+                        </select>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="text-xs text-slate-400 font-bold uppercase tracking-wide mb-1 block">Start Date</label>
+                                <input
+                                    type="date"
+                                    className="w-full p-4 bg-slate-950 border border-white/10 rounded-2xl text-white"
+                                    value={editForm.startDate}
+                                    onChange={e => setEditForm({ ...editForm, startDate: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs text-slate-400 font-bold uppercase tracking-wide mb-1 block">End Date</label>
+                                <input
+                                    type="date"
+                                    className="w-full p-4 bg-slate-950 border border-white/10 rounded-2xl text-white"
+                                    value={editForm.endDate}
+                                    onChange={e => setEditForm({ ...editForm, endDate: e.target.value })}
+                                />
+                            </div>
+                        </div>
+                        <div className="space-y-2 max-h-36 overflow-y-auto p-2 bg-slate-950 border border-white/10 rounded-2xl">
+                            <p className="text-xs text-slate-400 font-bold px-2">Classes</p>
+                            {classes.map((cl: any) => (
+                                <label key={cl._id} className="flex items-center gap-2 px-2 py-1 hover:bg-white/5 rounded-lg cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={editForm.classes.includes(cl._id)}
+                                        onChange={(e) => {
+                                            if (e.target.checked) {
+                                                setEditForm({ ...editForm, classes: [...editForm.classes, cl._id] });
+                                            } else {
+                                                setEditForm({ ...editForm, classes: editForm.classes.filter(id => id !== cl._id) });
+                                            }
+                                        }}
+                                        className="rounded border-white/10 bg-slate-900 text-indigo-500"
+                                    />
+                                    <span className="text-sm text-white">{cl.name} - {cl.section}</span>
+                                </label>
+                            ))}
+                        </div>
+                        <div className="flex gap-4">
+                            <button
+                                type="button"
+                                onClick={() => { setIsEditModalOpen(false); setEditingExam(null); }}
+                                className="flex-1 py-4 bg-slate-800 text-white rounded-2xl font-bold"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={isEditSaving}
+                                className="flex-1 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-bold disabled:opacity-50"
+                            >
+                                {isEditSaving ? 'Saving...' : 'Save Changes'}
+                            </button>
+                        </div>
                     </form>
                 </div>
             )}
