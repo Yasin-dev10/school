@@ -33,7 +33,7 @@ router.post('/:id/reset-password', authorize('school-admin', 'receptionist'), va
 
 router.route('/:id')
     .get(authorize('school-admin', 'teacher', 'parent', 'receptionist'), validateObjectId('id'), getStudentById)
-    .put(authorize('school-admin', 'teacher'), validateObjectId('id'), updateStudent)
+    .put(authorize('school-admin'), validateObjectId('id'), updateStudent)
     .delete(authorize('school-admin'), validateObjectId('id'), deleteStudent);
 
 module.exports = router;

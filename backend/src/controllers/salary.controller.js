@@ -124,7 +124,15 @@ exports.getAllSalaries = exports.getSalaries;
 exports.runPayroll = async (req, res) => { res.status(200).json({ success: true, message: "Not implemented" }) };
 exports.markSalaryPaid = async (req, res) => {
     try {
-        const updated = await prisma.salary.update({ where: { id: req.params.id }, data: { status: 'paid', paymentDate: new Date() } });
+        const exists = await prisma.salary.findFirst({
+            where: { id: req.params.id, tenantId: req.user.tenantId }
+        });
+        if (!exists) return res.status(404).json({ message: 'Salary record not found' });
+
+        const updated = await prisma.salary.update({
+            where: { id: req.params.id },
+            data: { status: 'paid', paymentDate: new Date() }
+        });
         res.status(200).json({ success: true, data: updated });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });

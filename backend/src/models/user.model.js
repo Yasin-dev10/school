@@ -19,7 +19,6 @@ const userSchema = new mongoose.Schema({
         // We will enforce uniqueness logic in controller or sparse index.
     },
     password: { type: String, required: true },
-    password_plain: { type: String }, // Store for admin reference
     role: {
         type: String,
         enum: [

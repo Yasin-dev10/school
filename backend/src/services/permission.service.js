@@ -29,8 +29,8 @@ class PermissionService {
         };
 
         this.ROLES = {
-            SUPER_ADMIN: 'super_admin',
-            SCHOOL_ADMIN: 'school_admin',
+            SUPER_ADMIN: 'super-admin',
+            SCHOOL_ADMIN: 'school-admin',
             TEACHER: 'teacher',
             STUDENT: 'student',
             PARENT: 'parent',
@@ -142,7 +142,8 @@ class PermissionService {
     }
 
     hasPermissionByRole(role, resource, action) {
-        const rolePermissions = this.rolePermissions[role];
+        const key = role ? String(role).replace(/_/g, '-') : role;
+        const rolePermissions = this.rolePermissions[key];
         if (!rolePermissions) return false;
         const resourcePermissions = rolePermissions[resource];
         if (!resourcePermissions) return false;

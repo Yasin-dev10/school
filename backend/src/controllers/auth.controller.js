@@ -1,6 +1,27 @@
 const prisma = require('../config/prismaClient');
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+const {
+    signAccessToken,
+    normalizeRole,
+    cookieOptions,
+} = require('../utils/security');
+const { revokeToken } = require('../utils/tokenStore');
+
+const buildAuthUser = (user) => ({
+    _id: user.id,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    email: user.email,
+    role: normalizeRole(user.role),
+    tenantId: user.tenantId,
+    profile: {
+        phone: user.phone,
+        address: user.profileAddress,
+        avatarUrl: user.avatarUrl,
+        class: user.profileClass,
+        section: user.profileSection
+    }
+});
 
 // @desc    Login user & get token
 // @route   POST /api/auth/login
@@ -23,6 +44,8 @@ exports.login = async (req, res) => {
                 email: true,
                 password: true,
                 role: true,
+                status: true,
+                tokenVersion: true,
                 phone: true,
                 profileAddress: true,
                 avatarUrl: true,
@@ -35,6 +58,10 @@ exports.login = async (req, res) => {
             return res.status(401).json({ message: 'Invalid credentials' });
         }
 
+        if (user.status !== 'active') {
+            return res.status(403).json({ message: 'Account is not active' });
+        }
+
         if (tenantId && user.role !== 'super_admin' && user.tenantId !== tenantId) {
             return res.status(403).json({ message: 'You are not registered in this school.' });
         }
@@ -44,35 +71,30 @@ exports.login = async (req, res) => {
             return res.status(401).json({ message: 'Invalid credentials' });
         }
 
-        // Update lastLogin
         await prisma.user.update({ where: { id: user.id }, data: { lastLogin: new Date() } });
 
-        const mappedRole = user.role.replace('_', '-');
-        const payload = { id: user.id, role: mappedRole, tenantId: user.tenantId };
-        const token = jwt.sign(payload, process.env.JWT_SECRET || 'secret', { expiresIn: '1d' });
+        const mappedRole = normalizeRole(user.role);
+        const payload = {
+            id: user.id,
+            role: mappedRole,
+            tenantId: user.tenantId,
+            tokenVersion: user.tokenVersion
+        };
+        const token = signAccessToken(payload);
+
+        res.cookie('token', token, cookieOptions());
 
         res.json({
             success: true,
             token,
-            user: {
-                _id: user.id,
-                firstName: user.firstName,
-                lastName: user.lastName,
-                email: user.email,
-                role: mappedRole,
-                tenantId: user.tenantId,
-                profile: {
-                    phone: user.phone,
-                    address: user.profileAddress,
-                    avatarUrl: user.avatarUrl,
-                    class: user.profileClass,
-                    section: user.profileSection
-                }
-            }
+            user: buildAuthUser({ ...user, role: mappedRole })
         });
     } catch (error) {
         console.error('Login error:', error);
-        res.status(500).json({ message: 'Server Error during login', error: error.message });
+        const message = error.message?.includes('JWT_SECRET')
+            ? 'Server misconfiguration'
+            : 'Server Error during login';
+        res.status(500).json({ message });
     }
 };
 
@@ -92,10 +114,10 @@ exports.getMe = async (req, res) => {
                 gender: true, dob: true, qualification: true
             }
         });
-        if (user) user.role = user.role.replace('_', '-');
+        if (user) user.role = normalizeRole(user.role);
         res.status(200).json({ success: true, data: user });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        res.status(500).json({ success: false, message: 'Server error' });
     }
 };
 
@@ -111,12 +133,21 @@ exports.updateProfile = async (req, res) => {
                 ...(lastName && { lastName }),
                 ...(phone && { phone }),
                 ...(address && { profileAddress: address })
+            },
+            select: {
+                id: true, firstName: true, lastName: true, email: true,
+                role: true, tenantId: true, phone: true, profileAddress: true,
+                avatarUrl: true, profileClass: true, profileSection: true
             }
         });
 
-        res.status(200).json({ success: true, message: 'Profile updated successfully', data: updated });
+        res.status(200).json({
+            success: true,
+            message: 'Profile updated successfully',
+            data: { ...updated, role: normalizeRole(updated.role), _id: updated.id }
+        });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        res.status(500).json({ success: false, message: 'Server error' });
     }
 };
 
@@ -125,7 +156,12 @@ exports.updateProfile = async (req, res) => {
 exports.changePassword = async (req, res) => {
     try {
         const { currentPassword, newPassword } = req.body;
+        if (!currentPassword || !newPassword || String(newPassword).length < 8) {
+            return res.status(400).json({ message: 'New password must be at least 8 characters' });
+        }
+
         const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+        if (!user) return res.status(404).json({ message: 'User not found' });
 
         const isMatch = await bcrypt.compare(currentPassword, user.password);
         if (!isMatch) {
@@ -137,17 +173,37 @@ exports.changePassword = async (req, res) => {
 
         await prisma.user.update({
             where: { id: req.user.id },
-            data: { password: hashed, passwordPlain: newPassword }
+            data: { password: hashed, tokenVersion: { increment: 1 } }
         });
 
-        res.status(200).json({ success: true, message: 'Password changed successfully' });
+        if (req.token) {
+            revokeToken(req.token, Date.now() + 24 * 60 * 60 * 1000);
+        }
+        res.clearCookie('token', { ...cookieOptions(), maxAge: 0 });
+
+        res.status(200).json({ success: true, message: 'Password changed successfully. Please log in again.' });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        res.status(500).json({ success: false, message: 'Server error' });
     }
 };
 
 // @desc    Logout user
 // @route   POST /api/auth/logout
 exports.logout = async (req, res) => {
-    res.status(200).json({ success: true, message: 'Logged out successfully' });
+    try {
+        if (req.user?.id) {
+            await prisma.user.update({
+                where: { id: req.user.id },
+                data: { tokenVersion: { increment: 1 } }
+            });
+        }
+        if (req.token) {
+            revokeToken(req.token, Date.now() + 24 * 60 * 60 * 1000);
+        }
+        res.clearCookie('token', { ...cookieOptions(), maxAge: 0 });
+        res.status(200).json({ success: true, message: 'Logged out successfully' });
+    } catch (error) {
+        res.clearCookie('token', { ...cookieOptions(), maxAge: 0 });
+        res.status(200).json({ success: true, message: 'Logged out successfully' });
+    }
 };

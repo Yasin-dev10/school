@@ -3,26 +3,22 @@ const bcrypt = require('bcryptjs');
 const { logAction } = require('../utils/logger');
 const generatePassword = require('../utils/generatePassword');
 const { emitToTenant } = require('../config/socket');
+const { normalizeRole } = require('../utils/security');
 
 const teacherSelect = {
     id: true, tenantId: true, firstName: true, lastName: true,
     email: true, role: true, status: true, phone: true,
     designation: true, qualification: true, salary: true, avatarUrl: true,
-    passwordPlain: true, createdAt: true, updatedAt: true
+    createdAt: true, updatedAt: true
 };
 
-const canViewTeacherPasswords = (user) => ['school-admin', 'receptionist'].includes(user?.role);
-
-const formatTeacher = (teacher, user) => {
+const formatTeacher = (teacher) => {
     if (!teacher) return null;
 
-    const { passwordPlain, ...safeTeacher } = teacher;
-
     return {
-        ...safeTeacher,
+        ...teacher,
         _id: teacher.id,
-        role: teacher.role ? teacher.role.replace('_', '-') : teacher.role,
-        ...(canViewTeacherPasswords(user) && { password_plain: passwordPlain }),
+        role: normalizeRole(teacher.role),
         profile: {
             phone: teacher.phone,
             designation: teacher.designation,
@@ -33,7 +29,6 @@ const formatTeacher = (teacher, user) => {
     };
 };
 
-// @desc    Create a new teacher
 exports.createTeacher = async (req, res) => {
     try {
         const { firstName, lastName, email, password, profile } = req.body;
@@ -50,7 +45,7 @@ exports.createTeacher = async (req, res) => {
             data: {
                 firstName, lastName,
                 email: email.toLowerCase(),
-                password: hashed, passwordPlain: generatedPassword,
+                password: hashed,
                 role: 'teacher', tenantId,
                 phone: profile?.phone || null,
                 designation: profile?.designation || null,
@@ -61,7 +56,7 @@ exports.createTeacher = async (req, res) => {
             select: teacherSelect
         });
 
-        const formattedTeacher = formatTeacher(teacher, req.user);
+        const formattedTeacher = formatTeacher(teacher);
 
         await logAction({ action: 'CREATE', module: 'USER', details: `Created teacher: ${firstName} ${lastName}`, userId: req.user._id, tenantId });
         emitToTenant(tenantId, 'teacher:created', formattedTeacher);
@@ -72,7 +67,6 @@ exports.createTeacher = async (req, res) => {
     }
 };
 
-// @desc    Get all teachers
 exports.getTeachers = async (req, res) => {
     try {
         const teachers = await prisma.user.findMany({
@@ -80,13 +74,12 @@ exports.getTeachers = async (req, res) => {
             select: teacherSelect,
             orderBy: { firstName: 'asc' }
         });
-        res.status(200).json({ success: true, count: teachers.length, data: teachers.map(teacher => formatTeacher(teacher, req.user)) });
+        res.status(200).json({ success: true, count: teachers.length, data: teachers.map(formatTeacher) });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
 };
 
-// @desc    Get teacher by ID
 exports.getTeacherById = async (req, res) => {
     try {
         const teacher = await prisma.user.findFirst({
@@ -94,13 +87,12 @@ exports.getTeacherById = async (req, res) => {
             select: teacherSelect
         });
         if (!teacher) return res.status(404).json({ message: 'Teacher not found' });
-        res.status(200).json({ success: true, data: formatTeacher(teacher, req.user) });
+        res.status(200).json({ success: true, data: formatTeacher(teacher) });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
 };
 
-// @desc    Update teacher
 exports.updateTeacher = async (req, res) => {
     try {
         const exists = await prisma.user.findFirst({ where: { id: req.params.id, tenantId: req.user.tenantId, role: 'teacher' } });
@@ -124,13 +116,12 @@ exports.updateTeacher = async (req, res) => {
         });
 
         await logAction({ action: 'UPDATE', module: 'USER', details: `Updated teacher: ${updated.firstName} ${updated.lastName}`, userId: req.user._id, tenantId: req.user.tenantId });
-        res.status(200).json({ success: true, data: formatTeacher(updated, req.user) });
+        res.status(200).json({ success: true, data: formatTeacher(updated) });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
 };
 
-// @desc    Delete teacher
 exports.deleteTeacher = async (req, res) => {
     try {
         const teacher = await prisma.user.findFirst({ where: { id: req.params.id, tenantId: req.user.tenantId, role: 'teacher' } });
@@ -145,7 +136,6 @@ exports.deleteTeacher = async (req, res) => {
     }
 };
 
-// @desc    Reset teacher password
 exports.resetTeacherPassword = async (req, res) => {
     try {
         const teacher = await prisma.user.findFirst({ where: { id: req.params.id, tenantId: req.user.tenantId, role: 'teacher' } });
@@ -155,7 +145,10 @@ exports.resetTeacherPassword = async (req, res) => {
         const salt = await bcrypt.genSalt(10);
         const hashed = await bcrypt.hash(newPassword, salt);
 
-        await prisma.user.update({ where: { id: req.params.id }, data: { password: hashed, passwordPlain: newPassword } });
+        await prisma.user.update({
+            where: { id: req.params.id },
+            data: { password: hashed, tokenVersion: { increment: 1 } }
+        });
 
         res.status(200).json({ success: true, message: 'Password reset successfully', password: newPassword });
     } catch (error) {
@@ -163,10 +156,9 @@ exports.resetTeacherPassword = async (req, res) => {
     }
 };
 
-// @desc    Bulk register teachers
 exports.bulkRegisterTeachers = async (req, res) => {
     try {
-        const { teachers } = req.body; // Array of objects
+        const { teachers } = req.body;
         const tenantId = req.user.tenantId;
 
         if (!teachers || !Array.isArray(teachers) || teachers.length === 0) {
@@ -194,7 +186,6 @@ exports.bulkRegisterTeachers = async (req, res) => {
                         lastName: teacherData.lastName,
                         email: teacherData.email.toLowerCase(),
                         password: hashed,
-                        passwordPlain: generatedPassword,
                         role: 'teacher',
                         tenantId,
                         phone: teacherData.phone || null,
@@ -205,7 +196,7 @@ exports.bulkRegisterTeachers = async (req, res) => {
                     select: teacherSelect
                 });
 
-                addedTeachers.push({ ...formatTeacher(teacher, req.user), tempPassword: generatedPassword });
+                addedTeachers.push({ ...formatTeacher(teacher), tempPassword: generatedPassword });
             } catch (err) {
                 errors.push({ email: teacherData.email, error: err.message });
             }

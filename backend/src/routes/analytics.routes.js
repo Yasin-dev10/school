@@ -15,7 +15,7 @@ router.get('/admin/overview', authorize('school-admin'), getAdminDashboardStats)
 router.get('/finance', authorize('school-admin'), getFinanceAnalytics);
 router.get('/staff', authorize('school-admin'), getStaffAnalytics);
 router.get('/class/:classId', authorize('teacher', 'school-admin'), getClassAnalytics);
-router.get('/student/:studentId', getStudentAnalytics);
+router.get('/student/:studentId', authorize('school-admin', 'teacher', 'student', 'parent'), getStudentAnalytics);
 
 module.exports = router;
 

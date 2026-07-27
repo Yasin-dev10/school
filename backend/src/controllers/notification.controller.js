@@ -73,6 +73,11 @@ exports.markAsRead = async (req, res) => {
 // @desc    Delete notification
 exports.deleteNotification = async (req, res) => {
     try {
+        const existing = await prisma.notification.findFirst({
+            where: { id: req.params.id, tenantId: req.user.tenantId }
+        });
+        if (!existing) return res.status(404).json({ success: false, message: 'Notification not found' });
+
         await prisma.notification.delete({ where: { id: req.params.id } });
         res.status(200).json({ success: true, message: 'Notification deleted' });
     } catch (error) {

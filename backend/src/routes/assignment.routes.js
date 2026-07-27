@@ -26,7 +26,12 @@ router.route('/:id')
     .delete(checkPermission(RESOURCES.ASSIGNMENTS, ACTIONS.DELETE), deleteAssignment);
 
 router.route('/:id/submit')
-    .post(checkPermission(RESOURCES.SUBMISSIONS, ACTIONS.CREATE), upload.single('file'), submitAssignment);
+    .post(
+        checkPermission(RESOURCES.SUBMISSIONS, ACTIONS.CREATE),
+        upload.single('file'),
+        upload.verifyUploadedFile,
+        submitAssignment
+    );
 
 router.route('/:id/submissions')
     .get(checkPermission(RESOURCES.SUBMISSIONS, ACTIONS.READ), getSubmissions);

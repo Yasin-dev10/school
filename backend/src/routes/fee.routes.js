@@ -17,14 +17,14 @@ router.use(protect);
 
 // Fee Types
 router.route('/types')
-    .get(getFeeTypes)
+    .get(authorize('school-admin', 'accountant', 'receptionist'), getFeeTypes)
     .post(authorize('school-admin'), createFeeType);
 
 // Invoices
 router.route('/invoices')
-    .get(getInvoices);
+    .get(authorize('school-admin', 'accountant', 'receptionist', 'student', 'parent'), getInvoices);
 
-router.get('/invoices/:id', authorize('school-admin', 'receptionist', 'student', 'parent'), getInvoiceById);
+router.get('/invoices/:id', authorize('school-admin', 'accountant', 'receptionist', 'student', 'parent'), getInvoiceById);
 
 router.post('/generate-invoices', authorize('school-admin'), generateClassInvoices);
 

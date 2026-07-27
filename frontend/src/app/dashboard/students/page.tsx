@@ -404,7 +404,19 @@ export default function StudentsListPage() {
                                 {loading ? (
                                     <tr><td colSpan={8} className="px-4 py-16 text-center text-slate-400 animate-pulse">Loading students...</td></tr>
                                 ) : paginated.length === 0 ? (
-                                    <tr><td colSpan={8} className="px-4 py-16 text-center text-slate-400">No students found.</td></tr>
+                                    <tr><td colSpan={8} className="px-4 py-10">
+                                        <div className="flex flex-col items-center justify-center text-center gap-2 py-6">
+                                            <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-500/15 text-indigo-500 flex items-center justify-center">
+                                                <Users className="w-6 h-6" />
+                                            </div>
+                                            <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">No students found</p>
+                                            <p className="text-xs text-slate-400 max-w-xs">Try another filter, or add a new student to get started.</p>
+                                            <Link href="/dashboard/students/add"
+                                                className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-500">
+                                                <Plus className="w-3.5 h-3.5" /> Add student
+                                            </Link>
+                                        </div>
+                                    </td></tr>
                                 ) : paginated.map(s => {
                                     const isSelected = selected.includes(s._id);
                                     const isViewed   = quickView?._id === s._id;

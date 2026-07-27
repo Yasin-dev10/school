@@ -82,11 +82,11 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
                 {/* Logo */}
                 <div className="px-5 py-5 border-b border-white/5 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center shrink-0">
-                            <span className="text-white font-serif italic font-bold text-sm">S</span>
+                        <div className="w-8 h-8 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-lg flex items-center justify-center shrink-0">
+                            <span className="text-white font-semibold text-sm">S</span>
                         </div>
-                        <span className="text-white font-bold text-sm">
-                            School<span className="text-indigo-400">OS</span>
+                        <span className="text-white font-semibold text-sm">
+                            School<span className="text-indigo-400">Registry</span>
                         </span>
                         <span className="text-[9px] bg-indigo-900/60 text-indigo-400 border border-indigo-500/30 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
                             ADMIN

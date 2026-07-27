@@ -7,9 +7,21 @@ const { prisma } = require('../config/db');
 const seedSuperAdmin = async () => {
     try {
         console.log('Connecting to PostgreSQL...');
-        
-        const superAdminEmail = 'yasindev54@gmail.com';
-        let existingAdmin = await prisma.user.findFirst({ where: { email: superAdminEmail } });
+
+        const superAdminEmail = process.env.SUPERADMIN_EMAIL;
+        const superAdminPassword = process.env.SUPERADMIN_PASSWORD;
+
+        if (!superAdminEmail || !superAdminPassword) {
+            console.error('Set SUPERADMIN_EMAIL and SUPERADMIN_PASSWORD in the environment before seeding.');
+            process.exit(1);
+        }
+
+        if (superAdminPassword.length < 12) {
+            console.error('SUPERADMIN_PASSWORD must be at least 12 characters.');
+            process.exit(1);
+        }
+
+        let existingAdmin = await prisma.user.findFirst({ where: { email: superAdminEmail.toLowerCase() } });
 
         if (existingAdmin) {
             console.log('Super Admin already exists.');
@@ -29,24 +41,22 @@ const seedSuperAdmin = async () => {
         }
 
         const salt = await bcrypt.genSalt(10);
-        const hashed = await bcrypt.hash('Yaasiin@2027', salt);
+        const hashed = await bcrypt.hash(superAdminPassword, salt);
 
         await prisma.user.create({
             data: {
-                firstName: 'Yasin',
-                lastName: 'Dev',
-                email: superAdminEmail,
+                firstName: process.env.SUPERADMIN_FIRST_NAME || 'Super',
+                lastName: process.env.SUPERADMIN_LAST_NAME || 'Admin',
+                email: superAdminEmail.toLowerCase(),
                 password: hashed,
-                passwordPlain: 'Yaasiin@2027',
                 role: 'super_admin',
                 tenantId: 'platform',
                 status: 'active'
             }
         });
 
-        console.log('Super Admin Created:');
-        console.log('Email: yasindev54@gmail.com');
-        console.log('Password: Yaasiin@2027');
+        console.log('Super Admin Created for:', superAdminEmail);
+        console.log('(Password is not printed. Store SUPERADMIN_PASSWORD securely.)');
 
         process.exit();
     } catch (error) {

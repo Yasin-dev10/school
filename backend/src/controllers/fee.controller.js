@@ -79,8 +79,18 @@ exports.getInvoices = async (req, res) => {
         const tenantId = req.user.tenantId;
         let where = { tenantId };
 
-        if (req.user.role === 'student') where.studentId = req.user.id;
-        else if (studentId) where.studentId = studentId;
+        if (req.user.role === 'student') {
+            where.studentId = req.user.id;
+        } else if (req.user.role === 'parent') {
+            const links = await prisma.studentParent.findMany({
+                where: { parentId: req.user.id },
+                select: { studentId: true }
+            });
+            const childIds = links.map((l) => l.studentId);
+            where.studentId = { in: childIds.length ? childIds : ['__none__'] };
+        } else if (studentId) {
+            where.studentId = studentId;
+        }
         if (status) where.status = status;
 
         const invoices = await prisma.invoice.findMany({
@@ -97,7 +107,6 @@ exports.getInvoices = async (req, res) => {
             orderBy: { createdAt: 'desc' }
         });
 
-        // Add _id aliases for frontend compatibility
         const formatted = invoices.map(inv => ({
             ...inv,
             _id: inv.id,
@@ -121,16 +130,25 @@ exports.recordPayment = async (req, res) => {
         const invoice = await prisma.invoice.findFirst({ where: { id: invoiceId, tenantId } });
         if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
 
+        const amountNum = Number(amount);
+        if (!Number.isFinite(amountNum) || amountNum <= 0) {
+            return res.status(400).json({ message: 'Invalid payment amount' });
+        }
+        const outstanding = invoice.totalAmount - invoice.paidAmount;
+        if (amountNum > outstanding + 0.01) {
+            return res.status(400).json({ message: 'Amount exceeds outstanding balance' });
+        }
+
         const payment = await prisma.payment.create({
             data: {
-                invoiceId, amount, paymentMethod,
+                invoiceId, amount: amountNum, paymentMethod,
                 transactionId: transactionId || null,
                 markedById: req.user.id,
                 tenantId
             }
         });
 
-        const newPaid = invoice.paidAmount + amount;
+        const newPaid = invoice.paidAmount + amountNum;
         const newStatus = newPaid >= invoice.totalAmount ? 'paid' : newPaid > 0 ? 'partially_paid' : 'unpaid';
         await prisma.invoice.update({ where: { id: invoiceId }, data: { paidAmount: newPaid, status: newStatus } });
 
@@ -323,6 +341,17 @@ exports.getInvoiceById = async (req, res) => {
             }
         });
         if (!invoice) return res.status(404).json({ success: false, message: 'Invoice not found' });
+
+        if (req.user.role === 'student' && invoice.studentId !== req.user.id) {
+            return res.status(403).json({ success: false, message: 'Access denied' });
+        }
+        if (req.user.role === 'parent') {
+            const link = await prisma.studentParent.findFirst({
+                where: { parentId: req.user.id, studentId: invoice.studentId }
+            });
+            if (!link) return res.status(403).json({ success: false, message: 'Access denied' });
+        }
+
         res.status(200).json({ success: true, data: invoice });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });

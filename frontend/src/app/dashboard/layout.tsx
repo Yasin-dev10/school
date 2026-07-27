@@ -124,8 +124,8 @@ export default function DashboardLayout({
     };
 
     if (!mounted || !isAuthorized || !user) return (
-        <div className="flex h-screen items-center justify-center bg-[#f0f4f8] dark:bg-slate-950">
-            <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        <div className="flex h-screen items-center justify-center bg-slate-50 dark:bg-slate-950">
+            <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
         </div>
     );
 
@@ -240,7 +240,7 @@ export default function DashboardLayout({
     const navItems = getNavItems();
 
     return (
-        <div className="flex h-screen overflow-hidden bg-[#f0f4f8] dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+        <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-300">
             {/* Mobile Overlay */}
             {isSidebarOpen && (
                 <div
@@ -251,7 +251,7 @@ export default function DashboardLayout({
 
             {/* Sidebar */}
             <aside className={`
-                fixed inset-y-0 left-0 w-60 bg-[#1a2744] dark:bg-[#1a2744] flex flex-col z-50 shadow-xl
+                fixed inset-y-0 left-0 w-60 bg-slate-900 dark:bg-slate-950 flex flex-col z-50 shadow-xl border-r border-white/5
                 transition-transform duration-300 transform lg:translate-x-0 lg:static lg:h-full
                 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
             `}>
@@ -268,7 +268,7 @@ export default function DashboardLayout({
                     </div>
                     {/* Logo */}
                     <Link href="/dashboard" className="flex flex-col items-center gap-2 w-full">
-                        <div className="w-full rounded-xl overflow-hidden border border-white/20 bg-white" style={{aspectRatio: '3/1'}}>
+                        <div className="w-full rounded-xl overflow-hidden border border-white/15 bg-white" style={{aspectRatio: '3/1'}}>
                             {tenant?.logoUrl ? (
                                 <img
                                     src={tenant.logoUrl}
@@ -276,8 +276,8 @@ export default function DashboardLayout({
                                     className="w-full h-full object-cover"
                                 />
                             ) : (
-                                <div className="w-full h-full flex items-center justify-center bg-[#1a2744]">
-                                    <span className="text-white font-serif italic text-3xl font-bold">
+                                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-indigo-600 to-violet-600">
+                                    <span className="text-white font-semibold text-2xl tracking-tight">
                                         {tenant?.name?.charAt(0) || 'S'}
                                     </span>
                                 </div>
@@ -285,8 +285,8 @@ export default function DashboardLayout({
                         </div>
                         {/* School name + subtitle */}
                         <div className="text-center mt-1">
-                            <p className="text-white font-bold text-sm leading-tight">
-                                {tenant?.name || 'SchoolOS'}
+                            <p className="text-white font-semibold text-sm leading-tight">
+                                {tenant?.name || 'School Registry'}
                             </p>
                             {tenant?.config?.mission && (
                                 <p className="text-white/50 text-[10px] mt-0.5 leading-tight line-clamp-1">
@@ -306,13 +306,13 @@ export default function DashboardLayout({
                             <Link
                                 key={item.href}
                                 href={item.href}
-                                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 group text-sm ${
+                                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-150 group text-sm ${
                                     isActive
-                                        ? 'bg-[#f5c842] text-[#1a2744] font-semibold'
-                                        : 'text-white/70 hover:text-white hover:bg-white/10'
+                                        ? 'bg-indigo-600 text-white font-semibold shadow-lg shadow-indigo-500/25'
+                                        : 'text-white/70 hover:text-white hover:bg-white/8'
                                 }`}
                             >
-                                <span className={`${isActive ? 'text-[#1a2744]' : 'text-white/50 group-hover:text-white/80'} transition-colors`}>
+                                <span className={`${isActive ? 'text-white' : 'text-white/45 group-hover:text-white/80'} transition-colors`}>
                                     {item.icon}
                                 </span>
                                 <span>{item.name}</span>
@@ -324,7 +324,7 @@ export default function DashboardLayout({
                 {/* User footer */}
                 <div className="px-3 py-3 border-t border-white/10">
                     <div className="flex items-center gap-2 px-2 py-2 mb-1">
-                        <div className="w-8 h-8 rounded-full bg-indigo-500/30 border border-indigo-400/30 flex items-center justify-center text-indigo-300 font-bold text-sm shrink-0">
+                        <div className="w-8 h-8 rounded-full bg-indigo-500/30 border border-indigo-400/30 flex items-center justify-center text-indigo-200 font-semibold text-sm shrink-0">
                             {user.firstName.charAt(0)}
                         </div>
                         <div className="overflow-hidden flex-1">
@@ -334,7 +334,7 @@ export default function DashboardLayout({
                     </div>
                     <button
                         onClick={handleLogout}
-                        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-white/50 hover:text-red-400 hover:bg-red-500/10 transition-colors text-sm"
+                        className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-white/50 hover:text-rose-300 hover:bg-rose-500/10 transition-colors text-sm"
                     >
                         <LogOut className="w-4 h-4" />
                         <span>Logout</span>

@@ -65,7 +65,10 @@ export default function StudentPortalPage() {
     if (loading) {
         return (
             <div className="flex items-center justify-center min-h-[60vh]">
-                <div className="w-12 h-12 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
+                <div className="flex flex-col items-center gap-3">
+                    <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Loading your portal…</p>
+                </div>
             </div>
         );
     }
@@ -88,11 +91,11 @@ export default function StudentPortalPage() {
     return (
         <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-6 sm:space-y-10">
             <div className="animate-in fade-in slide-in-from-top-4 duration-500">
-                <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
+                <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
                     Student Portal
                 </h1>
                 <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 mt-1">
-                    Welcome back, <span className="text-indigo-600 dark:text-indigo-400 font-bold">{user?.firstName}</span>. Manage your academic journey.
+                    Welcome back, <span className="text-indigo-600 dark:text-indigo-400 font-semibold">{user?.firstName}</span>. Manage your academic journey.
                 </p>
             </div>
 
@@ -128,20 +131,20 @@ export default function StudentPortalPage() {
                         bg: 'bg-purple-400/10' 
                     },
                 ].map((item, i) => (
-                    <div key={i} className="glass dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-white/5 relative overflow-hidden group hover:border-slate-300 dark:hover:border-white/10 transition-all duration-300 shadow-sm">
-                        <div className={`${item.bg} w-12 h-12 rounded-2xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform`}>
+                    <div key={i} className="surface-card p-6 relative overflow-hidden group hover:border-indigo-300 dark:hover:border-indigo-500/40 transition-all duration-300">
+                        <div className={`${item.bg} w-12 h-12 rounded-2xl flex items-center justify-center text-xl mb-4 group-hover:scale-105 transition-transform`}>
                             {item.icon}
                         </div>
-                        <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-widest">{item.label}</p>
-                        <p className={`text-3xl font-black mt-1 ${item.color}`}>{item.value}</p>
+                        <p className="text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wide">{item.label}</p>
+                        <p className={`text-3xl font-bold mt-1 tracking-tight ${item.color}`}>{item.value}</p>
                     </div>
                 ))}
             </div>
 
             {/* Student Portal Navigation */}
-            <div className="glass dark:bg-slate-900 p-8 rounded-[2.5rem] border border-slate-200 dark:border-white/5 shadow-sm">
-                <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-400 border border-indigo-500/20">
+            <div className="surface-card p-6 sm:p-8">
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-6 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-500 border border-indigo-500/20">
                         <GraduationCap className="w-5 h-5" />
                     </div>
                     <span>Academic Services</span>

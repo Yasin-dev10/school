@@ -152,36 +152,51 @@ exports.deleteAssignment = async (req, res) => {
 // @desc    Submit assignment
 exports.submitAssignment = async (req, res) => {
     try {
-        const { assignmentId, content, filePath } = req.body;
+        const assignmentId = req.params.id || req.body.assignmentId;
+        const { content } = req.body;
         const tenantId = req.user.tenantId;
 
-        const submission = await prisma.submission.upsert({
-            where: {
-                // No unique index on submission directly, use findFirst + create
-                id: 'none' // Trick: will always fail unique, fall through to create
-            },
-            update: {},
-            create: {
-                assignmentId,
-                studentId: req.user.id,
-                tenantId,
-                content: content || null,
-                filePath: filePath || null,
-                status: 'submitted'
-            }
-        }).catch(async () => {
-            // Upsert trick didn't work, just create
-            return prisma.submission.create({
+        if (!assignmentId) {
+            return res.status(400).json({ success: false, message: 'Assignment ID is required' });
+        }
+
+        const assignment = await prisma.assignment.findFirst({
+            where: { id: assignmentId, tenantId }
+        });
+        if (!assignment) {
+            return res.status(404).json({ success: false, message: 'Assignment not found' });
+        }
+
+        // Only accept server-side uploaded file path — never client-supplied paths
+        const filePath = req.file ? req.file.path.replace(/\\/g, '/') : null;
+
+        const existing = await prisma.submission.findFirst({
+            where: { assignmentId, studentId: req.user.id, tenantId }
+        });
+
+        let submission;
+        if (existing) {
+            submission = await prisma.submission.update({
+                where: { id: existing.id },
+                data: {
+                    content: content || existing.content,
+                    ...(filePath && { filePath }),
+                    status: 'submitted',
+                    submittedAt: new Date()
+                }
+            });
+        } else {
+            submission = await prisma.submission.create({
                 data: {
                     assignmentId,
                     studentId: req.user.id,
                     tenantId,
                     content: content || null,
-                    filePath: filePath || null,
+                    filePath,
                     status: 'submitted'
                 }
             });
-        });
+        }
 
         res.status(201).json({ success: true, data: submission });
     } catch (error) {

@@ -1,10 +1,17 @@
 import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import "./globals.css";
 
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
-  title: "SchoolOS | Modern Multi-Tenant Management",
-  description: "The Operating System for Modern Education Institutions.",
+  title: "School Registry | Modern School Management",
+  description: "School management for teachers, students, parents, and admins.",
 };
 
 export default function RootLayout({
@@ -15,7 +22,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className="antialiased"
+        className={`${inter.variable} font-sans antialiased`}
         suppressHydrationWarning={true}
       >
         <ThemeProvider

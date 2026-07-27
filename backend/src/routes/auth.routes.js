@@ -8,7 +8,7 @@ const permissionService = require('../services/permission.service');
 const { RESOURCES, ACTIONS } = permissionService;
 
 router.post('/login', login);
-router.post('/logout', logout);
+router.post('/logout', protect, logout);
 router.get('/me', protect, getMe);
 
 // Update profile restricted by permission (Student has Read-only on Profile)

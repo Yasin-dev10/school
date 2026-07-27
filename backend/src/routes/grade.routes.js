@@ -7,31 +7,27 @@ const { protect, authorize } = require('../middlewares/auth.middleware');
 router.use(protect);
 
 // Create a new grade system
-router.post('/', authorize('admin', 'teacher'), gradeController.createGradeSystem);
+router.post('/', authorize('school-admin'), gradeController.createGradeSystem);
 
 // Get active grade system
 router.get('/active', gradeController.getActiveGradeSystem);
 
 // Get all grade systems
-router.get('/', gradeController.getAllGradeSystems);
+router.get('/', authorize('school-admin', 'teacher', 'receptionist'), gradeController.getAllGradeSystems);
 
 // Calculate grade from percentage
-router.post('/calculate', gradeController.calculateGrade);
-
-// Bulk create grades (admin, teacher)
-// Bulk create grades (admin, teacher) - TODO: Implement if needed, currently undefined
-// router.post('/bulk', authorize('admin', 'teacher'), gradeController.bulkCreateGrades);
+router.post('/calculate', authorize('school-admin', 'teacher', 'receptionist'), gradeController.calculateGrade);
 
 // Get grade system by ID
-router.get('/:id', gradeController.getGradeSystemById);
+router.get('/:id', authorize('school-admin', 'teacher', 'receptionist'), gradeController.getGradeSystemById);
 
 // Update grade system
-router.put('/:id', authorize('admin', 'teacher'), gradeController.updateGradeSystem);
+router.put('/:id', authorize('school-admin'), gradeController.updateGradeSystem);
 
 // Delete grade system
-router.delete('/:id', authorize('admin', 'teacher'), gradeController.deleteGradeSystem);
+router.delete('/:id', authorize('school-admin'), gradeController.deleteGradeSystem);
 
 // Toggle grade system status (activate/deactivate)
-router.patch('/:id/toggle', authorize('admin', 'teacher'), gradeController.toggleGradeSystemStatus);
+router.patch('/:id/toggle', authorize('school-admin'), gradeController.toggleGradeSystemStatus);
 
 module.exports = router;

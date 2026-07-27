@@ -1,21 +1,64 @@
 const { Server } = require("socket.io");
+const { verifyAccessToken, parseAllowedOrigins, normalizeRole } = require('../utils/security');
+const { isRevoked } = require('../utils/tokenStore');
 
 let io;
 
 const initSocket = (server) => {
+    const allowedOrigins = parseAllowedOrigins();
+    const socketOrigin = process.env.SOCKET_CORS_ORIGIN
+        ? process.env.SOCKET_CORS_ORIGIN.split(',').map((s) => s.trim()).filter(Boolean)
+        : allowedOrigins;
+
     io = new Server(server, {
         cors: {
-            origin: "*",
-            methods: ["GET", "POST"]
+            origin: socketOrigin.length ? socketOrigin : false,
+            methods: ["GET", "POST"],
+            credentials: true
+        }
+    });
+
+    io.use((socket, next) => {
+        try {
+            const token =
+                socket.handshake.auth?.token ||
+                (socket.handshake.headers?.authorization || '').replace(/^Bearer\s+/i, '') ||
+                socket.handshake.query?.token;
+
+            if (!token) {
+                return next(new Error('Authentication required'));
+            }
+            if (isRevoked(token)) {
+                return next(new Error('Token revoked'));
+            }
+
+            const decoded = verifyAccessToken(token);
+            socket.user = {
+                id: decoded.id,
+                role: normalizeRole(decoded.role),
+                tenantId: decoded.tenantId,
+                tokenVersion: decoded.tokenVersion
+            };
+            next();
+        } catch (err) {
+            next(new Error('Invalid token'));
         }
     });
 
     io.on("connection", (socket) => {
         console.log("A user connected:", socket.id);
 
+        // Auto-join the authenticated user's tenant room only
+        if (socket.user?.tenantId) {
+            socket.join(String(socket.user.tenantId));
+        }
+
         socket.on("join-tenant", (tenantId) => {
-            socket.join(tenantId);
-            console.log(`Socket ${socket.id} joined tenant room: ${tenantId}`);
+            if (!tenantId || String(tenantId) !== String(socket.user?.tenantId)) {
+                socket.emit('error', { message: 'Forbidden tenant room' });
+                return;
+            }
+            socket.join(String(tenantId));
         });
 
         socket.on("disconnect", () => {
@@ -35,7 +78,7 @@ const getIO = () => {
 
 const emitToTenant = (tenantId, event, data) => {
     if (io) {
-        io.to(tenantId).emit(event, data);
+        io.to(String(tenantId)).emit(event, data);
     }
 };
 

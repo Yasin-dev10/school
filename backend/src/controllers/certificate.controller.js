@@ -6,7 +6,9 @@ exports.issueCertificate = async (req, res) => {
     try {
         const { studentId, certificateType, title, description, metadata } = req.body;
 
-        const student = await prisma.user.findUnique({ where: { id: studentId } });
+        const student = await prisma.user.findFirst({
+            where: { id: studentId, tenantId: req.user.tenantId, role: 'student' }
+        });
         if (!student) return res.status(404).json({ message: 'Student not found' });
         if (req.user.role === 'teacher') {
             const allowed = await canTeacherAccessStudent(req.user.id, studentId, req.user.tenantId);
@@ -14,8 +16,9 @@ exports.issueCertificate = async (req, res) => {
         }
 
         // Generate unique codes
-        const certNumber = 'CERT-' + Math.random().toString(36).substring(2, 10).toUpperCase();
-        const verificationCode = Math.random().toString(36).substring(2, 12).toUpperCase();
+        const crypto = require('crypto');
+        const certNumber = 'CERT-' + crypto.randomBytes(4).toString('hex').toUpperCase();
+        const verificationCode = crypto.randomBytes(6).toString('hex').toUpperCase();
 
         const certificate = await prisma.certificate.create({
             data: {

@@ -95,6 +95,21 @@ exports.getStudentAnalytics = async (req, res) => {
         const { studentId } = req.params;
         const tenantId = req.user.tenantId;
 
+        if (req.user.role === 'student' && studentId !== req.user.id) {
+            return res.status(403).json({ success: false, message: 'Access denied' });
+        }
+        if (req.user.role === 'parent') {
+            const link = await prisma.studentParent.findFirst({
+                where: { parentId: req.user.id, studentId }
+            });
+            if (!link) return res.status(403).json({ success: false, message: 'Access denied' });
+        }
+        if (req.user.role === 'teacher') {
+            const { canTeacherAccessStudent } = require('../utils/teacherScope');
+            const allowed = await canTeacherAccessStudent(req.user.id, studentId, tenantId);
+            if (!allowed) return res.status(403).json({ success: false, message: 'You are not assigned to this student' });
+        }
+
         const [marks, attendanceRecords] = await Promise.all([
             prisma.mark.findMany({
                 where: { studentId, tenantId },

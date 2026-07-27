@@ -261,19 +261,27 @@ cd ../mobile
 flutter pub get
 ```
 
-Update the API URL in `lib/services/api_service.dart`:
+By default the Flutter app uses the **same production API** as the web app
+(`https://school-ta8j.onrender.com/api`) via `lib/config/app_config.dart`.
 
-```dart
-// For Android Emulator
-static const String baseUrl = 'http://10.0.2.2:5000/api';
+For local development with the same backend as the web app:
 
-// For iOS Simulator
-static const String baseUrl = 'http://localhost:5000/api';
+```bash
+# Emulator / simulator → http://localhost:5000 (Android uses 10.0.2.2)
+flutter run --dart-define=USE_LOCAL_API=true
 
-// For Physical Device (use your computer's IP)
-static const String baseUrl = 'http://192.168.1.XXX:5000/api';
+# Physical device on your LAN
+flutter run --dart-define=API_BASE_URL=http://192.168.1.XXX:5000/api
 ```
 
+Ensure `frontend/.env.local` also points at that API:
+
+```env
+NEXT_PUBLIC_API_URL=http://localhost:5000/api
+NEXT_PUBLIC_SOCKET_URL=http://localhost:5000
+```
+
+Both clients use the same JWT auth (`POST /api/auth/login`) and Socket.IO host.
 ---
 
 ## ⚙️ Configuration

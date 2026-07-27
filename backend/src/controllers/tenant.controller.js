@@ -54,7 +54,6 @@ exports.createTenant = async (req, res) => {
                     lastName: adminDetails.lastName,
                     email: adminEmail,
                     password: hashed,
-                    passwordPlain: adminDetails.password,
                     role: 'school_admin',
                     tenantId: tenant.tenantId
                 }

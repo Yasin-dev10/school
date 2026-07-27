@@ -62,6 +62,10 @@ exports.handleWebhook = async (req, res) => {
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
     let event;
 
+    if (!webhookSecret) {
+        return res.status(500).send('Webhook secret not configured');
+    }
+
     try {
         event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
     } catch (err) {
@@ -89,9 +93,25 @@ exports.handleWebhook = async (req, res) => {
 exports.getPaymentStatus = async (req, res) => {
     try {
         const { paymentIntentId } = req.params;
-        const paymentIntent = await stripeService.getPaymentIntentStatus(paymentIntentId);
+        const invoice = await prisma.invoice.findFirst({
+            where: { stripePaymentIntentId: paymentIntentId, tenantId: req.user.tenantId }
+        });
 
-        const invoice = await prisma.invoice.findFirst({ where: { stripePaymentIntentId: paymentIntentId } });
+        if (!invoice) {
+            return res.status(404).json({ success: false, message: 'Payment not found' });
+        }
+
+        if (req.user.role === 'student' && invoice.studentId !== req.user.id) {
+            return res.status(403).json({ success: false, message: 'Access denied' });
+        }
+        if (req.user.role === 'parent') {
+            const link = await prisma.studentParent.findFirst({
+                where: { parentId: req.user.id, studentId: invoice.studentId }
+            });
+            if (!link) return res.status(403).json({ success: false, message: 'Access denied' });
+        }
+
+        const paymentIntent = await stripeService.getPaymentIntentStatus(paymentIntentId);
 
         res.status(200).json({
             success: true,
@@ -99,10 +119,10 @@ exports.getPaymentStatus = async (req, res) => {
                 status: paymentIntent.status,
                 amount: paymentIntent.amount,
                 currency: paymentIntent.currency,
-                invoice: invoice ? {
+                invoice: {
                     id: invoice.id, invoiceNumber: invoice.invoiceNumber,
                     status: invoice.status, paidAmount: invoice.paidAmount
-                } : null
+                }
             }
         });
     } catch (error) {
@@ -115,8 +135,15 @@ exports.createRefund = async (req, res) => {
     try {
         const { paymentIntentId, amount } = req.body;
 
-        if (!['school_admin', 'accountant'].includes(req.user.role))
+        if (!['school-admin', 'accountant'].includes(req.user.role))
             return res.status(403).json({ success: false, message: 'Access denied' });
+
+        const invoice = await prisma.invoice.findFirst({
+            where: { stripePaymentIntentId: paymentIntentId, tenantId: req.user.tenantId }
+        });
+        if (!invoice) {
+            return res.status(404).json({ success: false, message: 'Payment not found for this school' });
+        }
 
         const refund = await stripeService.createRefund(paymentIntentId, amount);
 

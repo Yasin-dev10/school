@@ -25,20 +25,15 @@ const userSelect = {
     emergencyContactNo: true, schoolComments: true, absenteeismStatus: true,
     regDate: true, editDate: true,
     qualification: true, salary: true, stripeCustomerId: true,
-    passwordPlain: true, createdAt: true, updatedAt: true
+    createdAt: true, updatedAt: true
 };
 
-const canViewUserPasswords = (viewer) => ['school-admin', 'receptionist'].includes(viewer?.role);
-
-const formatUser = (u, viewer) => {
+const formatUser = (u) => {
     if (!u) return null;
 
-    const { passwordPlain, ...safeUser } = u;
-
     return {
-        ...safeUser,
+        ...u,
         _id: u.id,
-        ...(canViewUserPasswords(viewer) && { password_plain: passwordPlain }),
         profile: {
             phone: u.phone, address: u.profileAddress, avatarUrl: u.avatarUrl,
             designation: u.designation, admissionNo: u.admissionNo,
@@ -130,18 +125,19 @@ exports.createStudent = async (req, res) => {
         if (exists) return res.status(400).json({ message: 'User with this email already exists' });
 
         let parentId = null;
+        let parentTempPassword = null;
         if (parentDetails?.email) {
             let parent = await prisma.user.findFirst({ where: { email: parentDetails.email, tenantId, role: 'parent' } });
             if (!parent) {
+                parentTempPassword = generatePassword();
                 const salt = await bcrypt.genSalt(10);
-                const hashed = await bcrypt.hash('parent123', salt);
+                const hashed = await bcrypt.hash(parentTempPassword, salt);
                 parent = await prisma.user.create({
                     data: {
                         firstName: parentDetails.firstName,
                         lastName: parentDetails.lastName,
                         email: parentDetails.email,
                         password: hashed,
-                        passwordPlain: 'parent123',
                         role: 'parent',
                         tenantId,
                         phone: parentDetails.phone || null
@@ -174,7 +170,6 @@ exports.createStudent = async (req, res) => {
                 firstName, lastName,
                 email: email.toLowerCase(),
                 password: hashed,
-                passwordPlain: generatedPassword,
                 role: 'student',
                 tenantId,
                 phone: profile?.phone || null,
@@ -213,11 +208,13 @@ exports.createStudent = async (req, res) => {
         }
 
         await logAction({ action: 'CREATE', module: 'USER', details: `Admitted student: ${firstName} ${lastName} (${admissionNo})`, userId: req.user._id, tenantId });
-        emitToTenant(tenantId, 'student:created', formatUser(student, req.user));
+        emitToTenant(tenantId, 'student:created', formatUser(student));
 
         res.status(201).json({
             success: true, message: 'Student registered successfully',
-            data: formatUser(student, req.user), tempPassword: generatedPassword
+            data: formatUser(student),
+            tempPassword: generatedPassword,
+            ...(parentTempPassword && { parentTempPassword })
         });
     } catch (error) {
         sendError(res, error);
@@ -260,7 +257,7 @@ exports.getStudents = async (req, res) => {
         else if (sortBy === 'class') orderBy = [{ profileClass: order }, { profileSection: order }];
 
         const students = await prisma.user.findMany({ where, select: userSelect, orderBy });
-        res.status(200).json({ success: true, count: students.length, data: students.map(student => formatUser(student, req.user)) });
+        res.status(200).json({ success: true, count: students.length, data: students.map(student => formatUser(student)) });
     } catch (error) {
         sendError(res, error);
     }
@@ -278,6 +275,13 @@ exports.getStudentById = async (req, res) => {
             if (!allowed) return res.status(403).json({ success: false, message: 'You are not assigned to this student' });
         }
 
+        if (req.user.role === 'parent') {
+            const link = await prisma.studentParent.findFirst({
+                where: { parentId: req.user.id, studentId: id }
+            });
+            if (!link) return res.status(403).json({ success: false, message: 'Access denied. Child not linked to parent.' });
+        }
+
         const student = await prisma.user.findFirst({
             where: { id, tenantId: req.user.tenantId, role: 'student' },
             select: {
@@ -288,8 +292,8 @@ exports.getStudentById = async (req, res) => {
 
         if (!student) return res.status(404).json({ success: false, message: 'Student not found in this school' });
 
-        const formatted = formatUser(student, req.user);
-        formatted.profile.parentIds = student.parentLinks?.map(l => formatUser(l.parent, req.user)) || [];
+        const formatted = formatUser(student);
+        formatted.profile.parentIds = student.parentLinks?.map(l => formatUser(l.parent)) || [];
         res.status(200).json({ success: true, data: formatted });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -350,8 +354,8 @@ exports.updateStudent = async (req, res) => {
         });
 
         await logAction({ action: 'UPDATE', module: 'USER', details: `Updated student: ${updated.firstName} ${updated.lastName}`, userId: req.user._id, tenantId: req.user.tenantId });
-        emitToTenant(req.user.tenantId, 'student:updated', formatUser(updated, req.user));
-        res.status(200).json({ success: true, data: formatUser(updated, req.user) });
+        emitToTenant(req.user.tenantId, 'student:updated', formatUser(updated));
+        res.status(200).json({ success: true, data: formatUser(updated) });
     } catch (error) {
         sendError(res, error);
     }
@@ -547,7 +551,7 @@ exports.getPromotionEligibility = async (req, res) => {
             const finalPercentage = totalMax > 0 ? Math.round((totalObtained / totalMax) * 100) : null;
 
             result.push({
-                ...formatUser(student, req.user),
+                ...formatUser(student),
                 finalGrade: finalPercentage,
                 eligible,
                 reason
@@ -570,7 +574,7 @@ exports.getChildren = async (req, res) => {
             },
             select: userSelect
         });
-        res.status(200).json({ success: true, data: children.map(child => formatUser(child, req.user)) });
+        res.status(200).json({ success: true, data: children.map(child => formatUser(child)) });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -616,14 +620,14 @@ exports.bulkImportStudents = async (req, res) => {
                 await prisma.user.create({
                     data: {
                         firstName: s.firstName, lastName: s.lastName,
-                        email: s.email.toLowerCase(), password: hashed, passwordPlain: genPass,
+                        email: s.email.toLowerCase(), password: hashed,
                         role: 'student', tenantId,
                         admissionNo, studentId,
                         ...classProfile,
                         gender: s.gender || null, phone: s.phone || null
                     }
                 });
-                importResults.push({ email: s.email, status: 'success' });
+                importResults.push({ email: s.email, status: 'success', tempPassword: genPass });
             } catch (err) {
                 importResults.push({ email: s.email, status: 'failed', reason: err.message });
             }
@@ -652,7 +656,10 @@ exports.resetStudentPassword = async (req, res) => {
         const salt = await bcrypt.genSalt(10);
         const hashed = await bcrypt.hash(newPassword, salt);
 
-        await prisma.user.update({ where: { id: req.params.id }, data: { password: hashed, passwordPlain: newPassword } });
+        await prisma.user.update({
+            where: { id: req.params.id },
+            data: { password: hashed, tokenVersion: { increment: 1 } }
+        });
 
         await logAction({ action: 'UPDATE', module: 'USER', details: `Reset password for student: ${student.firstName} ${student.lastName}`, userId: req.user._id, tenantId: req.user.tenantId });
         res.status(200).json({ success: true, message: 'Password reset successfully', password: newPassword });

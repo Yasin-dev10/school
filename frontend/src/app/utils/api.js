@@ -12,12 +12,13 @@ export const getApiUrl = (path = '') => {
 
 const api = axios.create({
     baseURL,
+    withCredentials: true,
     headers: {
         'Content-Type': 'application/json',
     },
 });
 
-// Add interceptor to include token
+// Prefer HttpOnly cookie; keep Bearer from localStorage as fallback for older sessions / SSR
 api.interceptors.request.use(
     (config) => {
         const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;

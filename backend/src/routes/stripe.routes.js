@@ -8,8 +8,8 @@ const {
 } = require('../controllers/stripe.controller');
 const { protect, authorize } = require('../middlewares/auth.middleware');
 
-// Webhook route (no auth required, Stripe handles verification)
-router.post('/webhook', express.raw({ type: 'application/json' }), handleWebhook);
+// Webhook route (raw body applied in app.js before json parser)
+router.post('/webhook', handleWebhook);
 
 // Protected routes
 router.use(protect);

@@ -13,6 +13,27 @@ const TEMPLATES = [
   { id: 'report', name: 'Report Card', icon: '📊', type: 'Perfect Attendance' },
 ];
 
+const escapeHtml = (value: unknown) =>
+    String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+
+const safeUrl = (value: unknown) => {
+    const raw = String(value ?? '').trim();
+    if (!raw) return '';
+    if (raw.startsWith('data:image/')) return raw;
+    try {
+        const u = new URL(raw);
+        if (u.protocol === 'http:' || u.protocol === 'https:') return u.toString();
+    } catch {
+        /* ignore */
+    }
+    return '';
+};
+
 export default function CertificatesPage() {
     const [user, setUser] = useState<any>(null);
     const [view, setView] = useState('list'); // 'list', 'issue'
@@ -233,18 +254,18 @@ export default function CertificatesPage() {
                     <div class="corner corner-tl"></div><div class="corner corner-tr"></div>
                     <div class="corner corner-bl"></div><div class="corner corner-br"></div>
                     <div class="inner-border">
-                        ${cert.metadata?.schoolLogo ? `<img src="${cert.metadata.schoolLogo}" style="width:80px;height:80px;margin-bottom:10px;object-fit:contain;display:block;" />` : ''}
-                        ${cert.metadata?.schoolName ? `<div style="font-family:'Cinzel',serif;font-size:28px;color:#0c2340;font-weight:bold;margin-bottom:20px;text-transform:uppercase;">${cert.metadata.schoolName}</div>` : ''}
+                        ${safeUrl(cert.metadata?.schoolLogo) ? `<img src="${safeUrl(cert.metadata.schoolLogo)}" style="width:80px;height:80px;margin-bottom:10px;object-fit:contain;display:block;" />` : ''}
+                        ${cert.metadata?.schoolName ? `<div style="font-family:'Cinzel',serif;font-size:28px;color:#0c2340;font-weight:bold;margin-bottom:20px;text-transform:uppercase;">${escapeHtml(cert.metadata.schoolName)}</div>` : ''}
                         <div class="header-title">Certificate of</div>
-                        <div class="sub-header">${cert.certificateType.toUpperCase()}</div>
+                        <div class="sub-header">${escapeHtml(String(cert.certificateType || '').toUpperCase())}</div>
                         <div class="separator"></div>
                         <div class="presentation">This certificate is proudly presented to</div>
-                        <div class="student-name">${cert.student?.firstName || ''} ${cert.student?.lastName || ''}</div>
-                        <div class="description">${cert.description || 'In recognition of achieving outstanding results and demonstrating exemplary dedication during the academic period at our institution.'}</div>
+                        <div class="student-name">${escapeHtml(cert.student?.firstName)} ${escapeHtml(cert.student?.lastName)}</div>
+                        <div class="description">${escapeHtml(cert.description || 'In recognition of achieving outstanding results and demonstrating exemplary dedication during the academic period at our institution.')}</div>
                         <div class="metadata-text">
-                            ${cert.metadata?.examType ? `${cert.metadata.examType.toUpperCase()} EXAMINATION<br/>` : ''}
-                            DATE OF ISSUE: ${issueDate} <br/>
-                            ID: ${cert.certificateNumber}
+                            ${cert.metadata?.examType ? `${escapeHtml(String(cert.metadata.examType).toUpperCase())} EXAMINATION<br/>` : ''}
+                            DATE OF ISSUE: ${escapeHtml(issueDate)} <br/>
+                            ID: ${escapeHtml(cert.certificateNumber)}
                         </div>
                         <div class="footer">
                             <div class="signature-box"><div class="sig-line"></div><div class="sig-label">PRINCIPAL</div></div>

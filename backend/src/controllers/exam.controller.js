@@ -342,6 +342,15 @@ exports.getStudentReport = async (req, res) => {
             const allowed = await canTeacherAccessStudent(req.user.id, studentId, tenantId);
             if (!allowed) return res.status(403).json({ success: false, message: 'You are not assigned to this student' });
         }
+        if (req.user.role === 'student' && studentId !== req.user.id) {
+            return res.status(403).json({ success: false, message: 'Access denied' });
+        }
+        if (req.user.role === 'parent') {
+            const link = await prisma.studentParent.findFirst({
+                where: { parentId: req.user.id, studentId }
+            });
+            if (!link) return res.status(403).json({ success: false, message: 'Access denied' });
+        }
 
         const [exam, marks, gradeSystem] = await Promise.all([
             prisma.exam.findFirst({ where: { id: examId, tenantId } }),
@@ -664,6 +673,15 @@ exports.getStudentGrades = async (req, res) => {
         if (req.user.role === 'teacher') {
             const allowed = await canTeacherAccessStudent(req.user.id, studentId, tenantId);
             if (!allowed) return res.status(403).json({ success: false, message: 'You are not assigned to this student' });
+        }
+        if (req.user.role === 'student' && studentId !== req.user.id) {
+            return res.status(403).json({ success: false, message: 'Access denied' });
+        }
+        if (req.user.role === 'parent') {
+            const link = await prisma.studentParent.findFirst({
+                where: { parentId: req.user.id, studentId }
+            });
+            if (!link) return res.status(403).json({ success: false, message: 'Access denied' });
         }
 
         const [marks, gradeSystem] = await Promise.all([

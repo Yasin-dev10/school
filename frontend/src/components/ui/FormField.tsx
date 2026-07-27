@@ -40,28 +40,29 @@ export const FormField: React.FC<FormFieldProps> = ({
   max,
   step,
   className,
-  children
+  children,
 }) => {
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>,
+  ) => {
     const newValue = type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value;
     onChange(name, newValue);
   };
 
   const handleBlur = () => {
-    if (onBlur) {
-      onBlur(name);
-    }
+    if (onBlur) onBlur(name);
   };
 
   const inputClasses = cn(
     'w-full px-4 py-3 rounded-xl border transition-all duration-200',
-    'bg-slate-900/50 text-white placeholder-slate-500',
+    'bg-white dark:bg-slate-900/60 text-slate-900 dark:text-white',
+    'placeholder-slate-400 dark:placeholder-slate-500',
     'focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent',
-    error 
-      ? 'border-red-500 bg-red-500/10' 
-      : 'border-slate-700 hover:border-slate-600',
+    error
+      ? 'border-red-500 bg-red-50 dark:bg-red-500/10'
+      : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600',
     disabled && 'opacity-50 cursor-not-allowed',
-    className
+    className,
   );
 
   const renderInput = () => {
@@ -127,20 +128,24 @@ export const FormField: React.FC<FormFieldProps> = ({
 
   return (
     <div className="space-y-2">
-      <label 
-        htmlFor={name} 
-        className="block text-sm font-semibold text-slate-300"
+      <label
+        htmlFor={name}
+        className="block text-sm font-semibold text-slate-700 dark:text-slate-300"
       >
         {label}
-        {required && <span className="text-red-400 ml-1">*</span>}
+        {required && <span className="text-red-500 ml-1">*</span>}
       </label>
-      
+
       {renderInput()}
-      
+
       {error && (
-        <div className="flex items-center gap-2 text-red-400 text-sm">
+        <div className="flex items-center gap-2 text-red-500 dark:text-red-400 text-sm">
           <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            <path
+              fillRule="evenodd"
+              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+              clipRule="evenodd"
+            />
           </svg>
           <span>{error}</span>
         </div>
@@ -149,7 +154,6 @@ export const FormField: React.FC<FormFieldProps> = ({
   );
 };
 
-// Specialized form fields
 export const EmailField: React.FC<Omit<FormFieldProps, 'type'>> = (props) => (
   <FormField {...props} type="email" />
 );

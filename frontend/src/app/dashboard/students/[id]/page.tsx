@@ -779,8 +779,7 @@ export default function StudentDetailPage() {
                                         { label: 'Emergency Contact No', value: student.profile?.emergencyContactNo || 'Not set' },
                                         { label: 'Absenteeism Status', value: student.profile?.absenteeismStatus || 'Not set' },
                                         { label: 'Registration Date', value: formatDateTime(student.profile?.regDate) },
-                                        { label: 'School Comments', value: student.profile?.schoolComments || 'Not set' },
-                                        { label: 'Password', value: student.password_plain || '********' }
+                                        { label: 'School Comments', value: student.profile?.schoolComments || 'Not set' }
                                     ].map((item, index) => (
                                         <div key={index}>
                                             <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest mb-1">{item.label}</p>

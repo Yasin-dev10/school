@@ -1,9 +1,14 @@
 const http = require('http');
 
-const data = JSON.stringify({
-    email: 'yasindev54@gmail.com',
-    password: 'Yaasiin@2027'
-});
+const email = process.env.TEST_LOGIN_EMAIL;
+const password = process.env.TEST_LOGIN_PASSWORD;
+
+if (!email || !password) {
+    console.error('Set TEST_LOGIN_EMAIL and TEST_LOGIN_PASSWORD env vars.');
+    process.exit(1);
+}
+
+const data = JSON.stringify({ email, password });
 
 const options = {
     hostname: 'localhost',
@@ -12,7 +17,7 @@ const options = {
     method: 'POST',
     headers: {
         'Content-Type': 'application/json',
-        'Content-Length': data.length
+        'Content-Length': Buffer.byteLength(data)
     }
 };
 

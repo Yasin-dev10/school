@@ -2,6 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const cookieParser = require('./middlewares/cookieParser');
+const rateLimit = require('./middlewares/rateLimit');
 
 // Route Imports
 const tenantRoutes = require('./routes/tenant.routes');
@@ -27,19 +29,50 @@ const contactMessageRoutes = require('./routes/contactMessage.routes');
 const gradeRoutes = require('./routes/grade.routes');
 const stripeRoutes = require('./routes/stripe.routes');
 const { handleValidationError } = require('./middlewares/validation.middleware');
+const { parseAllowedOrigins, redactSensitive } = require('./utils/security');
+const { getJwtSecret } = require('./utils/security');
+
+// Fail closed on missing JWT secret at boot
+try {
+    getJwtSecret();
+} catch (e) {
+    console.error(e.message);
+    if (process.env.NODE_ENV === 'production') {
+        process.exit(1);
+    }
+}
 
 const app = express();
 
-// Middleware
+const allowedOrigins = parseAllowedOrigins();
+
 app.use(helmet());
 app.use(
     cors({
-        origin: true, // Allow all origins temporarily for debugging
+        origin: (origin, callback) => {
+            // Allow non-browser clients (mobile) with no Origin header
+            if (!origin) return callback(null, true);
+            if (allowedOrigins.includes(origin)) return callback(null, true);
+            return callback(null, false);
+        },
         credentials: true,
     })
 );
-app.use(express.json());
+
+// Stripe webhook needs raw body — mount before json parser
+app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
+
+app.use(express.json({ limit: '1mb' }));
+app.use(cookieParser());
 app.use(morgan('dev'));
+
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    message: { message: 'Too many login attempts, please try again later' },
+});
+
+app.use('/api/auth/login', loginLimiter);
 
 // Routes
 app.use('/api/tenants', tenantRoutes);
@@ -69,35 +102,34 @@ app.get('/', (req, res) => {
     res.json({ message: 'School Management System API is running' });
 });
 
-// Validation Error Handling (must be before general error handler)
 app.use(handleValidationError);
 
-// Error Handling
 app.use((err, req, res, next) => {
     err.statusCode = err.statusCode || 500;
     err.status = err.status || 'error';
 
+    const isDev = process.env.NODE_ENV === 'development';
+
     console.error('GLOBAL ERROR CAUGHT:', {
         message: err.message,
-        stack: err.stack,
         statusCode: err.statusCode,
         url: req.url,
         method: req.method,
-        body: req.body, // Log the body to see what was sent
-        name: err.name, // Add error name
-        // Add more details if available from the error object
-        ...(err.errors && { validationErrors: err.errors }), // For Mongoose validation errors
-        ...(err.code && { errorCode: err.code }), // For database errors or custom error codes
+        body: redactSensitive(req.body),
+        name: err.name,
+        ...(isDev && err.stack && { stack: err.stack }),
     });
+
+    const clientMessage = isDev
+        ? (err.message || 'Something went wrong!')
+        : (err.statusCode < 500 ? (err.message || 'Request failed') : 'Something went wrong!');
 
     res.status(err.statusCode).json({
         success: false,
         status: err.status,
-        message: err.message || 'Something went wrong!',
-        error: err.message, // Include message for easier debugging
-        ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+        message: clientMessage,
+        ...(isDev && { error: err.message, stack: err.stack })
     });
 });
-
 
 module.exports = app;
