@@ -113,7 +113,7 @@ class _StudentFeesScreenState extends State<StudentFeesScreen> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFF43F5E).withOpacity(0.3),
+            color: const Color(0xFFF43F5E).withValues(alpha: 0.3),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -144,7 +144,7 @@ class _StudentFeesScreenState extends State<StudentFeesScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Text(
@@ -177,7 +177,7 @@ class _StudentFeesScreenState extends State<StudentFeesScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: Colors.black.withValues(alpha: 0.02),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -189,7 +189,7 @@ class _StudentFeesScreenState extends State<StudentFeesScreen> {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: (isPaid ? Colors.green : Colors.orange).withOpacity(0.1),
+              color: (isPaid ? Colors.green : Colors.orange).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(

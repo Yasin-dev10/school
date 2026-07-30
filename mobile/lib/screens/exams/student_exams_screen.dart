@@ -103,9 +103,9 @@ class UpcomingExamsTab extends StatelessWidget {
                 margin: const EdgeInsets.only(bottom: 16),
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.05),
+                  color: Colors.white.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white.withOpacity(0.1)),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -122,7 +122,7 @@ class UpcomingExamsTab extends StatelessWidget {
                     Text(
                       exam['term'],
                       style: TextStyle(
-                        color: const Color(0xFF6366F1).withOpacity(0.8),
+                        color: const Color(0xFF6366F1).withValues(alpha: 0.8),
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
                       ),
@@ -199,9 +199,9 @@ class MyResultsTab extends StatelessWidget {
               return Container(
                 margin: const EdgeInsets.only(bottom: 24),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.05),
+                  color: Colors.white.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: Colors.white.withOpacity(0.1)),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
                 ),
                 child: Column(
                   children: [
@@ -227,7 +227,7 @@ class MyResultsTab extends StatelessWidget {
                                   style: TextStyle(
                                     color: const Color(
                                       0xFF6366F1,
-                                    ).withOpacity(0.8),
+                                    ).withValues(alpha: 0.8),
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -411,9 +411,9 @@ class ProgressAnalyticsTab extends StatelessWidget {
             height: 250,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.05),
+              color: Colors.white.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: Colors.white.withOpacity(0.1)),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
             ),
             child: LineChart(
               LineChartData(
@@ -436,7 +436,7 @@ class ProgressAnalyticsTab extends StatelessWidget {
                     dotData: const FlDotData(show: true),
                     belowBarData: BarAreaData(
                       show: true,
-                      color: const Color(0xFF6366F1).withOpacity(0.2),
+                      color: const Color(0xFF6366F1).withValues(alpha: 0.2),
                     ),
                   ),
                 ],
@@ -467,9 +467,9 @@ class ProgressAnalyticsTab extends StatelessWidget {
                   margin: const EdgeInsets.symmetric(horizontal: 4),
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
+                    color: color.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: color.withOpacity(0.2)),
+                    border: Border.all(color: color.withValues(alpha: 0.2)),
                   ),
                   child: Column(
                     children: [
@@ -484,7 +484,7 @@ class ProgressAnalyticsTab extends StatelessWidget {
                       Text(
                         status.toUpperCase(),
                         style: TextStyle(
-                          color: color.withOpacity(0.7),
+                          color: color.withValues(alpha: 0.7),
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
                         ),
@@ -511,7 +511,7 @@ class ProgressAnalyticsTab extends StatelessWidget {
               margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.05),
+                color: Colors.white.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Row(
@@ -521,7 +521,7 @@ class ProgressAnalyticsTab extends StatelessWidget {
                     height: 40,
                     decoration: BoxDecoration(
                       color: (perc >= 50 ? Colors.green : Colors.red)
-                          .withOpacity(0.2),
+                          .withValues(alpha: 0.2),
                       shape: BoxShape.circle,
                     ),
                     child: Center(

@@ -1,4 +1,4 @@
-import 'package:socket_io_client/socket_io_client.dart' as IO;
+import 'package:socket_io_client/socket_io_client.dart' as io;
 import 'package:flutter/foundation.dart';
 import '../config/app_config.dart';
 import 'api_service.dart';
@@ -8,7 +8,7 @@ class SocketService {
   factory SocketService() => _instance;
   SocketService._internal();
 
-  IO.Socket? socket;
+  io.Socket? socket;
 
   Future<void> initSocket(String tenantId) async {
     if (socket != null && socket!.connected) return;
@@ -18,9 +18,9 @@ class SocketService {
 
     debugPrint('Initializing socket connection to $baseUrl');
 
-    socket = IO.io(
+    socket = io.io(
       baseUrl,
-      IO.OptionBuilder()
+      io.OptionBuilder()
           .setTransports(['websocket'])
           .enableAutoConnect()
           .setAuth({'token': token})

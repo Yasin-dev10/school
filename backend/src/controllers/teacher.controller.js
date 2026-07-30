@@ -4,10 +4,11 @@ const { logAction } = require('../utils/logger');
 const generatePassword = require('../utils/generatePassword');
 const { emitToTenant } = require('../config/socket');
 const { normalizeRole } = require('../utils/security');
+const generateUsername = require('../utils/generateUsername');
 
 const teacherSelect = {
     id: true, tenantId: true, firstName: true, lastName: true,
-    email: true, role: true, status: true, phone: true,
+    email: true, username: true, role: true, status: true, phone: true,
     designation: true, qualification: true, salary: true, avatarUrl: true,
     createdAt: true, updatedAt: true
 };
@@ -31,11 +32,10 @@ const formatTeacher = (teacher) => {
 
 exports.createTeacher = async (req, res) => {
     try {
-        const { firstName, lastName, email, password, profile } = req.body;
+        const { firstName, lastName, password, profile } = req.body;
         const tenantId = req.user.tenantId;
-
-        const exists = await prisma.user.findFirst({ where: { email: email.toLowerCase() } });
-        if (exists) return res.status(400).json({ message: 'User with this email already exists' });
+        if (!firstName || !lastName) return res.status(400).json({ message: 'First name and last name are required' });
+        const username = await generateUsername(prisma, { role: 'teacher', tenantId });
 
         const generatedPassword = password || generatePassword();
         const salt = await bcrypt.genSalt(10);
@@ -44,7 +44,8 @@ exports.createTeacher = async (req, res) => {
         const teacher = await prisma.user.create({
             data: {
                 firstName, lastName,
-                email: email.toLowerCase(),
+                email: null,
+                username,
                 password: hashed,
                 role: 'teacher', tenantId,
                 phone: profile?.phone || null,
@@ -61,7 +62,7 @@ exports.createTeacher = async (req, res) => {
         await logAction({ action: 'CREATE', module: 'USER', details: `Created teacher: ${firstName} ${lastName}`, userId: req.user._id, tenantId });
         emitToTenant(tenantId, 'teacher:created', formattedTeacher);
 
-        res.status(201).json({ success: true, data: formattedTeacher, tempPassword: generatedPassword });
+        res.status(201).json({ success: true, data: formattedTeacher, username, tempPassword: generatedPassword });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -84,10 +85,54 @@ exports.getTeacherById = async (req, res) => {
     try {
         const teacher = await prisma.user.findFirst({
             where: { id: req.params.id, tenantId: req.user.tenantId, role: 'teacher' },
-            select: teacherSelect
+            select: {
+                ...teacherSelect,
+                classTeaching: { select: { id: true, name: true, section: true, room: true } },
+                classSubjectTeachings: {
+                    select: {
+                        classSubject: {
+                            select: {
+                                class: { select: { id: true, name: true, section: true } },
+                                subject: { select: { id: true, name: true, code: true } }
+                            }
+                        }
+                    }
+                },
+                timetableTeachings: {
+                    select: {
+                        timetable: {
+                            select: {
+                                id: true, day: true, startTime: true, endTime: true, room: true,
+                                class: { select: { id: true, name: true, section: true } },
+                                subject: { select: { id: true, name: true } }
+                            }
+                        }
+                    }
+                },
+                salaries: {
+                    select: {
+                        id: true, month: true, year: true, basicSalary: true, netSalary: true,
+                        status: true, paymentDate: true,
+                        allowances: { select: { name: true, amount: true } },
+                        deductions: { select: { name: true, amount: true } }
+                    },
+                    orderBy: [{ year: 'desc' }, { createdAt: 'desc' }]
+                }
+            }
         });
         if (!teacher) return res.status(404).json({ message: 'Teacher not found' });
-        res.status(200).json({ success: true, data: formatTeacher(teacher) });
+        const formatted = formatTeacher(teacher);
+        formatted.assignedClasses = teacher.classSubjectTeachings.map(link => ({
+            ...link.classSubject.class,
+            subject: link.classSubject.subject
+        }));
+        formatted.homeroomClasses = teacher.classTeaching;
+        formatted.timetable = teacher.timetableTeachings.map(link => link.timetable);
+        formatted.salaries = teacher.salaries;
+        delete formatted.classSubjectTeachings;
+        delete formatted.classTeaching;
+        delete formatted.timetableTeachings;
+        res.status(200).json({ success: true, data: formatted });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -98,13 +143,12 @@ exports.updateTeacher = async (req, res) => {
         const exists = await prisma.user.findFirst({ where: { id: req.params.id, tenantId: req.user.tenantId, role: 'teacher' } });
         if (!exists) return res.status(404).json({ message: 'Teacher not found' });
 
-        const { firstName, lastName, email, status, profile } = req.body;
+        const { firstName, lastName, status, profile } = req.body;
         const updated = await prisma.user.update({
             where: { id: req.params.id },
             data: {
                 ...(firstName && { firstName }),
                 ...(lastName && { lastName }),
-                ...(email && { email: email.toLowerCase() }),
                 ...(status && { status }),
                 ...(profile?.phone !== undefined && { phone: profile.phone }),
                 ...(profile?.designation !== undefined && { designation: profile.designation }),

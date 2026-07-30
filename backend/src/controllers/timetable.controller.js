@@ -6,8 +6,24 @@ exports.createTimetable = async (req, res) => {
         const { classId, subjectId, day, startTime, endTime, room, teachers } = req.body;
         const tenantId = req.user.tenantId;
 
-        const exists = await prisma.timetable.findFirst({ where: { classId, day, startTime, tenantId } });
-        if (exists) return res.status(400).json({ message: 'Timetable slot already exists for this class, day and time' });
+        if (!classId || !subjectId || !day || !startTime || !endTime || startTime >= endTime) {
+            return res.status(400).json({ success: false, message: 'Class, subject, day and a valid time range are required' });
+        }
+        const [schoolClass, subject, validTeachers] = await Promise.all([
+            prisma.class.findFirst({ where: { id: classId, tenantId } }),
+            prisma.subject.findFirst({ where: { id: subjectId, tenantId } }),
+            teachers?.length
+                ? prisma.user.count({ where: { id: { in: teachers }, tenantId, role: 'teacher', status: 'active' } })
+                : Promise.resolve(0)
+        ]);
+        if (!schoolClass || !subject) return res.status(404).json({ success: false, message: 'Class or subject not found' });
+        if (teachers?.length && validTeachers !== new Set(teachers).size) {
+            return res.status(400).json({ success: false, message: 'One or more selected teachers are invalid' });
+        }
+        const conflicts = await findConflicts({ tenantId, classId, day, startTime, endTime, teachers: teachers || [] });
+        if (conflicts.length) {
+            return res.status(409).json({ success: false, message: 'Class or teacher has a conflicting timetable slot', conflicts });
+        }
 
         const slot = await prisma.timetable.create({
             data: {
@@ -30,12 +46,18 @@ exports.createTimetable = async (req, res) => {
 exports.getTimetable = async (req, res) => {
     try {
         const tenantId = req.user.tenantId;
-        const { classId } = req.query;
+        const classId = req.params.classId || req.query.classId;
 
         let where = { tenantId };
         if (classId) where.classId = classId;
         else if (req.user.role === 'student' && req.user.profile?.class) {
-            const cls = await prisma.class.findFirst({ where: { name: req.user.profile.class, tenantId } });
+            const cls = await prisma.class.findFirst({
+                where: {
+                    name: req.user.profile.class,
+                    tenantId,
+                    ...(req.user.profile.section && { section: req.user.profile.section })
+                }
+            });
             if (cls) where.classId = cls.id;
         } else if (req.user.role === 'teacher') {
             where.teachers = { some: { teacherId: req.user.id } };
@@ -116,7 +138,157 @@ exports.getTeacherTimetable = exports.getTimetable;
 exports.getStudentTimetable = exports.getTimetable;
 exports.deleteTimetableSlot = exports.deleteTimetable;
 exports.getAllTimetable = exports.getTimetable;
-exports.validateTimetableSlot = async (req, res) => { res.status(200).json({ success: true, valid: true }) };
-exports.getTeacherWorkload = async (req, res) => { res.status(200).json({ success: true, data: [] }) };
-exports.bulkUpdateClassTimetable = async (req, res) => { res.status(200).json({ success: true, message: "Not implemented" }) };
+
+const overlaps = (startA, endA, startB, endB) => startA < endB && endA > startB;
+
+const findConflicts = async ({ tenantId, classId, day, startTime, endTime, teachers = [], excludeId }) => {
+    const slots = await prisma.timetable.findMany({
+        where: {
+            tenantId,
+            day,
+            ...(excludeId && { id: { not: excludeId } }),
+            OR: [
+                { classId },
+                ...(teachers.length ? [{ teachers: { some: { teacherId: { in: teachers } } } }] : [])
+            ]
+        },
+        include: timetableInclude
+    });
+
+    return slots
+        .filter(slot => overlaps(startTime, endTime, slot.startTime, slot.endTime))
+        .map(formatSlot);
+};
+
+exports.validateTimetableSlot = async (req, res) => {
+    try {
+        const { classId, day, startTime, endTime, teachers = [], excludeId } = req.body;
+        if (!classId || !day || !startTime || !endTime) {
+            return res.status(400).json({ success: false, message: 'classId, day, startTime and endTime are required' });
+        }
+        if (startTime >= endTime) {
+            return res.status(400).json({ success: false, message: 'End time must be after start time' });
+        }
+
+        const conflicts = await findConflicts({
+            tenantId: req.user.tenantId, classId, day, startTime, endTime, teachers, excludeId
+        });
+        res.status(200).json({ success: true, valid: conflicts.length === 0, conflicts });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.getTeacherWorkload = async (req, res) => {
+    try {
+        const slots = await prisma.timetable.findMany({
+            where: {
+                tenantId: req.user.tenantId,
+                teachers: { some: { teacherId: req.user.id } }
+            },
+            include: timetableInclude,
+            orderBy: [{ day: 'asc' }, { startTime: 'asc' }]
+        });
+
+        const minutes = slots.reduce((total, slot) => {
+            const [sh, sm] = slot.startTime.split(':').map(Number);
+            const [eh, em] = slot.endTime.split(':').map(Number);
+            return total + Math.max(0, (eh * 60 + em) - (sh * 60 + sm));
+        }, 0);
+
+        res.status(200).json({
+            success: true,
+            data: {
+                totalSlots: slots.length,
+                totalMinutes: minutes,
+                totalHours: Number((minutes / 60).toFixed(2)),
+                byDay: slots.reduce((result, slot) => {
+                    result[slot.day] = (result[slot.day] || 0) + 1;
+                    return result;
+                }, {}),
+                slots: slots.map(formatSlot)
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.bulkUpdateClassTimetable = async (req, res) => {
+    try {
+        const { classId, slots } = req.body;
+        const tenantId = req.user.tenantId;
+        if (!classId || !Array.isArray(slots)) {
+            return res.status(400).json({ success: false, message: 'classId and slots array are required' });
+        }
+
+        const schoolClass = await prisma.class.findFirst({ where: { id: classId, tenantId } });
+        if (!schoolClass) return res.status(404).json({ success: false, message: 'Class not found' });
+
+        for (let index = 0; index < slots.length; index += 1) {
+            const slot = slots[index];
+            if (!slot.subjectId || !slot.day || !slot.startTime || !slot.endTime || slot.startTime >= slot.endTime) {
+                return res.status(400).json({ success: false, message: `Invalid timetable slot at index ${index}` });
+            }
+            const duplicate = slots.findIndex((other, otherIndex) =>
+                otherIndex !== index &&
+                other.day === slot.day &&
+                overlaps(slot.startTime, slot.endTime, other.startTime, other.endTime)
+            );
+            if (duplicate !== -1) {
+                return res.status(409).json({ success: false, message: `Class time conflict between slots ${index} and ${duplicate}` });
+            }
+        }
+
+        const teacherIds = [...new Set(slots.flatMap(slot => slot.teachers || []))];
+        const externalSlots = teacherIds.length ? await prisma.timetable.findMany({
+            where: {
+                tenantId,
+                classId: { not: classId },
+                teachers: { some: { teacherId: { in: teacherIds } } }
+            },
+            include: { teachers: true }
+        }) : [];
+
+        for (const slot of slots) {
+            const conflict = externalSlots.find(existing =>
+                existing.day === slot.day &&
+                overlaps(slot.startTime, slot.endTime, existing.startTime, existing.endTime) &&
+                existing.teachers.some(link => (slot.teachers || []).includes(link.teacherId))
+            );
+            if (conflict) {
+                return res.status(409).json({ success: false, message: 'A selected teacher has another class during this time' });
+            }
+        }
+
+        await prisma.$transaction(async tx => {
+            await tx.timetable.deleteMany({ where: { classId, tenantId } });
+            for (const slot of slots) {
+                await tx.timetable.create({
+                    data: {
+                        classId,
+                        subjectId: slot.subjectId,
+                        day: slot.day,
+                        startTime: slot.startTime,
+                        endTime: slot.endTime,
+                        room: slot.room || null,
+                        tenantId,
+                        ...((slot.teachers || []).length && {
+                            teachers: { create: slot.teachers.map(teacherId => ({ teacherId })) }
+                        })
+                    }
+                });
+            }
+        });
+
+        const updated = await prisma.timetable.findMany({
+            where: { classId, tenantId },
+            include: timetableInclude,
+            orderBy: [{ day: 'asc' }, { startTime: 'asc' }]
+        });
+        res.status(200).json({ success: true, count: updated.length, data: updated.map(formatSlot) });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
 

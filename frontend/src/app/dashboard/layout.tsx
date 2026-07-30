@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import api from '../utils/api';
+import { disconnectSocket, initSocket } from '../utils/socket';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { normalizeRole } from '@/hooks/usePermission';
 import {
@@ -74,7 +75,21 @@ export default function DashboardLayout({
             return;
         }
 
-        const parsedUser = JSON.parse(userStr);
+        let parsedUser;
+        try {
+            parsedUser = JSON.parse(userStr);
+        } catch {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            router.replace('/login');
+            return;
+        }
+        if (!parsedUser || typeof parsedUser !== 'object') {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            router.replace('/login');
+            return;
+        }
         const userData = { ...parsedUser, role: normalizeRole(parsedUser.role) };
         localStorage.setItem('user', JSON.stringify(userData));
         setUser(userData);
@@ -96,7 +111,6 @@ export default function DashboardLayout({
             setTenant(tenantData);
 
             if (tenantData?._id) {
-                const { initSocket } = require('../utils/socket');
                 const socket = initSocket(tenantData._id);
                 if (socket) {
                     socket.on('notification-received', () => {
@@ -108,7 +122,6 @@ export default function DashboardLayout({
 
         return () => {
             window.removeEventListener('tenant-updated', handleTenantUpdate as EventListener);
-            const { disconnectSocket } = require('../utils/socket');
             disconnectSocket();
         };
     }, [router]);
@@ -325,7 +338,7 @@ export default function DashboardLayout({
                 <div className="px-3 py-3 border-t border-white/10">
                     <div className="flex items-center gap-2 px-2 py-2 mb-1">
                         <div className="w-8 h-8 rounded-full bg-indigo-500/30 border border-indigo-400/30 flex items-center justify-center text-indigo-200 font-semibold text-sm shrink-0">
-                            {user.firstName.charAt(0)}
+                            {user.firstName?.charAt(0) || user.email?.charAt(0)?.toUpperCase() || 'U'}
                         </div>
                         <div className="overflow-hidden flex-1">
                             <p className="text-sm font-semibold text-white truncate">{user.firstName} {user.lastName}</p>
@@ -385,9 +398,9 @@ export default function DashboardLayout({
                         </Link>
 
                         {/* Help */}
-                        <button className="w-9 h-9 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400 transition-colors">
+                        <Link href="/dashboard/about" aria-label="Help and system information" className="w-9 h-9 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400 transition-colors">
                             <HelpCircle className="w-4 h-4" />
-                        </button>
+                        </Link>
 
                         <div className="w-px h-5 bg-slate-200 dark:bg-slate-700" />
 

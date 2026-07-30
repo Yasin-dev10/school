@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../providers/student_provider.dart';
 
 class StudentAssignmentDetailScreen extends StatefulWidget {
@@ -16,6 +17,23 @@ class _StudentAssignmentDetailScreenState
     extends State<StudentAssignmentDetailScreen> {
   final _contentController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  String? _filePath;
+  String? _fileName;
+
+  Future<void> _pickFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: false,
+      withData: false,
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'doc', 'docx', 'txt', 'jpg', 'jpeg', 'png'],
+    );
+    if (result != null && mounted) {
+      setState(() {
+        _filePath = result.files.single.path;
+        _fileName = result.files.single.name;
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -29,7 +47,7 @@ class _StudentAssignmentDetailScreenState
       final success = await student.submitAssignment(
         widget.assignment['_id'],
         _contentController.text,
-        null, // File path placeholder (implement file picker later)
+        _filePath,
       );
 
       if (success && mounted) {
@@ -85,7 +103,7 @@ class _StudentAssignmentDetailScreenState
                       'Submitted',
                       style: TextStyle(color: Colors.white),
                     ),
-                    backgroundColor: Colors.green.withOpacity(0.8),
+                    backgroundColor: Colors.green.withValues(alpha: 0.8),
                   ),
               ],
             ),
@@ -105,9 +123,9 @@ class _StudentAssignmentDetailScreenState
                 width: double.infinity,
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.05),
+                  color: Colors.white.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.white.withOpacity(0.1)),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
                 ),
                 child: const Text(
                   'You have already submitted this assignment.',
@@ -138,9 +156,25 @@ class _StudentAssignmentDetailScreenState
                           ),
                         ),
                       ),
-                      validator: (v) =>
-                          v!.isEmpty ? 'Please enter your answer' : null,
+                      validator: (v) => (v == null || v.trim().isEmpty) && _filePath == null
+                          ? 'Enter an answer or attach a file'
+                          : null,
                     ),
+                    const SizedBox(height: 14),
+                    OutlinedButton.icon(
+                      onPressed: _pickFile,
+                      icon: const Icon(Icons.attach_file),
+                      label: Text(_fileName ?? 'Attach file'),
+                    ),
+                    if (_fileName != null)
+                      TextButton.icon(
+                        onPressed: () => setState(() {
+                          _fileName = null;
+                          _filePath = null;
+                        }),
+                        icon: const Icon(Icons.close, size: 18),
+                        label: const Text('Remove attachment'),
+                      ),
                     const SizedBox(height: 24),
                     SizedBox(
                       width: double.infinity,

@@ -94,7 +94,7 @@ class _ClassListScreenState extends State<ClassListScreen> {
                                     decoration: BoxDecoration(
                                       color: const Color(
                                         0xFF6366F1,
-                                      ).withOpacity(0.1),
+                                      ).withValues(alpha: 0.1),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Center(

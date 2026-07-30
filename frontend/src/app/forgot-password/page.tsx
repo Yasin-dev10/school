@@ -1,45 +1,87 @@
 "use client";
+
+import { FormEvent, useEffect, useState } from 'react';
 import Link from 'next/link';
+import api from '../utils/api';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
 export default function ForgotPasswordPage() {
+    const [token, setToken] = useState('');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [message, setMessage] = useState('');
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        setToken(new URLSearchParams(window.location.search).get('token') || '');
+    }, []);
+
+    const submit = async (event: FormEvent) => {
+        event.preventDefault();
+        setError('');
+        setMessage('');
+        if (token && password !== confirmPassword) {
+            setError('Passwords do not match.');
+            return;
+        }
+        setLoading(true);
+        try {
+            const response = token
+                ? await api.post('/auth/reset-password', { token, password })
+                : await api.post('/auth/forgot-password', { email });
+            setMessage(response.data.message);
+            if (token) {
+                setPassword('');
+                setConfirmPassword('');
+            }
+        } catch (requestError: any) {
+            setError(requestError.response?.data?.message || 'Could not process the request.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
-        <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
-            <div className="absolute top-4 right-4 z-50">
-                <ThemeToggle />
-            </div>
-
-            <div className="absolute top-0 -left-48 w-96 h-96 bg-indigo-600/20 rounded-full blur-[128px] pointer-events-none"></div>
-            <div className="absolute bottom-0 -right-48 w-96 h-96 bg-purple-600/20 rounded-full blur-[128px] pointer-events-none"></div>
-
-            <div className="z-10 w-full max-w-md p-8">
-                <div className="glass-dark p-8 rounded-3xl border border-slate-200 dark:border-white/10 shadow-2xl text-center">
-                    <div className="inline-flex items-center justify-center w-16 h-16 bg-amber-500/10 border border-amber-500/20 rounded-2xl mb-6">
-                        <svg className="w-8 h-8 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m0 0v2m0-2h2m-2 0H10m11-3V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h14a2 2 0 002-2v-4zM14 4h6m0 0v6m0-6L10 14" />
-                        </svg>
-                    </div>
-
-                    <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight mb-4">Reset Password</h1>
-
-                    <p className="text-slate-600 dark:text-slate-400 mb-8 leading-relaxed">
-                        For security reasons in our multi-tenant system, password resets must be initiated by your school administrator or the person who created your account.
+        <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-4">
+            <div className="absolute top-4 right-4"><ThemeToggle /></div>
+            <form onSubmit={submit} className="w-full max-w-md bg-white dark:bg-slate-900 p-7 sm:p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl space-y-5">
+                <div>
+                    <h1 className="text-2xl font-black text-slate-900 dark:text-white">
+                        {token ? 'Choose a new password' : 'Reset your password'}
+                    </h1>
+                    <p className="text-sm text-slate-500 mt-2">
+                        {token ? 'Enter a secure password with at least 8 characters.' : 'We will email a secure reset link to your account address.'}
                     </p>
-
-                    <div className="space-y-4">
-                        <div className="p-4 bg-indigo-500/5 border border-indigo-500/10 rounded-xl text-sm text-slate-500 dark:text-slate-400">
-                            If you are a <strong>School Admin</strong> and lost access, please contact SchoolOS Global Support.
-                        </div>
-
-                        <Link
-                            href="/login"
-                            className="block w-full py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition shadow-lg shadow-indigo-500/20 active:scale-[0.98]"
-                        >
-                            Back to Login
-                        </Link>
-                    </div>
                 </div>
-            </div>
+                {token ? (
+                    <>
+                        <label className="block text-sm font-semibold">
+                            New password
+                            <input type="password" minLength={8} required value={password} onChange={event => setPassword(event.target.value)}
+                                className="mt-1 w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" />
+                        </label>
+                        <label className="block text-sm font-semibold">
+                            Confirm password
+                            <input type="password" minLength={8} required value={confirmPassword} onChange={event => setConfirmPassword(event.target.value)}
+                                className="mt-1 w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" />
+                        </label>
+                    </>
+                ) : (
+                    <label className="block text-sm font-semibold">
+                        Email address
+                        <input type="email" required value={email} onChange={event => setEmail(event.target.value)}
+                            className="mt-1 w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500" />
+                    </label>
+                )}
+                {error && <p role="alert" className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 text-rose-600 text-sm">{error}</p>}
+                {message && <p className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 text-sm">{message}</p>}
+                <button disabled={loading} className="w-full py-3.5 bg-indigo-600 disabled:opacity-60 text-white rounded-xl font-bold">
+                    {loading ? 'Processing...' : token ? 'Save new password' : 'Send reset link'}
+                </button>
+                <Link href="/login" className="block text-center text-sm text-indigo-600 font-semibold">Back to login</Link>
+            </form>
         </div>
     );
 }

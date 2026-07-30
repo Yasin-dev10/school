@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/teacher_provider.dart';
+import '../../services/api_service.dart';
+import 'dart:convert';
 import '../attendance_screen.dart';
 import '../students/student_profile_screen.dart';
 
@@ -24,6 +26,8 @@ class _ClassDetailScreenState extends State<ClassDetailScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   String _sortBy = 'name';
+  List<dynamic> _timetable = [];
+  bool _timetableLoading = true;
 
   @override
   void initState() {
@@ -38,7 +42,22 @@ class _ClassDetailScreenState extends State<ClassDetailScreen>
       final provider = Provider.of<TeacherProvider>(context, listen: false);
       provider.fetchClassStudents(widget.classId);
       provider.fetchClassAnalytics(widget.classId);
+      _fetchTimetable();
     });
+  }
+
+  Future<void> _fetchTimetable() async {
+    try {
+      final response = await ApiService().get('/timetable/class/${widget.classId}');
+      if (!mounted) return;
+      final data = jsonDecode(response.body);
+      setState(() {
+        _timetable = response.statusCode == 200 ? (data['data'] ?? []) : [];
+        _timetableLoading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _timetableLoading = false);
+    }
   }
 
   @override
@@ -112,7 +131,7 @@ class _ClassDetailScreenState extends State<ClassDetailScreen>
         children: [
           _buildStudentsList(),
           _buildPerformanceTab(),
-          _buildTimetablePlaceholder(),
+          _buildTimetable(),
         ],
       ),
     );
@@ -159,7 +178,7 @@ class _ClassDetailScreenState extends State<ClassDetailScreen>
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
+                      color: Colors.black.withValues(alpha: 0.05),
                       blurRadius: 10,
                     ),
                   ],
@@ -221,7 +240,7 @@ class _ClassDetailScreenState extends State<ClassDetailScreen>
                         width: 30,
                         height: (120 * perc).toDouble(),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF6366F1).withOpacity(0.8),
+                          color: const Color(0xFF6366F1).withValues(alpha: 0.8),
                           borderRadius: BorderRadius.circular(8),
                         ),
                       ),
@@ -280,7 +299,7 @@ class _ClassDetailScreenState extends State<ClassDetailScreen>
           ),
           child: ListTile(
             leading: CircleAvatar(
-              backgroundColor: const Color(0xFF6366F1).withOpacity(0.1),
+              backgroundColor: const Color(0xFF6366F1).withValues(alpha: 0.1),
               child: Text(
                 '${student['firstName']?[0] ?? ''}${student['lastName']?[0] ?? ''}',
                 style: const TextStyle(
@@ -326,22 +345,34 @@ class _ClassDetailScreenState extends State<ClassDetailScreen>
     );
   }
 
-  Widget _buildTimetablePlaceholder() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.calendar_today_outlined,
-            size: 64,
-            color: Colors.grey[400],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'No timetable available for this class',
-            style: TextStyle(color: Colors.grey[600], fontSize: 16),
-          ),
-        ],
+  Widget _buildTimetable() {
+    if (_timetableLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_timetable.isEmpty) {
+      return const Center(child: Text('No timetable available for this class.'));
+    }
+    const dayOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    final sorted = [..._timetable]..sort((a, b) {
+      final dayCompare = dayOrder.indexOf(a['day']).compareTo(dayOrder.indexOf(b['day']));
+      return dayCompare != 0 ? dayCompare : '${a['startTime']}'.compareTo('${b['startTime']}');
+    });
+    return RefreshIndicator(
+      onRefresh: _fetchTimetable,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: sorted.length,
+        itemBuilder: (context, index) {
+          final slot = sorted[index];
+          return Card(
+            child: ListTile(
+              leading: CircleAvatar(child: Text('${slot['day']}'.substring(0, 2))),
+              title: Text(slot['subject']?['name'] ?? 'Subject'),
+              subtitle: Text('${slot['day']} • ${slot['startTime']}–${slot['endTime']}'),
+              trailing: Text(slot['room'] ?? ''),
+            ),
+          );
+        },
       ),
     );
   }
@@ -370,7 +401,7 @@ class _ClassDetailScreenState extends State<ClassDetailScreen>
                 student['_id'] ?? student['id'],
               );
               if (success) {
-                if (mounted) {
+                if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Student deleted successfully'),
@@ -378,7 +409,7 @@ class _ClassDetailScreenState extends State<ClassDetailScreen>
                   );
                 }
               } else {
-                if (mounted) {
+                if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(

@@ -349,12 +349,15 @@ model User {
   tenantId      String?
   firstName     String
   lastName      String
-  email         String
+  email         String?
+  username      String?     @unique
   password      String
   role          UserRole
   status        UserStatus @default(active)
   tokenVersion  Int        @default(0)
   lastLogin     DateTime?
+  resetPasswordTokenHash String?
+  resetPasswordExpires   DateTime?
 
   // Profile (flattened)
   phone              String?
@@ -442,6 +445,8 @@ model User {
 
   @@index([tenantId])
   @@index([email])
+  @@index([username])
+  @@index([resetPasswordTokenHash])
   @@map("users")
 }
 

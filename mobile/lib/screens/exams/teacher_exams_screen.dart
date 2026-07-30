@@ -54,9 +54,9 @@ class _TeacherExamsScreenState extends State<TeacherExamsScreen> {
                   return Container(
                     margin: const EdgeInsets.only(bottom: 20),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
+                      color: Colors.white.withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: Colors.white.withOpacity(0.1)),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
                     ),
                     child: Padding(
                       padding: const EdgeInsets.all(20),
@@ -83,7 +83,7 @@ class _TeacherExamsScreenState extends State<TeacherExamsScreen> {
                                       style: TextStyle(
                                         color: const Color(
                                           0xFF6366F1,
-                                        ).withOpacity(0.8),
+                                        ).withValues(alpha: 0.8),
                                         fontSize: 12,
                                         fontWeight: FontWeight.bold,
                                         letterSpacing: 1.2,
@@ -99,8 +99,8 @@ class _TeacherExamsScreenState extends State<TeacherExamsScreen> {
                                 ),
                                 decoration: BoxDecoration(
                                   color: (exam['isApproved'] ?? false)
-                                      ? Colors.green.withOpacity(0.1)
-                                      : Colors.orange.withOpacity(0.1),
+                                      ? Colors.green.withValues(alpha: 0.1)
+                                      : Colors.orange.withValues(alpha: 0.1),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Text(
@@ -124,13 +124,13 @@ class _TeacherExamsScreenState extends State<TeacherExamsScreen> {
                               Icon(
                                 Icons.calendar_today,
                                 size: 14,
-                                color: Colors.white.withOpacity(0.5),
+                                color: Colors.white.withValues(alpha: 0.5),
                               ),
                               const SizedBox(width: 8),
                               Text(
                                 '${exam['startDate'].toString().split('T')[0]} - ${exam['endDate'].toString().split('T')[0]}',
                                 style: TextStyle(
-                                  color: Colors.white.withOpacity(0.5),
+                                  color: Colors.white.withValues(alpha: 0.5),
                                   fontSize: 12,
                                 ),
                               ),

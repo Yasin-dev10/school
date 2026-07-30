@@ -230,7 +230,7 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
               label,
               style: GoogleFonts.outfit(
                 fontSize: 12,
-                color: textColor.withOpacity(0.8),
+                color: textColor.withValues(alpha: 0.8),
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -389,7 +389,7 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),

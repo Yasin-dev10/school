@@ -6,6 +6,7 @@ const {
     getClassTimetable,
     getTeacherTimetable,
     getStudentTimetable,
+    updateTimetable,
     deleteTimetableSlot,
     getTeacherWorkload,
     bulkUpdateClassTimetable
@@ -31,6 +32,7 @@ router.route('/class/:classId')
     .get(authorize('school-admin', 'teacher', 'student', 'parent'), getClassTimetable);
 
 router.route('/:id')
+    .put(authorize('school-admin'), updateTimetable)
     .delete(authorize('school-admin'), deleteTimetableSlot);
 
 module.exports = router;

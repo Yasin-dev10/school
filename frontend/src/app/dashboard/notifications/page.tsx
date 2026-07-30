@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from 'react';
 import api from '../../utils/api';
+import { getSocket } from '../../utils/socket';
 
 export default function NotificationsPage() {
     const [user, setUser] = useState<any>(null);
@@ -60,7 +61,6 @@ export default function NotificationsPage() {
         fetchUnreadCount();
 
         // Socket Listener
-        const { getSocket } = require('../../utils/socket');
         const socket = getSocket();
 
         if (socket) {

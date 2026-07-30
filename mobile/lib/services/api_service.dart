@@ -36,6 +36,17 @@ class ApiService {
     }
   }
 
+  bool _canQueueWrite(String endpoint) {
+    const sensitivePrefixes = [
+      '/fees/pay',
+      '/stripe',
+      '/salaries',
+      '/inventory',
+      '/certificates',
+    ];
+    return !sensitivePrefixes.any(endpoint.startsWith);
+  }
+
   Future<http.Response> get(String endpoint) async {
     try {
       if (await _isOnline()) {
@@ -98,6 +109,15 @@ class ApiService {
 
         return response;
       } else {
+        if (!_canQueueWrite(endpoint)) {
+          return http.Response(
+            jsonEncode({
+              'success': false,
+              'message': 'This action requires an active internet connection.',
+            }),
+            503,
+          );
+        }
         debugPrint('Offline: Queuing request for $endpoint');
         await OfflineService.queueRequest(
           endpoint: endpoint,
@@ -118,6 +138,7 @@ class ApiService {
       debugPrint('POST Error [$endpoint]: $e');
       // Queue on network error too
       if (e is SocketException || e is http.ClientException) {
+        if (!_canQueueWrite(endpoint)) rethrow;
         await OfflineService.queueRequest(
           endpoint: endpoint,
           method: 'POST',
@@ -267,23 +288,12 @@ class ApiService {
         debugPrint('DELETE Response [$endpoint]: ${response.statusCode}');
         return response;
       } else {
-        // Queueing DELETE is tricky if we don't have body, but usually DELETE is simple
-        // We might need to handle this carefully. For now, let's just fail or mock success if critical?
-        // Actually, offline DELETE is risky. But let's queue it if possible.
-        // Wait, queueRequest needs a body.
-        await OfflineService.queueRequest(
-          endpoint: endpoint,
-          method: 'DELETE',
-          body: {}, // Empty body for DELETE
-          headers: await _getHeaders(),
-        );
         return http.Response(
           jsonEncode({
-            'success': true,
-            'message': 'Deletion queued offline.',
-            'offline': true,
+            'success': false,
+            'message': 'Deletion requires an active internet connection.',
           }),
-          200,
+          503,
         );
       }
     } catch (e) {

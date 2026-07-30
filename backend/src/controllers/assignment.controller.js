@@ -141,6 +141,8 @@ exports.deleteAssignment = async (req, res) => {
         if (!exists) return res.status(404).json({ message: 'Assignment not found' });
         if (req.user.role === 'teacher' && exists.teacherId !== req.user.id)
             return res.status(403).json({ success: false, message: 'You can only delete your own assignments' });
+        if (exists.status !== 'draft')
+            return res.status(400).json({ success: false, message: 'Only draft assignments can be deleted' });
 
         await prisma.assignment.delete({ where: { id: req.params.id } });
         res.status(200).json({ success: true, message: 'Assignment deleted' });
@@ -165,6 +167,9 @@ exports.submitAssignment = async (req, res) => {
         });
         if (!assignment) {
             return res.status(404).json({ success: false, message: 'Assignment not found' });
+        }
+        if (assignment.status === 'closed' || new Date(assignment.dueDate).getTime() < Date.now()) {
+            return res.status(400).json({ success: false, message: 'Assignment deadline has passed' });
         }
 
         // Only accept server-side uploaded file path — never client-supplied paths

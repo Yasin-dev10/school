@@ -87,7 +87,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
                 gradeController.text,
                 feedbackController.text,
               );
-              if (success && mounted) {
+              if (success && context.mounted) {
                 Navigator.pop(context);
                 teacher.fetchSubmissions(widget.assignment['_id']); // Refresh
               }
@@ -136,7 +136,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
+                        color: Colors.white.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
@@ -220,7 +220,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen> {
                                 Container(
                                   padding: const EdgeInsets.all(8),
                                   decoration: BoxDecoration(
-                                    color: Colors.green.withOpacity(0.1),
+                                    color: Colors.green.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Text(

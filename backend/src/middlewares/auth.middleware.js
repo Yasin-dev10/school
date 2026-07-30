@@ -29,7 +29,7 @@ exports.protect = async (req, res, next) => {
             where: { id: decoded.id },
             select: {
                 id: true, tenantId: true, firstName: true, lastName: true,
-                email: true, role: true, status: true, lastLogin: true,
+                email: true, username: true, role: true, status: true, lastLogin: true,
                 tokenVersion: true,
                 phone: true, profileAddress: true, avatarUrl: true,
                 designation: true, admissionNo: true, studentId: true,

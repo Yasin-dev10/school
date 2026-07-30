@@ -191,7 +191,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
               );
               final success = await provider.deleteStudent(widget.studentId);
               if (success) {
-                if (mounted) {
+                if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Student deleted successfully'),
@@ -200,7 +200,7 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
                   Navigator.pop(context); // Go back after deletion
                 }
               } else {
-                if (mounted) {
+                if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(

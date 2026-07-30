@@ -155,21 +155,21 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
                   boxShadow: isSelected
                       ? [
                           BoxShadow(
-                            color: const Color(0xFF2563EB).withOpacity(0.3),
+                            color: const Color(0xFF2563EB).withValues(alpha: 0.3),
                             blurRadius: 8,
                             offset: const Offset(0, 4),
                           ),
                         ]
                       : [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
+                            color: Colors.black.withValues(alpha: 0.05),
                             blurRadius: 4,
                             offset: const Offset(0, 2),
                           ),
                         ],
                   border: isSelected
                       ? null
-                      : Border.all(color: Colors.black.withOpacity(0.05)),
+                      : Border.all(color: Colors.black.withValues(alpha: 0.05)),
                 ),
                 child: Row(
                   children: [
@@ -209,7 +209,7 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF2563EB).withOpacity(0.4),
+            color: const Color(0xFF2563EB).withValues(alpha: 0.4),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -239,7 +239,7 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
+              color: Colors.white.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(30),
             ),
             child: Row(
@@ -335,7 +335,7 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withValues(alpha: 0.03),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -349,7 +349,7 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
                 width: 50,
                 height: 50,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
+                  color: color.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Icon(icon, color: color, size: 24),

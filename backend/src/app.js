@@ -28,6 +28,7 @@ const parentRoutes = require('./routes/parent.routes');
 const contactMessageRoutes = require('./routes/contactMessage.routes');
 const gradeRoutes = require('./routes/grade.routes');
 const stripeRoutes = require('./routes/stripe.routes');
+const inventoryRoutes = require('./routes/inventory.routes');
 const { handleValidationError } = require('./middlewares/validation.middleware');
 const { parseAllowedOrigins, redactSensitive } = require('./utils/security');
 const { getJwtSecret } = require('./utils/security');
@@ -72,7 +73,7 @@ const loginLimiter = rateLimit({
     message: { message: 'Too many login attempts, please try again later' },
 });
 
-app.use('/api/auth/login', loginLimiter);
+app.use(['/api/auth/login', '/api/auth/forgot-password', '/api/auth/reset-password'], loginLimiter);
 
 // Routes
 app.use('/api/tenants', tenantRoutes);
@@ -97,6 +98,7 @@ app.use('/api/parent', parentRoutes);
 app.use('/api/contact-messages', contactMessageRoutes);
 app.use('/api/grades', gradeRoutes);
 app.use('/api/stripe', stripeRoutes);
+app.use('/api/inventory', inventoryRoutes);
 
 app.get('/', (req, res) => {
     res.json({ message: 'School Management System API is running' });

@@ -21,7 +21,7 @@ class ParentProvider with ChangeNotifier {
         _children = data['data'];
       }
     } catch (e) {
-      print('Error fetching children: $e');
+      debugPrint('Error fetching children: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -36,7 +36,7 @@ class ParentProvider with ChangeNotifier {
       final data = jsonDecode(response.body);
       return data['data'] ?? {};
     } catch (e) {
-      print('Error fetching child attendance: $e');
+      debugPrint('Error fetching child attendance: $e');
       return {};
     }
   }
@@ -47,7 +47,7 @@ class ParentProvider with ChangeNotifier {
       final data = jsonDecode(response.body);
       return data['data'] ?? [];
     } catch (e) {
-      print('Error fetching child marks: $e');
+      debugPrint('Error fetching child marks: $e');
       return [];
     }
   }
@@ -60,7 +60,7 @@ class ParentProvider with ChangeNotifier {
       final data = jsonDecode(response.body);
       return data['data'] ?? [];
     } catch (e) {
-      print('Error fetching child timetable: $e');
+      debugPrint('Error fetching child timetable: $e');
       return [];
     }
   }

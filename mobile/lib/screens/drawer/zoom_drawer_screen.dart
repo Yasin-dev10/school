@@ -3,8 +3,6 @@ import 'package:flutter_zoom_drawer/flutter_zoom_drawer.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../dashboard_screen.dart';
-import '../student_dashboard_screen.dart';
-import '../parent/parent_dashboard_screen.dart';
 import 'menu_screen.dart';
 
 class ZoomDrawerScreen extends StatefulWidget {
@@ -28,18 +26,15 @@ class _ZoomDrawerScreenState extends State<ZoomDrawerScreen> {
   void _initializeScreen() {
     final auth = Provider.of<AuthProvider>(context, listen: false);
     final role = auth.user?['role'];
+    final menuItems = MenuScreen.getMenuItems(role);
 
-    // Set initial screen based on role
-    if (role == 'student') {
-      _currentScreen = const StudentDashboardScreen();
-    } else if (role == 'teacher') {
-      _currentScreen = const DashboardScreen();
-    } else if (role == 'parent') {
-      _currentScreen = ParentDashboardScreen();
+    if (menuItems.isNotEmpty) {
+      _currentScreen = menuItems.first.screen;
+      _currentTitle = menuItems.first.title;
     } else {
       _currentScreen = const DashboardScreen();
+      _currentTitle = 'Dashboard';
     }
-    _currentTitle = 'Dashboard';
   }
 
   @override

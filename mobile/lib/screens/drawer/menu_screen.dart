@@ -23,6 +23,8 @@ import '../student/student_fees_screen.dart';
 import '../login_screen.dart';
 import '../parent/parent_dashboard_screen.dart';
 import '../certificates/staff_certificates_screen.dart';
+import '../classes/class_list_screen.dart';
+import '../students/all_students_screen.dart';
 
 class MenuItem {
   final String title;
@@ -43,7 +45,41 @@ class MenuScreen extends StatelessWidget {
   });
 
   static List<MenuItem> getMenuItems(String? role) {
-    if (role == 'teacher') {
+    if (role == 'school-admin') {
+      return [
+        const MenuItem('Dashboard', Icons.dashboard_rounded, DashboardScreen()),
+        const MenuItem('Students', Icons.school_rounded, AllStudentsScreen()),
+        const MenuItem('Classes', Icons.meeting_room_rounded, ClassListScreen()),
+        const MenuItem('Attendance', Icons.calendar_today_rounded, AttendanceScreen()),
+        const MenuItem('Assignments', Icons.assignment_rounded, AssignmentListScreen()),
+        const MenuItem('Exams', Icons.grade_rounded, TeacherExamsScreen()),
+        const MenuItem('Timetable', Icons.calendar_month_rounded, TeacherTimetableScreen()),
+        const MenuItem('LMS Materials', Icons.menu_book_rounded, MaterialListScreen()),
+        const MenuItem('Certificates', Icons.workspace_premium_rounded, StaffCertificatesScreen()),
+        const MenuItem('Payslips', Icons.receipt_long_rounded, PayslipsScreen()),
+        const MenuItem('Profile', Icons.person_rounded, ProfileScreen()),
+        const MenuItem('Notifications', Icons.notifications_rounded, NotificationsScreen()),
+      ];
+    } else if (role == 'receptionist') {
+      return [
+        const MenuItem('Students', Icons.school_rounded, AllStudentsScreen()),
+        const MenuItem('Classes', Icons.meeting_room_rounded, ClassListScreen()),
+        const MenuItem('Profile', Icons.person_rounded, ProfileScreen()),
+        const MenuItem('Notifications', Icons.notifications_rounded, NotificationsScreen()),
+      ];
+    } else if (role == 'accountant') {
+      return [
+        const MenuItem('Payroll', Icons.receipt_long_rounded, PayslipsScreen()),
+        const MenuItem('Profile', Icons.person_rounded, ProfileScreen()),
+        const MenuItem('Notifications', Icons.notifications_rounded, NotificationsScreen()),
+      ];
+    } else if (role == 'librarian') {
+      return [
+        const MenuItem('LMS Materials', Icons.menu_book_rounded, MaterialListScreen()),
+        const MenuItem('Profile', Icons.person_rounded, ProfileScreen()),
+        const MenuItem('Notifications', Icons.notifications_rounded, NotificationsScreen()),
+      ];
+    } else if (role == 'teacher') {
       return [
         const MenuItem('Dashboard', Icons.dashboard_rounded, DashboardScreen()),
         const MenuItem(
@@ -220,7 +256,7 @@ class MenuScreen extends StatelessWidget {
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF6366F1).withOpacity(0.3),
+                        color: const Color(0xFF6366F1).withValues(alpha: 0.3),
                         blurRadius: 12,
                         offset: const Offset(0, 6),
                       ),
@@ -256,10 +292,10 @@ class MenuScreen extends StatelessWidget {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF6366F1).withOpacity(0.2),
+                    color: const Color(0xFF6366F1).withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                      color: const Color(0xFF6366F1).withOpacity(0.3),
+                      color: const Color(0xFF6366F1).withValues(alpha: 0.3),
                     ),
                   ),
                   child: Text(
@@ -285,19 +321,19 @@ class MenuScreen extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12), // Increased spacing
       decoration: BoxDecoration(
         color: isSelected
-            ? const Color(0xFF6366F1).withOpacity(0.15)
+            ? const Color(0xFF6366F1).withValues(alpha: 0.15)
             : Colors.transparent,
         borderRadius: BorderRadius.circular(16),
         border: isSelected
             ? Border.all(
-                color: const Color(0xFF6366F1).withOpacity(0.3),
+                color: const Color(0xFF6366F1).withValues(alpha: 0.3),
                 width: 1,
               )
             : Border.all(color: Colors.transparent),
         boxShadow: isSelected
             ? [
                 BoxShadow(
-                  color: const Color(0xFF6366F1).withOpacity(0.1),
+                  color: const Color(0xFF6366F1).withValues(alpha: 0.1),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -309,8 +345,8 @@ class MenuScreen extends StatelessWidget {
         child: InkWell(
           onTap: () => onMenuItemSelected(item),
           borderRadius: BorderRadius.circular(16),
-          splashColor: const Color(0xFF6366F1).withOpacity(0.15),
-          highlightColor: const Color(0xFF6366F1).withOpacity(0.08),
+          splashColor: const Color(0xFF6366F1).withValues(alpha: 0.15),
+          highlightColor: const Color(0xFF6366F1).withValues(alpha: 0.08),
           child: Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: 20,
@@ -322,7 +358,7 @@ class MenuScreen extends StatelessWidget {
                   item.icon,
                   color: isSelected
                       ? const Color(0xFF818CF8)
-                      : Colors.white.withOpacity(0.6),
+                      : Colors.white.withValues(alpha: 0.6),
                   size: 26, // Slightly larger icon
                 ),
                 const SizedBox(width: 16),
@@ -332,7 +368,7 @@ class MenuScreen extends StatelessWidget {
                     style: GoogleFonts.inter(
                       color: isSelected
                           ? Colors.white
-                          : Colors.white.withOpacity(0.7),
+                          : Colors.white.withValues(alpha: 0.7),
                       fontSize: 17, // Slightly larger text
                       fontWeight: isSelected
                           ? FontWeight.w600
@@ -351,7 +387,7 @@ class MenuScreen extends StatelessWidget {
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF818CF8).withOpacity(0.4),
+                          color: const Color(0xFF818CF8).withValues(alpha: 0.4),
                           blurRadius: 6,
                         ),
                       ],
@@ -372,11 +408,11 @@ class MenuScreen extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFF43F5E).withOpacity(0.3)),
-          color: const Color(0xFFF43F5E).withOpacity(0.1),
+          border: Border.all(color: const Color(0xFFF43F5E).withValues(alpha: 0.3)),
+          color: const Color(0xFFF43F5E).withValues(alpha: 0.1),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFFF43F5E).withOpacity(0.1),
+              color: const Color(0xFFF43F5E).withValues(alpha: 0.1),
               blurRadius: 12,
               offset: const Offset(0, 4),
             ),
@@ -395,7 +431,7 @@ class MenuScreen extends StatelessWidget {
               }
             },
             borderRadius: BorderRadius.circular(16),
-            splashColor: const Color(0xFFF43F5E).withOpacity(0.2),
+            splashColor: const Color(0xFFF43F5E).withValues(alpha: 0.2),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               child: Row(

@@ -93,7 +93,7 @@ class _AllStudentsScreenState extends State<AllStudentsScreen> {
                             leading: CircleAvatar(
                               backgroundColor: const Color(
                                 0xFF6366F1,
-                              ).withOpacity(0.1),
+                              ).withValues(alpha: 0.1),
                               child: Text(
                                 '${student['firstName']?[0] ?? ''}${student['lastName']?[0] ?? ''}',
                                 style: const TextStyle(
@@ -173,7 +173,7 @@ class _AllStudentsScreenState extends State<AllStudentsScreen> {
                 student['_id'] ?? student['id'],
               );
               if (success) {
-                if (mounted) {
+                if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Student deleted successfully'),
@@ -181,7 +181,7 @@ class _AllStudentsScreenState extends State<AllStudentsScreen> {
                   );
                 }
               } else {
-                if (mounted) {
+                if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(

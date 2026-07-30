@@ -16,8 +16,107 @@ class _StaffCertificatesScreenState extends State<StaffCertificatesScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<TeacherProvider>().fetchCertificates();
+      final provider = context.read<TeacherProvider>();
+      provider.fetchCertificates();
+      provider.fetchAllStudents();
     });
+  }
+
+  Future<void> _showIssueDialog() async {
+    final provider = context.read<TeacherProvider>();
+    String? studentId;
+    String certificateType = 'Academic Excellence';
+    final titleController = TextEditingController();
+    final descriptionController = TextEditingController();
+
+    final submitted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Issue Certificate'),
+          content: SizedBox(
+            width: 480,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<String>(
+                    initialValue: studentId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Student'),
+                    items: provider.students.map<DropdownMenuItem<String>>((student) {
+                      final id = (student['id'] ?? student['_id']).toString();
+                      return DropdownMenuItem(
+                        value: id,
+                        child: Text('${student['firstName'] ?? ''} ${student['lastName'] ?? ''}'),
+                      );
+                    }).toList(),
+                    onChanged: (value) => setDialogState(() => studentId = value),
+                  ),
+                  const SizedBox(height: 14),
+                  DropdownButtonFormField<String>(
+                    initialValue: certificateType,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'Certificate type'),
+                    items: const [
+                      'Academic Excellence',
+                      'Perfect Attendance',
+                      'Course Completion',
+                      'Sports Achievement',
+                      'Extra-Curricular',
+                      'Graduation',
+                    ].map((type) => DropdownMenuItem(value: type, child: Text(type))).toList(),
+                    onChanged: (value) => setDialogState(() => certificateType = value!),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: titleController,
+                    decoration: const InputDecoration(labelText: 'Title'),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: descriptionController,
+                    maxLines: 3,
+                    decoration: const InputDecoration(labelText: 'Description'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () {
+                if (studentId == null || titleController.text.trim().isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Select a student and enter a title.')),
+                  );
+                  return;
+                }
+                Navigator.pop(dialogContext, true);
+              },
+              child: const Text('Issue'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (submitted == true && mounted) {
+      final success = await provider.issueCertificate({
+        'studentId': studentId,
+        'certificateType': certificateType,
+        'title': titleController.text.trim(),
+        'description': descriptionController.text.trim(),
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(success ? 'Certificate issued successfully.' : provider.errorMessage ?? 'Could not issue certificate.')),
+        );
+      }
+    }
+    titleController.dispose();
+    descriptionController.dispose();
   }
 
   @override
@@ -59,7 +158,7 @@ class _StaffCertificatesScreenState extends State<StaffCertificatesScreen> {
                   Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
+                      color: Colors.white.withValues(alpha: 0.05),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
@@ -93,9 +192,9 @@ class _StaffCertificatesScreenState extends State<StaffCertificatesScreen> {
                 return Container(
                   margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.05),
+                    color: Colors.white.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: Colors.white.withOpacity(0.1)),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
                   ),
                   child: Padding(
                     padding: const EdgeInsets.all(20),
@@ -120,7 +219,7 @@ class _StaffCertificatesScreenState extends State<StaffCertificatesScreen> {
                                 vertical: 4,
                               ),
                               decoration: BoxDecoration(
-                                color: Colors.green.withOpacity(0.1),
+                                color: Colors.green.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
@@ -174,7 +273,7 @@ class _StaffCertificatesScreenState extends State<StaffCertificatesScreen> {
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.2),
+                            color: Colors.black.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Row(
@@ -209,16 +308,7 @@ class _StaffCertificatesScreenState extends State<StaffCertificatesScreen> {
         },
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          // TODO: Implement issue certificate screen or dialog
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Issuance and generation of certificate is Coming soon to Mobile! Use Web Dashboard for full management.',
-              ),
-            ),
-          );
-        },
+        onPressed: _showIssueDialog,
         backgroundColor: Colors.indigo,
         child: const Icon(Icons.add),
       ),

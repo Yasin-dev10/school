@@ -4,17 +4,28 @@ const { logAction } = require('../utils/logger');
 // @desc    Create salary record
 exports.createSalary = async (req, res) => {
     try {
-        const { userId, month, year, basicSalary, allowances, deductions, netSalary } = req.body;
+        const { userId, month, year, basicSalary, allowances = [], deductions = [] } = req.body;
         const tenantId = req.user.tenantId;
+        const numericBasicSalary = Number(basicSalary);
+        if (!userId || !month || !Number.isInteger(Number(year)) || !Number.isFinite(numericBasicSalary) || numericBasicSalary < 0) {
+            return res.status(400).json({ success: false, message: 'User, month, year and a valid basic salary are required' });
+        }
+        const employee = await prisma.user.findFirst({ where: { id: userId, tenantId } });
+        if (!employee) return res.status(404).json({ success: false, message: 'Staff member not found' });
+        const duplicate = await prisma.salary.findFirst({ where: { userId, month, year: Number(year), tenantId } });
+        if (duplicate) return res.status(409).json({ success: false, message: 'Payroll already exists for this employee and period' });
+        const allowanceTotal = allowances.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+        const deductionTotal = deductions.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+        const netSalary = Math.max(0, numericBasicSalary + allowanceTotal - deductionTotal);
 
         const salary = await prisma.salary.create({
             data: {
-                userId, month, year, basicSalary, netSalary, tenantId,
+                userId, month, year: Number(year), basicSalary: numericBasicSalary, netSalary, tenantId,
                 ...(allowances?.length > 0 && {
-                    allowances: { create: allowances.map(a => ({ name: a.name, amount: a.amount })) }
+                    allowances: { create: allowances.map(a => ({ name: a.name, amount: Number(a.amount) })) }
                 }),
                 ...(deductions?.length > 0 && {
-                    deductions: { create: deductions.map(d => ({ name: d.name, amount: d.amount })) }
+                    deductions: { create: deductions.map(d => ({ name: d.name, amount: Number(d.amount) })) }
                 })
             },
             include: { allowances: true, deductions: true, user: { select: { id: true, firstName: true, lastName: true, role: true } } }
@@ -121,7 +132,76 @@ exports.deleteSalary = async (req, res) => {
 
 exports.getMySalaries = exports.getMySalary;
 exports.getAllSalaries = exports.getSalaries;
-exports.runPayroll = async (req, res) => { res.status(200).json({ success: true, message: "Not implemented" }) };
+exports.runPayroll = async (req, res) => {
+    try {
+        const tenantId = req.user.tenantId;
+        const { month, year, userIds, allowances = [], deductions = [] } = req.body;
+        const numericYear = Number(year);
+        if (!month || !Number.isInteger(numericYear)) {
+            return res.status(400).json({ success: false, message: 'A valid month and year are required' });
+        }
+
+        const users = await prisma.user.findMany({
+            where: {
+                tenantId,
+                status: 'active',
+                role: { in: ['teacher', 'accountant', 'librarian', 'receptionist'] },
+                ...(Array.isArray(userIds) && userIds.length ? { id: { in: userIds } } : {})
+            },
+            select: { id: true, firstName: true, lastName: true, salary: true }
+        });
+        if (!users.length) {
+            return res.status(400).json({ success: false, message: 'No eligible staff found for payroll' });
+        }
+
+        const existing = await prisma.salary.findMany({
+            where: { tenantId, month, year: numericYear, userId: { in: users.map(user => user.id) } },
+            select: { userId: true }
+        });
+        const existingIds = new Set(existing.map(record => record.userId));
+        const created = [];
+        const skipped = [];
+
+        for (const user of users) {
+            if (existingIds.has(user.id)) {
+                skipped.push({ userId: user.id, reason: 'Payroll already exists' });
+                continue;
+            }
+            const basicSalary = Number(user.salary);
+            if (!Number.isFinite(basicSalary) || basicSalary < 0) {
+                skipped.push({ userId: user.id, reason: 'Missing or invalid salary on staff profile' });
+                continue;
+            }
+            const allowanceTotal = allowances.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+            const deductionTotal = deductions.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+            const salary = await prisma.salary.create({
+                data: {
+                    userId: user.id,
+                    month,
+                    year: numericYear,
+                    basicSalary,
+                    netSalary: Math.max(0, basicSalary + allowanceTotal - deductionTotal),
+                    tenantId,
+                    ...(allowances.length && { allowances: { create: allowances.map(item => ({ name: item.name, amount: Number(item.amount) })) } }),
+                    ...(deductions.length && { deductions: { create: deductions.map(item => ({ name: item.name, amount: Number(item.amount) })) } })
+                },
+                include: { allowances: true, deductions: true, user: { select: { id: true, firstName: true, lastName: true } } }
+            });
+            created.push(salary);
+        }
+
+        await logAction({
+            action: 'CREATE',
+            module: 'USER',
+            details: `Ran payroll for ${month} ${numericYear}: ${created.length} created, ${skipped.length} skipped`,
+            userId: req.user.id,
+            tenantId
+        });
+        res.status(201).json({ success: true, count: created.length, skipped, data: created });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
 exports.markSalaryPaid = async (req, res) => {
     try {
         const exists = await prisma.salary.findFirst({

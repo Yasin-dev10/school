@@ -26,10 +26,9 @@ class _ParentDashboardScreenState extends State<ParentDashboardScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(
-      () =>
-          Provider.of<ParentProvider>(context, listen: false).fetchMyChildren(),
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<ParentProvider>().fetchMyChildren();
+    });
   }
 
   @override

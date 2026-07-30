@@ -694,8 +694,10 @@ class TeacherProvider with ChangeNotifier {
       final response = await _apiService.get('/certificates');
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        _certificates =
-            data['data']['certificates'] ?? data['data']['results'] ?? [];
+        final payload = data['data'];
+        _certificates = payload is List
+            ? payload
+            : (payload?['certificates'] ?? payload?['results'] ?? []);
         debugPrint('Loaded ${_certificates.length} certificates');
       } else {
         _errorMessage = 'Failed to load certificates';

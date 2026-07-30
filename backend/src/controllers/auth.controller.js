@@ -1,5 +1,7 @@
 const prisma = require('../config/prismaClient');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
+const { sendEmail } = require('../services/notification.service');
 const {
     signAccessToken,
     normalizeRole,
@@ -12,6 +14,7 @@ const buildAuthUser = (user) => ({
     firstName: user.firstName,
     lastName: user.lastName,
     email: user.email,
+    username: user.username,
     role: normalizeRole(user.role),
     tenantId: user.tenantId,
     profile: {
@@ -27,21 +30,28 @@ const buildAuthUser = (user) => ({
 // @route   POST /api/auth/login
 // @access  Public
 exports.login = async (req, res) => {
-    const { email, password, tenantId } = req.body;
+    const { identifier, email, username, password, tenantId } = req.body;
+    const loginId = String(identifier || username || email || '').trim();
 
-    if (!email || !password) {
-        return res.status(400).json({ message: 'Please provide email and password' });
+    if (!loginId || !password) {
+        return res.status(400).json({ message: 'Please provide username/email and password' });
     }
 
     try {
         const user = await prisma.user.findFirst({
-            where: { email: email.toLowerCase().trim() },
+            where: {
+                OR: [
+                    { username: loginId.toUpperCase() },
+                    { email: loginId.toLowerCase() }
+                ]
+            },
             select: {
                 id: true,
                 tenantId: true,
                 firstName: true,
                 lastName: true,
                 email: true,
+                username: true,
                 password: true,
                 role: true,
                 status: true,
@@ -106,7 +116,7 @@ exports.getMe = async (req, res) => {
         const user = await prisma.user.findUnique({
             where: { id: req.user.id },
             select: {
-                id: true, firstName: true, lastName: true, email: true,
+                id: true, firstName: true, lastName: true, email: true, username: true,
                 role: true, tenantId: true, status: true, lastLogin: true,
                 phone: true, profileAddress: true, avatarUrl: true,
                 designation: true, admissionNo: true, studentId: true,
@@ -135,7 +145,7 @@ exports.updateProfile = async (req, res) => {
                 ...(address && { profileAddress: address })
             },
             select: {
-                id: true, firstName: true, lastName: true, email: true,
+                id: true, firstName: true, lastName: true, email: true, username: true,
                 role: true, tenantId: true, phone: true, profileAddress: true,
                 avatarUrl: true, profileClass: true, profileSection: true
             }
@@ -205,5 +215,76 @@ exports.logout = async (req, res) => {
     } catch (error) {
         res.clearCookie('token', { ...cookieOptions(), maxAge: 0 });
         res.status(200).json({ success: true, message: 'Logged out successfully' });
+    }
+};
+
+exports.forgotPassword = async (req, res) => {
+    try {
+        const email = String(req.body.email || '').trim().toLowerCase();
+        if (!email) return res.status(400).json({ success: false, message: 'Email is required' });
+        const user = await prisma.user.findFirst({ where: { email, status: 'active' } });
+        const genericMessage = 'If an active account exists, password reset instructions have been sent.';
+        if (!user) return res.json({ success: true, message: genericMessage });
+
+        const token = crypto.randomBytes(32).toString('hex');
+        const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+        await prisma.user.update({
+            where: { id: user.id },
+            data: {
+                resetPasswordTokenHash: tokenHash,
+                resetPasswordExpires: new Date(Date.now() + 30 * 60 * 1000)
+            }
+        });
+        const frontendUrl = String(process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
+        const resetUrl = `${frontendUrl}/forgot-password?token=${encodeURIComponent(token)}`;
+        const delivered = await sendEmail(
+            user.email,
+            'Reset your School Registry password',
+            `Reset your password within 30 minutes: ${resetUrl}`,
+            `<p>Hello ${user.firstName},</p><p>Use this link within 30 minutes to reset your password:</p><p><a href="${resetUrl}">Reset password</a></p>`
+        );
+        if (!delivered) {
+            await prisma.user.update({
+                where: { id: user.id },
+                data: { resetPasswordTokenHash: null, resetPasswordExpires: null }
+            });
+            return res.status(503).json({ success: false, message: 'Password email service is not configured. Contact your administrator.' });
+        }
+        res.json({ success: true, message: genericMessage });
+    } catch (error) {
+        console.error('Forgot password error:', error.message);
+        res.status(500).json({ success: false, message: 'Could not process password reset request' });
+    }
+};
+
+exports.resetPassword = async (req, res) => {
+    try {
+        const { token, password } = req.body;
+        if (!token || !password || String(password).length < 8) {
+            return res.status(400).json({ success: false, message: 'A valid token and password of at least 8 characters are required' });
+        }
+        const tokenHash = crypto.createHash('sha256').update(String(token)).digest('hex');
+        const user = await prisma.user.findFirst({
+            where: {
+                resetPasswordTokenHash: tokenHash,
+                resetPasswordExpires: { gt: new Date() },
+                status: 'active'
+            }
+        });
+        if (!user) return res.status(400).json({ success: false, message: 'Reset link is invalid or has expired' });
+
+        const passwordHash = await bcrypt.hash(String(password), 12);
+        await prisma.user.update({
+            where: { id: user.id },
+            data: {
+                password: passwordHash,
+                tokenVersion: { increment: 1 },
+                resetPasswordTokenHash: null,
+                resetPasswordExpires: null
+            }
+        });
+        res.json({ success: true, message: 'Password reset successfully. You can now log in.' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Could not reset password' });
     }
 };

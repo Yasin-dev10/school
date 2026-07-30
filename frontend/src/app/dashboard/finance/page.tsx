@@ -684,8 +684,12 @@ export default function FinancePage() {
                             <div className="flex-1 border-t border-slate-200 mt-10 pt-2">
                                 <p className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Accountant Signature</p>
                             </div>
-                            <div className="flex-1 italic text-slate-300 text-xs flex items-center justify-center">
-                                Institution Seal & Stamp Placeholder
+                            <div className="flex-1 text-slate-400 text-xs flex items-center justify-center">
+                                {tenant?.config?.logoUrl ? (
+                                    <img src={tenant.config.logoUrl} alt="Institution seal" className="w-16 h-16 object-contain opacity-70 grayscale" />
+                                ) : (
+                                    <span className="uppercase font-bold tracking-wider">Institution Seal</span>
+                                )}
                             </div>
                             <div className="flex-1 border-t border-slate-200 mt-10 pt-2">
                                 <p className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Parent/Payer Signature</p>

@@ -42,7 +42,7 @@ export default function TeacherDetailPage() {
     if (!teacher) return <div className="p-20 text-center text-red-500 font-bold">Faculty record not found.</div>;
 
     return (
-        <div className="p-8 max-w-6xl mx-auto space-y-8">
+        <div className="max-w-6xl mx-auto space-y-6 sm:space-y-8">
             {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                 <div className="flex items-center gap-6">
@@ -51,7 +51,7 @@ export default function TeacherDetailPage() {
                     </Link>
                     <div className="flex items-center gap-4">
                         <div className="w-20 h-20 rounded-3xl bg-purple-600 flex items-center justify-center text-3xl font-black text-white shadow-2xl shadow-purple-500/30">
-                            {teacher.firstName.charAt(0)}
+                            {teacher.firstName?.charAt(0) || 'T'}
                         </div>
                         <div>
                             <h1 className="text-3xl font-black text-white tracking-tight">{teacher.firstName} {teacher.lastName}</h1>
@@ -74,7 +74,7 @@ export default function TeacherDetailPage() {
 
             {/* Tabs */}
             <div className="flex gap-8 border-b border-white/5">
-                {['profile', 'classes', 'salary', 'attendance'].map((tab) => (
+                {['profile', 'classes', 'salary', 'schedule'].map((tab) => (
                     <button
                         key={tab}
                         onClick={() => setView(tab)}
@@ -121,7 +121,13 @@ export default function TeacherDetailPage() {
                                     </div>
                                     <div className="p-4 bg-white/5 rounded-2xl flex justify-between items-center">
                                         <span className="text-slate-400 text-sm font-medium">Teaching Hours</span>
-                                        <span className="text-purple-400 font-bold">42h / Week</span>
+                                        <span className="text-purple-400 font-bold">
+                                            {(teacher.timetable || []).reduce((total: number, slot: any) => {
+                                                const [sh, sm] = slot.startTime.split(':').map(Number);
+                                                const [eh, em] = slot.endTime.split(':').map(Number);
+                                                return total + Math.max(0, (eh * 60 + em) - (sh * 60 + sm));
+                                            }, 0) / 60}h / Week
+                                        </span>
                                     </div>
                                 </div>
                             </div>
@@ -134,26 +140,17 @@ export default function TeacherDetailPage() {
                         <div className="glass-dark p-8 rounded-[2rem] border border-white/5">
                             <h3 className="text-xl font-bold text-white mb-6">Assigned Classes</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {/* Placeholder for classes - will be populated from API */}
-                                <div className="p-6 bg-white/5 rounded-2xl border border-white/5 hover:border-purple-500/30 transition">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <h4 className="text-lg font-bold text-white">Class 10-A</h4>
-                                        <span className="px-3 py-1 bg-purple-500/20 text-purple-400 text-xs font-bold rounded-lg">Mathematics</span>
-                                    </div>
-                                    <div className="space-y-2 text-sm">
-                                        <div className="flex justify-between">
-                                            <span className="text-slate-400">Students</span>
-                                            <span className="text-white font-medium">32</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-slate-400">Periods/Week</span>
-                                            <span className="text-white font-medium">6</span>
+                                {(teacher.assignedClasses || []).map((assigned: any) => (
+                                    <div key={`${assigned.id}-${assigned.subject?.id}`} className="p-6 bg-white/5 rounded-2xl border border-white/5 hover:border-purple-500/30 transition">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <h4 className="text-lg font-bold text-white">{assigned.name}-{assigned.section}</h4>
+                                            <span className="px-3 py-1 bg-purple-500/20 text-purple-400 text-xs font-bold rounded-lg">{assigned.subject?.name}</span>
                                         </div>
                                     </div>
-                                </div>
-                                <div className="p-6 bg-white/5 rounded-2xl border border-dashed border-white/10 flex items-center justify-center text-slate-500 italic">
-                                    No additional classes assigned
-                                </div>
+                                ))}
+                                {(teacher.assignedClasses || []).length === 0 && (
+                                    <div className="p-6 bg-white/5 rounded-2xl border border-dashed border-white/10 text-slate-500 italic">No classes assigned.</div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -164,9 +161,9 @@ export default function TeacherDetailPage() {
                         <div className="glass-dark p-8 rounded-[2rem] border border-white/5">
                             <div className="flex justify-between items-center mb-6">
                                 <h3 className="text-xl font-bold text-white">Salary History</h3>
-                                <button className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl font-bold text-sm transition">
+                                <Link href="/dashboard/hr" className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl font-bold text-sm transition">
                                     Generate Payslip
-                                </button>
+                                </Link>
                             </div>
                             <div className="overflow-x-auto">
                                 <table className="w-full">
@@ -181,27 +178,17 @@ export default function TeacherDetailPage() {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-white/5">
-                                        {/* Placeholder data */}
-                                        <tr className="hover:bg-white/5 transition">
-                                            <td className="px-6 py-4 text-white font-medium">January 2026</td>
-                                            <td className="px-6 py-4 text-slate-300">${teacher.profile?.salary || '0.00'}</td>
-                                            <td className="px-6 py-4 text-green-400">$200.00</td>
-                                            <td className="px-6 py-4 text-red-400">$50.00</td>
-                                            <td className="px-6 py-4 text-white font-bold">${(parseFloat(teacher.profile?.salary || '0') + 200 - 50).toFixed(2)}</td>
-                                            <td className="px-6 py-4">
-                                                <span className="px-3 py-1 bg-green-500/10 text-green-400 text-xs font-bold rounded-lg border border-green-500/20">Paid</span>
-                                            </td>
-                                        </tr>
-                                        <tr className="hover:bg-white/5 transition">
-                                            <td className="px-6 py-4 text-white font-medium">December 2025</td>
-                                            <td className="px-6 py-4 text-slate-300">${teacher.profile?.salary || '0.00'}</td>
-                                            <td className="px-6 py-4 text-green-400">$200.00</td>
-                                            <td className="px-6 py-4 text-red-400">$50.00</td>
-                                            <td className="px-6 py-4 text-white font-bold">${(parseFloat(teacher.profile?.salary || '0') + 200 - 50).toFixed(2)}</td>
-                                            <td className="px-6 py-4">
-                                                <span className="px-3 py-1 bg-green-500/10 text-green-400 text-xs font-bold rounded-lg border border-green-500/20">Paid</span>
-                                            </td>
-                                        </tr>
+                                        {(teacher.salaries || []).map((salary: any) => (
+                                            <tr key={salary.id} className="hover:bg-white/5 transition">
+                                                <td className="px-6 py-4 text-white font-medium">{salary.month} {salary.year}</td>
+                                                <td className="px-6 py-4 text-slate-300">${salary.basicSalary.toFixed(2)}</td>
+                                                <td className="px-6 py-4 text-green-400">${salary.allowances.reduce((sum: number, item: any) => sum + item.amount, 0).toFixed(2)}</td>
+                                                <td className="px-6 py-4 text-red-400">${salary.deductions.reduce((sum: number, item: any) => sum + item.amount, 0).toFixed(2)}</td>
+                                                <td className="px-6 py-4 text-white font-bold">${salary.netSalary.toFixed(2)}</td>
+                                                <td className="px-6 py-4 capitalize">{salary.status}</td>
+                                            </tr>
+                                        ))}
+                                        {(teacher.salaries || []).length === 0 && <tr><td colSpan={6} className="p-10 text-center text-slate-500">No salary records.</td></tr>}
                                     </tbody>
                                 </table>
                             </div>
@@ -209,74 +196,35 @@ export default function TeacherDetailPage() {
                     </div>
                 )}
 
-                {view === 'attendance' && (
+                {view === 'schedule' && (
                     <div className="lg:col-span-3 animate-in fade-in slide-in-from-bottom-4">
                         <div className="glass-dark p-8 rounded-[2rem] border border-white/5">
                             <div className="flex justify-between items-center mb-6">
-                                <h3 className="text-xl font-bold text-white">Attendance Record</h3>
-                                <div className="flex gap-3">
-                                    <select className="px-4 py-2 bg-slate-800 border border-white/10 rounded-xl text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-purple-500/50">
-                                        <option>January 2026</option>
-                                        <option>December 2025</option>
-                                        <option>November 2025</option>
-                                    </select>
-                                </div>
+                                <h3 className="text-xl font-bold text-white">Weekly Teaching Schedule</h3>
                             </div>
 
-                            {/* Stats Cards */}
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                                <div className="p-6 bg-gradient-to-br from-green-500/10 to-green-500/5 rounded-2xl border border-green-500/20">
-                                    <p className="text-xs text-green-400 uppercase font-black tracking-widest mb-2">Present Days</p>
-                                    <p className="text-3xl font-black text-white">22</p>
-                                </div>
-                                <div className="p-6 bg-gradient-to-br from-red-500/10 to-red-500/5 rounded-2xl border border-red-500/20">
-                                    <p className="text-xs text-red-400 uppercase font-black tracking-widest mb-2">Absent Days</p>
-                                    <p className="text-3xl font-black text-white">1</p>
-                                </div>
-                                <div className="p-6 bg-gradient-to-br from-yellow-500/10 to-yellow-500/5 rounded-2xl border border-yellow-500/20">
-                                    <p className="text-xs text-yellow-400 uppercase font-black tracking-widest mb-2">Leave Days</p>
-                                    <p className="text-3xl font-black text-white">2</p>
-                                </div>
-                                <div className="p-6 bg-gradient-to-br from-purple-500/10 to-purple-500/5 rounded-2xl border border-purple-500/20">
-                                    <p className="text-xs text-purple-400 uppercase font-black tracking-widest mb-2">Attendance Rate</p>
-                                    <p className="text-3xl font-black text-white">88%</p>
-                                </div>
-                            </div>
-
-                            {/* Calendar/List View */}
                             <div className="overflow-x-auto">
                                 <table className="w-full">
                                     <thead className="text-xs uppercase bg-slate-950/50 text-slate-500 font-black tracking-widest border-b border-white/5">
                                         <tr>
-                                            <th className="px-6 py-4 text-left">Date</th>
-                                            <th className="px-6 py-4 text-left">Check In</th>
-                                            <th className="px-6 py-4 text-left">Check Out</th>
-                                            <th className="px-6 py-4 text-left">Hours</th>
-                                            <th className="px-6 py-4 text-left">Status</th>
+                                            <th className="px-6 py-4 text-left">Day</th>
+                                            <th className="px-6 py-4 text-left">Time</th>
+                                            <th className="px-6 py-4 text-left">Class</th>
+                                            <th className="px-6 py-4 text-left">Subject</th>
+                                            <th className="px-6 py-4 text-left">Room</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-white/5">
-                                        {/* Placeholder data */}
-                                        {[
-                                            { date: 'Jan 2, 2026', checkIn: '08:00 AM', checkOut: '04:00 PM', hours: '8h', status: 'present' },
-                                            { date: 'Jan 1, 2026', checkIn: '08:15 AM', checkOut: '04:10 PM', hours: '7.9h', status: 'present' },
-                                            { date: 'Dec 31, 2025', checkIn: '-', checkOut: '-', hours: '-', status: 'absent' },
-                                        ].map((record, i) => (
-                                            <tr key={i} className="hover:bg-white/5 transition">
-                                                <td className="px-6 py-4 text-white font-medium">{record.date}</td>
-                                                <td className="px-6 py-4 text-slate-300">{record.checkIn}</td>
-                                                <td className="px-6 py-4 text-slate-300">{record.checkOut}</td>
-                                                <td className="px-6 py-4 text-slate-300">{record.hours}</td>
-                                                <td className="px-6 py-4">
-                                                    <span className={`px-3 py-1 text-xs font-bold rounded-lg border ${record.status === 'present'
-                                                        ? 'bg-green-500/10 text-green-400 border-green-500/20'
-                                                        : 'bg-red-500/10 text-red-400 border-red-500/20'
-                                                        }`}>
-                                                        {record.status}
-                                                    </span>
-                                                </td>
+                                        {(teacher.timetable || []).map((slot: any) => (
+                                            <tr key={slot.id} className="hover:bg-white/5 transition">
+                                                <td className="px-6 py-4 text-white font-medium">{slot.day}</td>
+                                                <td className="px-6 py-4 text-slate-300">{slot.startTime}–{slot.endTime}</td>
+                                                <td className="px-6 py-4 text-slate-300">{slot.class?.name}-{slot.class?.section}</td>
+                                                <td className="px-6 py-4 text-slate-300">{slot.subject?.name}</td>
+                                                <td className="px-6 py-4 text-slate-300">{slot.room || '—'}</td>
                                             </tr>
                                         ))}
+                                        {(teacher.timetable || []).length === 0 && <tr><td colSpan={5} className="p-10 text-center text-slate-500">No timetable assigned.</td></tr>}
                                     </tbody>
                                 </table>
                             </div>
