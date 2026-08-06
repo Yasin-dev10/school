@@ -52,8 +52,14 @@ const redactSensitive = (body) => {
 const parseAllowedOrigins = () => {
     const raw = process.env.FRONTEND_URL || process.env.CORS_ORIGINS || '';
     const list = raw.split(',').map((s) => s.trim()).filter(Boolean);
-    if (list.length === 0 && process.env.NODE_ENV !== 'production') {
-        return ['http://localhost:3000', 'http://127.0.0.1:3000'];
+    if (list.length === 0) {
+        if (process.env.NODE_ENV !== 'production') {
+            return ['http://localhost:3000', 'http://127.0.0.1:3000'];
+        }
+        // Production fallback: include deployed frontend domain so preflight won't fail
+        // If you prefer explicit config, set FRONTEND_URL or CORS_ORIGINS in env instead.
+        const fallback = process.env.FRONTEND_URL || 'https://www.dugsi.online';
+        return [fallback];
     }
     return list;
 };
