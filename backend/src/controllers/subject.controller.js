@@ -172,13 +172,40 @@ exports.updateSubject = async (req, res) => {
 // @desc    Delete subject
 exports.deleteSubject = async (req, res) => {
     try {
-        const subject = await prisma.subject.findFirst({ where: { id: req.params.id, tenantId: req.user.tenantId } });
+        const subjectId = req.params.id;
+        const tenantId = req.user.tenantId;
+
+        const subject = await prisma.subject.findFirst({ where: { id: subjectId, tenantId } });
         if (!subject) return res.status(404).json({ message: 'Subject not found' });
 
-        await prisma.subject.delete({ where: { id: req.params.id } });
+        // Delete dependent records explicitly to avoid FK constraint errors and give clearer logs.
+        await prisma.$transaction(async (tx) => {
+            // Marks, materials, attendances, timetables, resources, teachers, class-subject links
+            await tx.mark.deleteMany({ where: { subjectId, tenantId } });
+            await tx.material.deleteMany({ where: { subjectId, tenantId } });
+            await tx.attendance.deleteMany({ where: { subjectId, tenantId } });
+            await tx.timetable.deleteMany({ where: { subjectId, tenantId } });
+            await tx.subjectResource.deleteMany({ where: { subjectId } });
+            await tx.subjectTeacher.deleteMany({ where: { subjectId } });
+            await tx.classSubject.deleteMany({ where: { subjectId } });
+
+            await tx.subject.delete({ where: { id: subjectId } });
+        });
+
+        await logAction({ action: 'DELETE', module: 'TENANT', details: `Deleted subject: ${subject.name} (${subjectId})`, userId: req.user._id, tenantId });
         res.status(200).json({ success: true, message: 'Subject deleted successfully' });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+        // Verbose logging for troubleshooting delete failures
+        console.error('DELETE SUBJECT ERROR:', {
+            message: error.message,
+            stack: error.stack,
+            subjectId: req.params.id,
+            userId: req.user && req.user._id,
+            tenantId: req.user && req.user.tenantId
+        });
+
+        const isDev = process.env.NODE_ENV === 'development';
+        res.status(500).json({ success: false, message: isDev ? error.message : 'Failed to delete subject' });
     }
 };
 

@@ -20,7 +20,7 @@ A comprehensive, full-stack school management system with multi-tenant architect
 - [Configuration](#-configuration)
 - [Running the Application](#-running-the-application)
 - [API Documentation](#-api-documentation)
-- [User Roles & Permissions](#-user-roles--permissions)
+- [User Roles &amp; Permissions](#-user-roles--permissions)
 - [Key Features Deep Dive](#-key-features-deep-dive)
 - [Screenshots](#-screenshots)
 - [Team Contributors](#-team-contributors)
@@ -83,6 +83,7 @@ A comprehensive, full-stack school management system with multi-tenant architect
 ## 🛠 Tech Stack
 
 ### Backend
+
 - **Runtime:** Node.js with Express.js
 - **Database:** MongoDB with Mongoose ODM
 - **Authentication:** JWT (JSON Web Tokens)
@@ -94,6 +95,7 @@ A comprehensive, full-stack school management system with multi-tenant architect
 - **SMS:** Twilio integration
 
 ### Frontend (Web)
+
 - **Framework:** Next.js 16.1.1 (React 19.2.3)
 - **Language:** TypeScript
 - **Styling:** Tailwind CSS 4
@@ -108,6 +110,7 @@ A comprehensive, full-stack school management system with multi-tenant architect
 - **Excel Export:** xlsx
 
 ### Mobile (Flutter)
+
 - **Framework:** Flutter 3.9.2
 - **Language:** Dart
 - **State Management:** Provider
@@ -282,13 +285,14 @@ NEXT_PUBLIC_SOCKET_URL=http://localhost:5000
 ```
 
 Both clients use the same JWT auth (`POST /api/auth/login`) and Socket.IO host.
----
+---------------------------------------------------------
 
 ## ⚙️ Configuration
 
 ### Database Setup
 
 1. **Start PostgreSQL:**
+
    ```bash
    # Windows (if installed as service)
    net start postgresql-x64-16
@@ -296,19 +300,19 @@ Both clients use the same JWT auth (`POST /api/auth/login`) and Socket.IO host.
    # macOS/Linux
    sudo systemctl start postgresql
    ```
-
 2. **Create Database:**
+
    ```bash
    createdb -U postgres school_management
    ```
-
 3. **Apply Prisma Migrations:**
+
    ```bash
    cd backend
    npm run db:migrate
    ```
-
 4. **Seed Initial Data (Optional):**
+
    ```bash
    cd backend
    npm run db:seed
@@ -349,18 +353,21 @@ The web dashboard will be available at `http://localhost:3000`
 #### 3. Run Mobile Application
 
 **Android:**
+
 ```bash
 cd mobile
 flutter run
 ```
 
 **iOS (macOS only):**
+
 ```bash
 cd mobile
 flutter run -d ios
 ```
 
 **Chrome (Web Preview):**
+
 ```bash
 cd mobile
 flutter run -d chrome
@@ -369,12 +376,14 @@ flutter run -d chrome
 ### Production Mode
 
 #### Backend
+
 ```bash
 cd backend
 npm start
 ```
 
 #### Frontend
+
 ```bash
 cd frontend
 npm run build
@@ -382,6 +391,7 @@ npm start
 ```
 
 #### Mobile
+
 ```bash
 cd mobile
 # Android
@@ -442,6 +452,7 @@ npm run dev
 ## 📡 API Documentation
 
 ### Base URL
+
 ```
 http://localhost:5000/api
 ```
@@ -449,6 +460,7 @@ http://localhost:5000/api
 ### Authentication
 
 All protected routes require a JWT token in the Authorization header:
+
 ```
 Authorization: Bearer <your_jwt_token>
 ```
@@ -456,6 +468,7 @@ Authorization: Bearer <your_jwt_token>
 ### Main Endpoints
 
 #### Authentication
+
 - `POST /auth/register` - Register new user
 - `POST /auth/login` - User login
 - `POST /auth/logout` - User logout
@@ -464,6 +477,7 @@ Authorization: Bearer <your_jwt_token>
 - `PUT /auth/change-password` - Change password
 
 #### Students
+
 - `GET /students` - Get all students (filtered by role)
 - `GET /students/:id` - Get student by ID
 - `POST /students` - Create new student
@@ -472,6 +486,7 @@ Authorization: Bearer <your_jwt_token>
 - `GET /students/:id/id-card` - Get student ID card data
 
 #### Teachers
+
 - `GET /teachers` - Get all teachers
 - `GET /teachers/:id` - Get teacher by ID
 - `POST /teachers` - Create new teacher
@@ -479,6 +494,7 @@ Authorization: Bearer <your_jwt_token>
 - `DELETE /teachers/:id` - Delete teacher
 
 #### Classes
+
 - `GET /classes` - Get all classes (filtered by role)
 - `GET /classes/:id` - Get class by ID
 - `POST /classes` - Create new class
@@ -487,6 +503,7 @@ Authorization: Bearer <your_jwt_token>
 - `GET /classes/:id/students` - Get class students
 
 #### Subjects
+
 - `GET /subjects` - Get all subjects
 - `GET /subjects/:id` - Get subject by ID
 - `POST /subjects` - Create new subject
@@ -494,6 +511,7 @@ Authorization: Bearer <your_jwt_token>
 - `DELETE /subjects/:id` - Delete subject
 
 #### Attendance
+
 - `GET /attendance` - Get attendance records
 - `POST /attendance` - Mark attendance
 - `PUT /attendance/:id` - Update attendance
@@ -501,6 +519,7 @@ Authorization: Bearer <your_jwt_token>
 - `GET /attendance/class/:classId` - Get class attendance
 
 #### Exams
+
 - `GET /exams` - Get all exams
 - `GET /exams/:id` - Get exam by ID
 - `POST /exams` - Create new exam
@@ -510,6 +529,7 @@ Authorization: Bearer <your_jwt_token>
 - `GET /exams/student-grades/:studentId` - Get student grades with GPA
 
 #### Timetable
+
 - `GET /timetable/class/:classId` - Get class timetable
 - `POST /timetable` - Create timetable entry
 - `PUT /timetable/:id` - Update timetable entry
@@ -517,6 +537,7 @@ Authorization: Bearer <your_jwt_token>
 - `POST /timetable/bulk-update` - Bulk update class timetable
 
 #### Certificates
+
 - `GET /certificates` - Get all certificates
 - `GET /certificates/:id` - Get certificate by ID
 - `POST /certificates` - Issue new certificate
@@ -524,6 +545,7 @@ Authorization: Bearer <your_jwt_token>
 - `DELETE /certificates/:id` - Delete certificate
 
 #### Finance
+
 - `GET /fees` - Get fee types
 - `POST /fees` - Create fee type
 - `GET /fees/invoices` - Get invoices
@@ -531,27 +553,32 @@ Authorization: Bearer <your_jwt_token>
 - `POST /fees/payments` - Record payment
 
 #### Payroll
+
 - `GET /salary` - Get salary records
 - `POST /salary` - Create salary record
 - `GET /salary/payslips/:userId` - Get user payslips
 
 #### Notifications
+
 - `GET /notifications` - Get user notifications
 - `POST /notifications` - Create notification
 - `PUT /notifications/:id/read` - Mark as read
 - `DELETE /notifications/:id` - Delete notification
 
 #### Analytics
+
 - `GET /analytics/dashboard` - Get dashboard statistics
 - `GET /analytics/attendance` - Get attendance analytics
 - `GET /analytics/performance` - Get performance analytics
 
 #### Materials
+
 - `GET /materials` - Get learning materials
 - `POST /materials` - Upload material
 - `DELETE /materials/:id` - Delete material
 
 #### Assignments
+
 - `GET /assignments` - Get assignments
 - `POST /assignments` - Create assignment
 - `GET /assignments/:id/submissions` - Get submissions
@@ -564,7 +591,9 @@ For complete API documentation, refer to the controller files in `backend/src/co
 ## 👥 User Roles & Permissions
 
 ### 1. Admin
+
 **Full system access including:**
+
 - Tenant management
 - User creation and management (all roles)
 - System configuration and settings
@@ -575,7 +604,9 @@ For complete API documentation, refer to the controller files in `backend/src/co
 - Audit log access
 
 ### 2. Teacher
+
 **Academic and class management:**
+
 - View assigned classes and students
 - Mark attendance for their subjects
 - Create and grade exams
@@ -587,7 +618,9 @@ For complete API documentation, refer to the controller files in `backend/src/co
 - Communication with students and parents
 
 ### 3. Student
+
 **Personal academic access:**
+
 - View personal profile and ID card
 - View class and subject information
 - Check attendance records
@@ -599,7 +632,9 @@ For complete API documentation, refer to the controller files in `backend/src/co
 - View certificates
 
 ### 4. Parent
+
 **Child monitoring access:**
+
 - View children's profiles
 - Monitor attendance
 - View exam results and grades
@@ -699,24 +734,28 @@ Automated payroll processing:
 ### Web Dashboard
 
 **Dashboard Overview**
+
 - Real-time statistics and analytics
 - Quick access cards
 - Recent activity feed
 - Performance charts
 
 **Student Management**
+
 - Student list with search and filters
 - Student profile with complete details
 - ID card generation and download
 - Academic performance tracking
 
 **Attendance System**
+
 - Subject-wise attendance marking
 - Monthly attendance reports
 - Attendance analytics
 - Export functionality
 
 **Exam & Grades**
+
 - Exam creation and scheduling
 - Grade entry interface
 - Result generation
@@ -725,18 +764,21 @@ Automated payroll processing:
 ### Mobile Application
 
 **Student Dashboard**
+
 - Personal statistics
 - Quick action buttons
 - Upcoming events
 - Notifications
 
 **Teacher Dashboard**
+
 - Class overview
 - Student management
 - Attendance marking
 - Grade entry
 
 **Parent Portal**
+
 - Children's progress
 - Attendance monitoring
 - Communication hub
@@ -779,9 +821,11 @@ Contributions are welcome! Please follow these steps:
 This project was developed by a dedicated team of students:
 
 ### Team Leader
+
 - **Yasin Mohamud Abdullahi** - C1220926 (Team Leader & Project Lead)
 
 ### Team Members
+
 - **Abdibasid Mohamed Ahmed** - C1221173
 - **Falastin Mohamud Adow** - C1220745
 - **Yasmin Osman Mohamud** - C1220724
@@ -843,26 +887,31 @@ For support, email support@yourschool.com or join our Slack channel.
 ### Common Issues
 
 **Backend won't start:**
+
 - Check MongoDB is running
 - Verify `.env` file exists and is configured
 - Ensure port 5000 is not in use
 
 **Frontend connection errors:**
+
 - Verify backend is running
 - Check `NEXT_PUBLIC_API_URL` in `.env.local`
 - Clear browser cache and restart
 
 **Mobile app can't connect:**
+
 - Update API URL in `api_service.dart`
 - For physical devices, use computer's IP address
 - Ensure backend allows CORS from mobile
 
 **Database connection failed:**
+
 - Verify MongoDB is running
 - Check `MONGODB_URI` in `.env`
 - Ensure database user has proper permissions
 
 **Socket.io not working:**
+
 - Check `SOCKET_CORS_ORIGIN` in backend `.env`
 - Verify frontend socket URL is correct
 - Check firewall settings
@@ -872,18 +921,21 @@ For support, email support@yourschool.com or join our Slack channel.
 ## 📊 System Requirements
 
 ### Backend Server
+
 - **CPU:** 2+ cores
 - **RAM:** 4GB minimum, 8GB recommended
 - **Storage:** 20GB minimum
 - **OS:** Windows, macOS, or Linux
 
 ### Development Machine
+
 - **CPU:** 4+ cores recommended
 - **RAM:** 8GB minimum, 16GB recommended
 - **Storage:** 50GB free space
 - **OS:** Windows 10+, macOS 10.14+, or Linux
 
 ### Mobile Development
+
 - **Android:** Android Studio with SDK 21+
 - **iOS:** Xcode 12+ (macOS only)
 - **Emulator:** 4GB RAM allocated
