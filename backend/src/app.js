@@ -48,17 +48,28 @@ const app = express();
 const allowedOrigins = parseAllowedOrigins();
 
 app.use(helmet());
-app.use(
-    cors({
-        origin: (origin, callback) => {
-            // Allow non-browser clients (mobile) with no Origin header
-            if (!origin) return callback(null, true);
-            if (allowedOrigins.includes(origin)) return callback(null, true);
-            return callback(null, false);
-        },
-        credentials: true,
-    })
-);
+
+// Configure CORS with a small override for quick deployments.
+// - `CORS_ALLOW_ALL=true` will allow all origins (useful for quick testing).
+// - Otherwise, the origin must be in `CORS_ORIGINS` / `FRONTEND_URL` env.
+const corsOptions = {
+    origin: (origin, callback) => {
+        // Allow non-browser clients (mobile / server-to-server) with no Origin header
+        if (!origin) return callback(null, true);
+        // Quick override to allow all origins (use with caution)
+        if (process.env.CORS_ALLOW_ALL === 'true') return callback(null, true);
+        if (allowedOrigins.includes(origin)) return callback(null, true);
+        return callback(new Error('CORS policy: origin not allowed'));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    optionsSuccessStatus: 200,
+};
+
+app.use(cors(corsOptions));
+// Ensure preflight `OPTIONS` requests are handled for all routes
+app.options('*', cors(corsOptions));
 
 // Stripe webhook needs raw body — mount before json parser
 app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
