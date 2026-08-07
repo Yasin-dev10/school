@@ -88,13 +88,51 @@ class ValidationUtils {
     }
 
     final emailRegex = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
-    if (!emailRegex.hasMatch(email)) {
+    if (!emailRegex.hasMatch(email.trim())) {
       return ValidationResult(
         isValid: false,
         message: 'Please provide a valid email address',
       );
     }
 
+    return ValidationResult(isValid: true, message: '');
+  }
+
+  /// Validates login identifier (generated username or email).
+  static ValidationResult validateLoginIdentifier(String? value) {
+    final trimmed = value?.trim() ?? '';
+    if (trimmed.isEmpty) {
+      return ValidationResult(
+        isValid: false,
+        message: 'Username or email is required',
+      );
+    }
+    if (trimmed.contains('@')) {
+      return validateEmail(trimmed);
+    }
+    if (trimmed.length < 3) {
+      return ValidationResult(
+        isValid: false,
+        message: 'Enter a valid username or email',
+      );
+    }
+    return ValidationResult(isValid: true, message: '');
+  }
+
+  /// Validates a new password for reset / change (backend requires ≥ 8).
+  static ValidationResult validateNewPassword(String? password) {
+    if (password == null || password.isEmpty) {
+      return ValidationResult(
+        isValid: false,
+        message: 'Password is required',
+      );
+    }
+    if (password.length < 8) {
+      return ValidationResult(
+        isValid: false,
+        message: 'Password must be at least 8 characters',
+      );
+    }
     return ValidationResult(isValid: true, message: '');
   }
 

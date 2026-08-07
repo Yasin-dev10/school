@@ -70,8 +70,14 @@ export default function AddTeacherPage() {
                     }
                 });
 
-                if (data.tempPassword) {
-                    alert(`Teacher recruited successfully!\n\nAccess Credentials:\nEmail: ${formData.email}\nPassword: ${data.tempPassword}\n\nPlease copy this password and provide it to the faculty member.`);
+                if (data.tempPassword || data.username) {
+                    alert(
+                        `Teacher recruited successfully!\n\n` +
+                        `Access Credentials:\n` +
+                        `Username: ${data.username || data.data?.username || '—'}\n` +
+                        `Password: ${data.tempPassword || '—'}\n\n` +
+                        `Please copy these credentials and provide them to the teacher.`
+                    );
                 } else {
                     alert('Teacher recruited successfully');
                 }

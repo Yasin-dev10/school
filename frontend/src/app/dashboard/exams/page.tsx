@@ -26,7 +26,7 @@ ChartJS.register(
 
 export default function ExamsPage() {
     const [user, setUser] = useState<any>(null);
-    const [view, setView] = useState('board'); // 'board', 'grades', 'grade-config', 'complaints', 'my-results', 'analytics'
+    const [view, setView] = useState('board'); // 'board', 'grades', 'grade-config', 'complaints', 'my-results', 'analytics', 'entry-status'
     const [maxMarks, setMaxMarks] = useState('100');
     const [exams, setExams] = useState<any[]>([]);
     const [classes, setClasses] = useState<any[]>([]);
@@ -77,6 +77,11 @@ export default function ExamsPage() {
     const [isReportOpen, setIsReportOpen] = useState(false);
     const [tenant, setTenant] = useState<any>(null);
     const [analytics, setAnalytics] = useState<any>(null);
+
+    // Entry Status — subjects with marks entered vs remaining
+    const [entryStatusExam, setEntryStatusExam] = useState<any>(null);
+    const [entryStatusLoading, setEntryStatusLoading] = useState(false);
+    const [entryStatusRows, setEntryStatusRows] = useState<any[]>([]);
 
     useEffect(() => {
         const userStr = localStorage.getItem('user');
@@ -273,6 +278,91 @@ export default function ExamsPage() {
         }
     }, [view, clearanceClass]);
 
+    // Load subject mark-entry progress for Entry Status view
+    useEffect(() => {
+        if (view !== 'entry-status' || !entryStatusExam) {
+            if (view !== 'entry-status') setEntryStatusRows([]);
+            return;
+        }
+        const load = async () => {
+            setEntryStatusLoading(true);
+            try {
+                const examId = entryStatusExam._id || entryStatusExam.id;
+                const examClassIds: string[] = (entryStatusExam.classes || [])
+                    .map((c: any) => (typeof c === 'string' ? c : c._id || c.id))
+                    .filter(Boolean);
+
+                const targetClasses = examClassIds.length
+                    ? classes.filter((c: any) => examClassIds.includes(c._id || c.id))
+                    : classes;
+
+                const [marksRes, ...studentResList] = await Promise.all([
+                    api.get('/exams/marks', { params: { examId } }),
+                    ...targetClasses.map((c: any) =>
+                        api.get(`/students?class=${c._id || c.id}`).catch(() => ({ data: { data: [] } }))
+                    ),
+                ]);
+
+                const marks: any[] = marksRes.data.data || [];
+                const markCount = new Map<string, number>(); // `${classId}:${subjectId}` -> count
+                marks.forEach((m: any) => {
+                    const classId = m.classId || m.class?._id || m.class?.id;
+                    const subjectId = m.subjectId || m.subject?._id || m.subject?.id;
+                    if (!classId || !subjectId) return;
+                    const key = `${classId}:${subjectId}`;
+                    markCount.set(key, (markCount.get(key) || 0) + 1);
+                });
+
+                const rows = targetClasses.map((cls: any, idx: number) => {
+                    const classId = cls._id || cls.id;
+                    const studentTotal = (studentResList[idx]?.data?.data || []).length;
+                    const classSubjects = (cls.subjects || [])
+                        .map((item: any) => item?.subject)
+                        .filter((s: any) => s && (s._id || s.id));
+
+                    const subjects = classSubjects.map((sub: any) => {
+                        const subjectId = sub._id || sub.id;
+                        const entered = markCount.get(`${classId}:${subjectId}`) || 0;
+                        const complete = studentTotal > 0 && entered >= studentTotal;
+                        const partial = entered > 0 && !complete;
+                        return {
+                            id: subjectId,
+                            name: sub.name,
+                            entered,
+                            studentTotal,
+                            complete,
+                            partial,
+                            status: complete ? 'done' : partial ? 'partial' : 'pending',
+                        };
+                    });
+
+                    const done = subjects.filter((s: any) => s.complete).length;
+                    const partial = subjects.filter((s: any) => s.partial).length;
+                    const pending = subjects.filter((s: any) => !s.complete && !s.partial).length;
+
+                    return {
+                        classId,
+                        className: `${cls.grade || cls.name}${cls.section ? ` ${cls.section}` : ''}`,
+                        studentTotal,
+                        subjects,
+                        done,
+                        partial,
+                        pending,
+                        totalSubjects: subjects.length,
+                    };
+                });
+
+                setEntryStatusRows(rows);
+            } catch (err) {
+                console.error(err);
+                setEntryStatusRows([]);
+            } finally {
+                setEntryStatusLoading(false);
+            }
+        };
+        load();
+    }, [view, entryStatusExam, classes]);
+
     const checkClearance = async (studentId: string) => {
         setIsCheckingClearance(true);
         try {
@@ -440,6 +530,7 @@ export default function ExamsPage() {
                     <div className="flex bg-slate-900/50 p-1 rounded-2xl border border-white/5 shadow-inner flex-wrap gap-1 w-full lg:w-auto">
                         <button onClick={() => setView('board')} className={`flex-1 lg:flex-none px-3 sm:px-4 py-2 rounded-xl text-[10px] sm:text-xs font-bold transition-all ${view === 'board' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Board</button>
                         <button onClick={() => setView('grades')} className={`flex-1 lg:flex-none px-3 sm:px-4 py-2 rounded-xl text-[10px] sm:text-xs font-bold transition-all ${view === 'grades' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Grades</button>
+                        <button onClick={() => setView('entry-status')} className={`flex-1 lg:flex-none px-3 sm:px-4 py-2 rounded-xl text-[10px] sm:text-xs font-bold transition-all ${view === 'entry-status' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Entry Status</button>
                         {isActualAdmin && <button onClick={() => setView('grade-config')} className={`flex-1 lg:flex-none px-3 sm:px-4 py-2 rounded-xl text-[10px] sm:text-xs font-bold transition-all ${view === 'grade-config' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Grading</button>}
                         <button onClick={() => setView('clearance')} className={`flex-1 lg:flex-none px-3 sm:px-4 py-2 rounded-xl text-[10px] sm:text-xs font-bold transition-all ${view === 'clearance' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Clearance</button>
                         <button onClick={() => setView('complaints')} className={`flex-1 lg:flex-none px-3 sm:px-4 py-2 rounded-xl text-[10px] sm:text-xs font-bold transition-all ${view === 'complaints' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Complaints</button>
@@ -541,6 +632,7 @@ export default function ExamsPage() {
                                 </div>
                                 <div className="flex gap-3 flex-wrap">
                                     <button onClick={() => { setSelectedExam(exam); setView('grades'); }} className="flex-1 py-4 bg-white/5 hover:bg-white/10 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all">Mark Entry</button>
+                                    <button onClick={() => { setEntryStatusExam(exam); setView('entry-status'); }} className="flex-1 py-4 bg-cyan-600/10 hover:bg-cyan-600/20 text-cyan-400 border border-cyan-500/10 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all">Entry Status</button>
                                     {!exam.isApproved && user?.role === 'school-admin' && (
                                         <button onClick={() => handleApprove(exam._id)} className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-600/20">Finalize</button>
                                     )}
@@ -548,6 +640,7 @@ export default function ExamsPage() {
                                         <button onClick={() => handleUnapprove(exam._id)} className="flex-1 py-4 bg-amber-600 hover:bg-amber-700 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-amber-600/20 transition-all">🔓 Unlock</button>
                                     )}
                                     <button onClick={() => fetchAnalytics(exam._id)} className="w-full py-4 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border border-emerald-500/10">Academic Analytics</button>
+                                    <a href="/dashboard/combined-results" className="w-full py-4 bg-violet-600/10 hover:bg-violet-600/20 text-violet-400 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border border-violet-500/10 text-center">Combined Results</a>
                                     {user?.role === 'school-admin' && (
                                         <div className="w-full flex gap-2">
                                             <button
@@ -714,6 +807,111 @@ export default function ExamsPage() {
                             </div>
                         )) : <div className="col-span-full py-24 text-center opacity-40">No complaints reported.</div>}
                     </div>
+                </div>
+            ) : view === 'entry-status' ? (
+                <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                        <div>
+                            <h2 className="text-2xl sm:text-3xl font-black text-white">Marks Entry Status</h2>
+                            <p className="text-slate-400 text-sm mt-1">Arag inta maado oo marks la xareeyey iyo inta dhiman.</p>
+                        </div>
+                        <select
+                            value={entryStatusExam?._id || entryStatusExam?.id || ''}
+                            onChange={(e) => setEntryStatusExam(exams.find((ex: any) => (ex._id || ex.id) === e.target.value) || null)}
+                            className="w-full sm:w-72 px-5 py-3 bg-slate-950 border border-white/10 rounded-2xl text-white text-sm"
+                        >
+                            <option value="">Dooro Imtixaanka...</option>
+                            {exams.map((ex: any) => (
+                                <option key={ex._id || ex.id} value={ex._id || ex.id}>{ex.name} — {ex.term?.replace?.('_', ' ') || ex.term}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {!entryStatusExam ? (
+                        <div className="glass-dark p-16 rounded-[3rem] text-center text-slate-500">Dooro imtixaan si aad u aragto horumarka maadooyinka.</div>
+                    ) : entryStatusLoading ? (
+                        <div className="glass-dark p-16 rounded-[3rem] text-center text-slate-400 animate-pulse">Xogta ayaa soo raraya...</div>
+                    ) : entryStatusRows.length === 0 ? (
+                        <div className="glass-dark p-16 rounded-[3rem] text-center text-slate-500">Fasalo lama helin imtixaanakan.</div>
+                    ) : (
+                        <>
+                            {(() => {
+                                const totalDone = entryStatusRows.reduce((a, r) => a + r.done, 0);
+                                const totalPartial = entryStatusRows.reduce((a, r) => a + r.partial, 0);
+                                const totalPending = entryStatusRows.reduce((a, r) => a + r.pending, 0);
+                                const totalSubjects = entryStatusRows.reduce((a, r) => a + r.totalSubjects, 0);
+                                const pct = totalSubjects ? Math.round((totalDone / totalSubjects) * 100) : 0;
+                                return (
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                        <div className="glass-dark p-6 rounded-[2rem] border border-white/5">
+                                            <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Done</p>
+                                            <p className="text-3xl font-black text-emerald-400 mt-1">{totalDone}</p>
+                                        </div>
+                                        <div className="glass-dark p-6 rounded-[2rem] border border-white/5">
+                                            <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Partial</p>
+                                            <p className="text-3xl font-black text-amber-400 mt-1">{totalPartial}</p>
+                                        </div>
+                                        <div className="glass-dark p-6 rounded-[2rem] border border-white/5">
+                                            <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Remaining</p>
+                                            <p className="text-3xl font-black text-slate-300 mt-1">{totalPending}</p>
+                                        </div>
+                                        <div className="glass-dark p-6 rounded-[2rem] border border-white/5">
+                                            <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">Overall</p>
+                                            <p className="text-3xl font-black text-indigo-400 mt-1">{pct}%</p>
+                                            <p className="text-[10px] text-slate-500 mt-1">{totalDone}/{totalSubjects} subjects</p>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+
+                            <div className="space-y-6">
+                                {entryStatusRows.map((row: any) => (
+                                    <div key={row.classId} className="glass-dark rounded-[2.5rem] border border-white/5 overflow-hidden">
+                                        <div className="px-6 sm:px-8 py-5 border-b border-white/5 flex flex-wrap items-center justify-between gap-3">
+                                            <div>
+                                                <h3 className="text-lg font-black text-white">{row.className}</h3>
+                                                <p className="text-xs text-slate-500 mt-0.5">{row.studentTotal} students · {row.done} done · {row.partial} partial · {row.pending} remaining</p>
+                                            </div>
+                                            <div className="w-40 h-2 rounded-full bg-slate-800 overflow-hidden">
+                                                <div
+                                                    className="h-full bg-emerald-500"
+                                                    style={{ width: `${row.totalSubjects ? Math.round((row.done / row.totalSubjects) * 100) : 0}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                        {row.subjects.length === 0 ? (
+                                            <p className="px-8 py-8 text-sm text-slate-500">Maadooyin lama qoondein fasalkan.</p>
+                                        ) : (
+                                            <div className="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                                {row.subjects.map((sub: any) => (
+                                                    <div
+                                                        key={sub.id}
+                                                        className={`flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border text-sm ${
+                                                            sub.complete
+                                                                ? 'border-emerald-500/20 bg-emerald-500/10'
+                                                                : sub.partial
+                                                                    ? 'border-amber-500/20 bg-amber-500/10'
+                                                                    : 'border-white/5 bg-white/5'
+                                                        }`}
+                                                    >
+                                                        <div className="min-w-0">
+                                                            <p className="font-bold text-white truncate">{sub.name}</p>
+                                                            <p className="text-[11px] text-slate-400">{sub.entered}/{sub.studentTotal} marks</p>
+                                                        </div>
+                                                        <span className={`shrink-0 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${
+                                                            sub.complete ? 'text-emerald-400' : sub.partial ? 'text-amber-400' : 'text-slate-500'
+                                                        }`}>
+                                                            {sub.complete ? 'Done' : sub.partial ? 'Partial' : 'Pending'}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </>
+                    )}
                 </div>
             ) : view === 'clearance' ? (
                 <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">

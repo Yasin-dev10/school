@@ -12,6 +12,7 @@ import {
 interface SchoolClass { _id: string; name: string; section?: string }
 interface Student {
     _id: string; firstName: string; lastName: string; email: string;
+    username?: string;
     status?: string; password_plain?: string; createdAt?: string;
     profile?: {
         admissionNo?: string; studentId?: string; rollNo?: string;
@@ -110,6 +111,10 @@ function QuickView({ student, classes, onClose }: { student: Student; classes: S
             {/* Details */}
             <div className="px-4 space-y-3 text-sm pb-4">
                 <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-0.5">Username</p>
+                    <p className="text-slate-700 dark:text-slate-300 font-mono text-sm">{student.username || '—'}</p>
+                </div>
+                <div>
                     <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-0.5">Contact</p>
                     <p className="text-slate-700 dark:text-slate-300">{student.profile?.phone || '—'}</p>
                     <p className="text-slate-500 dark:text-slate-400 text-xs">{student.email}</p>
@@ -200,7 +205,8 @@ export default function StudentsListPage() {
             `${s.firstName} ${s.lastName}`.toLowerCase().includes(q) ||
             (s.profile?.admissionNo || '').toLowerCase().includes(q) ||
             (s.profile?.studentId || '').toLowerCase().includes(q) ||
-            s.email.toLowerCase().includes(q);
+            s.email.toLowerCase().includes(q) ||
+            (s.username || '').toLowerCase().includes(q);
         const matchCls = !filterClass ||
             `${s.profile?.class || ''}${s.profile?.section ? ` ${s.profile.section}` : ''}`.trim() === filterClass ||
             s.profile?.class === filterClass;
@@ -234,7 +240,11 @@ export default function StudentsListPage() {
         if (!confirm("Reset this student's password?")) return;
         try {
             const { data } = await api.post(`/students/${id}/reset-password`);
-            alert(`New password: ${data.password}`);
+            alert(
+                `Login credentials:\n` +
+                `Username: ${data.username || '—'}\n` +
+                `New password: ${data.password}`
+            );
             fetchData();
         } catch (err: any) { alert(err.response?.data?.message || 'Failed'); }
     };
@@ -433,7 +443,9 @@ export default function StudentsListPage() {
                                                     </div>
                                                     <div>
                                                         <p className="font-semibold text-slate-800 dark:text-white leading-tight">{s.firstName} {s.lastName}</p>
-                                                        <p className="text-[10px] text-slate-400 truncate max-w-[140px]">{s.email}</p>
+                                                        <p className="text-[10px] font-mono text-indigo-600 dark:text-indigo-300 truncate max-w-[140px]">
+                                                            {s.username || s.email}
+                                                        </p>
                                                     </div>
                                                 </div>
                                             </td>

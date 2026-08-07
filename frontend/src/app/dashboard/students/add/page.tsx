@@ -146,8 +146,18 @@ export default function AddStudentPage() {
                 parentRelationship: formData.parentRelationship
             });
 
-            if (data.tempPassword) {
-                alert(`Student registered successfully!\n\nAccess Credentials:\nEmail: ${formData.email}\nPassword: ${data.tempPassword}\n\nPlease copy this password and provide it to the student.`);
+            if (data.tempPassword || data.username) {
+                const parentLine = data.parentTempPassword
+                    ? `\n\nParent credentials:\nEmail: ${formData.parentEmail}\nPassword: ${data.parentTempPassword}`
+                    : '';
+                alert(
+                    `Student registered successfully!\n\n` +
+                    `Access Credentials:\n` +
+                    `Username: ${data.username || data.data?.username || '—'}\n` +
+                    `Password: ${data.tempPassword || '—'}` +
+                    `${parentLine}\n\n` +
+                    `Please copy these credentials and provide them to the student.`
+                );
             } else {
                 alert('Student registered successfully');
             }

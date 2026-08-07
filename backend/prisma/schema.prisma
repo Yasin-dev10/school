@@ -352,6 +352,8 @@ model User {
   email         String?
   username      String?     @unique
   password      String
+  /// Admin-recoverable login password (shown on student/teacher profile). Hashed `password` remains authoritative for auth.
+  passwordPlain String?
   role          UserRole
   status        UserStatus @default(active)
   tokenVersion  Int        @default(0)

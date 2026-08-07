@@ -42,7 +42,9 @@ exports.login = async (req, res) => {
             where: {
                 OR: [
                     { username: loginId.toUpperCase() },
-                    { email: loginId.toLowerCase() }
+                    { email: loginId.toLowerCase() },
+                    { studentId: loginId.toUpperCase() },
+                    { admissionNo: loginId }
                 ]
             },
             select: {

@@ -189,12 +189,26 @@ exports.resetTeacherPassword = async (req, res) => {
         const salt = await bcrypt.genSalt(10);
         const hashed = await bcrypt.hash(newPassword, salt);
 
-        await prisma.user.update({
-            where: { id: req.params.id },
-            data: { password: hashed, tokenVersion: { increment: 1 } }
-        });
+        let username = teacher.username;
+        if (!username) {
+            username = await generateUsername(prisma, { role: 'teacher', tenantId: req.user.tenantId });
+            await prisma.user.update({
+                where: { id: req.params.id },
+                data: { password: hashed, username, tokenVersion: { increment: 1 } }
+            });
+        } else {
+            await prisma.user.update({
+                where: { id: req.params.id },
+                data: { password: hashed, tokenVersion: { increment: 1 } }
+            });
+        }
 
-        res.status(200).json({ success: true, message: 'Password reset successfully', password: newPassword });
+        res.status(200).json({
+            success: true,
+            message: 'Password reset successfully',
+            username,
+            password: newPassword
+        });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -221,6 +235,7 @@ exports.bulkRegisterTeachers = async (req, res) => {
                 }
 
                 const generatedPassword = generatePassword();
+                const username = await generateUsername(prisma, { role: 'teacher', tenantId });
                 const salt = await bcrypt.genSalt(10);
                 const hashed = await bcrypt.hash(generatedPassword, salt);
 
@@ -229,6 +244,7 @@ exports.bulkRegisterTeachers = async (req, res) => {
                         firstName: teacherData.firstName,
                         lastName: teacherData.lastName,
                         email: teacherData.email.toLowerCase(),
+                        username,
                         password: hashed,
                         role: 'teacher',
                         tenantId,
@@ -240,7 +256,11 @@ exports.bulkRegisterTeachers = async (req, res) => {
                     select: teacherSelect
                 });
 
-                addedTeachers.push({ ...formatTeacher(teacher), tempPassword: generatedPassword });
+                addedTeachers.push({
+                    ...formatTeacher(teacher),
+                    username,
+                    tempPassword: generatedPassword
+                });
             } catch (err) {
                 errors.push({ email: teacherData.email, error: err.message });
             }

@@ -61,6 +61,7 @@ interface StudentProfile {
 
 interface Student extends Person {
     profile?: StudentProfile;
+    username?: string | null;
     password_plain?: string | null;
     createdAt?: DateInput;
     updatedAt?: DateInput;
@@ -260,6 +261,8 @@ export default function StudentDetailPage() {
     const [view, setView] = useState<View>('profile');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const [resettingPassword, setResettingPassword] = useState(false);
     const [attendanceData, setAttendanceData] = useState<AttendanceData>({ records: [], stats: emptyAttendanceStats });
     const [gradesData, setGradesData] = useState<GradesData>({ terms: [], cumulativeGpa: '0.00', totalCredits: 0 });
     const [marks, setMarks] = useState<Mark[]>([]);
@@ -413,6 +416,31 @@ export default function StudentDetailPage() {
     useEffect(() => {
         if (id) fetchStudent();
     }, [fetchStudent, id]);
+
+    const handleResetPassword = async () => {
+        if (!id || !confirm("Generate a new password for this student?")) return;
+        setResettingPassword(true);
+        try {
+            const { data } = await api.post(`/students/${id}/reset-password`);
+            setStudent((prev) =>
+                prev
+                    ? {
+                          ...prev,
+                          username: data.username || prev.username,
+                          password_plain: data.password
+                      }
+                    : prev
+            );
+            setShowPassword(true);
+            alert(
+                `Login credentials:\nUsername: ${data.username || '—'}\nPassword: ${data.password}`
+            );
+        } catch (error: any) {
+            alert(error.response?.data?.message || 'Failed to reset password');
+        } finally {
+            setResettingPassword(false);
+        }
+    };
 
     const handleEditSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
@@ -790,6 +818,43 @@ export default function StudentDetailPage() {
                             </div>
                         </div>
                         <div className="lg:col-span-1 space-y-6 animate-in fade-in slide-in-from-right-4">
+                            <div className="glass-dark p-6 rounded-3xl border border-white/5">
+                                <h3 className="text-lg font-bold text-white mb-4">Login Credentials</h3>
+                                <div className="space-y-3">
+                                    <div className="p-4 bg-white/5 rounded-2xl border border-white/5">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Username</p>
+                                        <p className="text-sm font-mono text-indigo-300 break-all">{student.username || 'Not set'}</p>
+                                    </div>
+                                    <div className="p-4 bg-white/5 rounded-2xl border border-white/5">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Password</p>
+                                        <p className="text-sm font-mono text-indigo-300 break-all">
+                                            {student.password_plain
+                                                ? (showPassword ? student.password_plain : '••••••••••••')
+                                                : 'Reset password to generate'}
+                                        </p>
+                                    </div>
+                                    <div className="flex flex-col gap-2 pt-1">
+                                        {student.password_plain && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowPassword((value) => !value)}
+                                                className="w-full py-2.5 rounded-xl border border-white/10 text-sm font-semibold text-slate-200 hover:bg-white/5 transition"
+                                            >
+                                                {showPassword ? 'Hide password' : 'Show password'}
+                                            </button>
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={handleResetPassword}
+                                            disabled={resettingPassword}
+                                            className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 text-sm font-semibold text-white transition"
+                                        >
+                                            {resettingPassword ? 'Resetting…' : 'Reset password'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div className="glass-dark p-6 rounded-3xl border border-white/5">
                                 <h3 className="text-lg font-bold text-white mb-4">Guardians</h3>
                                 {guardians.length > 0 ? guardians.map((parent) => (

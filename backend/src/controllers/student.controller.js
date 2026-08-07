@@ -2,6 +2,7 @@ const prisma = require('../config/prismaClient');
 const bcrypt = require('bcryptjs');
 const { logAction } = require('../utils/logger');
 const generatePassword = require('../utils/generatePassword');
+const generateUsername = require('../utils/generateUsername');
 const { emitToTenant } = require('../config/socket');
 const { getTeacherScope, canTeacherAccessStudent } = require('../utils/teacherScope');
 const {
@@ -13,7 +14,7 @@ const {
 
 const userSelect = {
     id: true, tenantId: true, firstName: true, lastName: true,
-    email: true, role: true, status: true, lastLogin: true,
+    email: true, username: true, role: true, status: true, lastLogin: true,
     phone: true, profileAddress: true, avatarUrl: true,
     designation: true, admissionNo: true, studentId: true,
     rollNo: true, profileClass: true, profileSection: true,
@@ -28,12 +29,22 @@ const userSelect = {
     createdAt: true, updatedAt: true
 };
 
-const formatUser = (u) => {
+const adminCredentialSelect = {
+    ...userSelect,
+    passwordPlain: true
+};
+
+const formatUser = (u, { includeCredentials = false } = {}) => {
     if (!u) return null;
 
+    const { passwordPlain, password, ...safeUser } = u;
+
     return {
-        ...u,
+        ...safeUser,
         _id: u.id,
+        ...(includeCredentials
+            ? { password_plain: passwordPlain || null, username: u.username || null }
+            : {}),
         profile: {
             phone: u.phone, address: u.profileAddress, avatarUrl: u.avatarUrl,
             designation: u.designation, admissionNo: u.admissionNo,
@@ -120,6 +131,7 @@ exports.createStudent = async (req, res) => {
 
         const tenantId = req.user.tenantId;
         const generatedPassword = password || generatePassword();
+        const username = await generateUsername(prisma, { role: 'student', tenantId });
 
         const exists = await prisma.user.findFirst({ where: { email: email.toLowerCase() } });
         if (exists) return res.status(400).json({ message: 'User with this email already exists' });
@@ -169,7 +181,9 @@ exports.createStudent = async (req, res) => {
             data: {
                 firstName, lastName,
                 email: email.toLowerCase(),
+                username,
                 password: hashed,
+                passwordPlain: generatedPassword,
                 role: 'student',
                 tenantId,
                 phone: profile?.phone || null,
@@ -213,6 +227,7 @@ exports.createStudent = async (req, res) => {
         res.status(201).json({
             success: true, message: 'Student registered successfully',
             data: formatUser(student),
+            username,
             tempPassword: generatedPassword,
             ...(parentTempPassword && { parentTempPassword })
         });
@@ -282,18 +297,34 @@ exports.getStudentById = async (req, res) => {
             if (!link) return res.status(403).json({ success: false, message: 'Access denied. Child not linked to parent.' });
         }
 
+        const canViewCredentials = ['school-admin', 'receptionist'].includes(req.user.role);
         const student = await prisma.user.findFirst({
             where: { id, tenantId: req.user.tenantId, role: 'student' },
             select: {
-                ...userSelect,
+                ...(canViewCredentials ? adminCredentialSelect : userSelect),
                 parentLinks: { include: { parent: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } } } }
             }
         });
 
         if (!student) return res.status(404).json({ success: false, message: 'Student not found in this school' });
 
-        const formatted = formatUser(student);
+        // Backfill generated username for older student records
+        if (canViewCredentials && !student.username) {
+            const username = await generateUsername(prisma, {
+                role: 'student',
+                tenantId: req.user.tenantId
+            });
+            await prisma.user.update({
+                where: { id: student.id },
+                data: { username }
+            });
+            student.username = username;
+        }
+
+        const formatted = formatUser(student, { includeCredentials: canViewCredentials });
         formatted.profile.parentIds = student.parentLinks?.map(l => formatUser(l.parent)) || [];
+        // Always expose username on profile responses (login id for students)
+        formatted.username = student.username || null;
         res.status(200).json({ success: true, data: formatted });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -613,6 +644,7 @@ exports.bulkImportStudents = async (req, res) => {
                 const admissionNo = s.admissionNo || `${yr2}${String(count + 1).padStart(4, '0')}`;
                 const studentId = s.studentId || `STU-${year}-${String(count + 1).padStart(4, '0')}`;
                 const genPass = s.password || generatePassword();
+                const username = await generateUsername(prisma, { role: 'student', tenantId });
                 const salt = await bcrypt.genSalt(10);
                 const hashed = await bcrypt.hash(genPass, salt);
                 const classProfile = await resolveStudentClassProfile(tenantId, s.class, s.section);
@@ -620,14 +652,15 @@ exports.bulkImportStudents = async (req, res) => {
                 await prisma.user.create({
                     data: {
                         firstName: s.firstName, lastName: s.lastName,
-                        email: s.email.toLowerCase(), password: hashed,
+                        email: s.email.toLowerCase(), username, password: hashed,
+                        passwordPlain: genPass,
                         role: 'student', tenantId,
                         admissionNo, studentId,
                         ...classProfile,
                         gender: s.gender || null, phone: s.phone || null
                     }
                 });
-                importResults.push({ email: s.email, status: 'success', tempPassword: genPass });
+                importResults.push({ email: s.email, username, status: 'success', tempPassword: genPass });
             } catch (err) {
                 importResults.push({ email: s.email, status: 'failed', reason: err.message });
             }
@@ -656,13 +689,29 @@ exports.resetStudentPassword = async (req, res) => {
         const salt = await bcrypt.genSalt(10);
         const hashed = await bcrypt.hash(newPassword, salt);
 
+        let username = student.username;
+        const updateData = {
+            password: hashed,
+            passwordPlain: newPassword,
+            tokenVersion: { increment: 1 }
+        };
+        if (!username) {
+            username = await generateUsername(prisma, { role: 'student', tenantId: req.user.tenantId });
+            updateData.username = username;
+        }
+
         await prisma.user.update({
             where: { id: req.params.id },
-            data: { password: hashed, tokenVersion: { increment: 1 } }
+            data: updateData
         });
 
         await logAction({ action: 'UPDATE', module: 'USER', details: `Reset password for student: ${student.firstName} ${student.lastName}`, userId: req.user._id, tenantId: req.user.tenantId });
-        res.status(200).json({ success: true, message: 'Password reset successfully', password: newPassword });
+        res.status(200).json({
+            success: true,
+            message: 'Password reset successfully',
+            username,
+            password: newPassword
+        });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }

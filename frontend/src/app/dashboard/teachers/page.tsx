@@ -13,6 +13,7 @@ type Teacher = {
     firstName: string;
     lastName: string;
     email: string;
+    username?: string;
     status?: string;
     password_plain?: string;
     createdAt?: string;
@@ -107,6 +108,9 @@ function TeacherCard({ teacher, onReset }: { teacher: Teacher; onReset: (id: str
                     <p className="font-bold text-slate-800 dark:text-white text-sm leading-tight">
                         {teacher.firstName} {teacher.lastName}
                     </p>
+                    <p className="text-xs font-mono text-indigo-600 dark:text-indigo-300 mt-0.5">
+                        {teacher.username || teacher.email}
+                    </p>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{designation}</p>
                 </div>
 
@@ -165,7 +169,12 @@ export default function TeachersPage() {
         if (!confirm("Reset this teacher's password?")) return;
         try {
             const { data } = await api.post(`/teachers/${id}/reset-password`);
-            alert(`New password: ${data.password}\n\nShare this with the teacher.`);
+            alert(
+                `Login credentials:\n` +
+                `Username: ${data.username || '—'}\n` +
+                `New password: ${data.password}\n\n` +
+                `Share this with the teacher.`
+            );
             fetchTeachers();
         } catch (err: any) { alert(err.response?.data?.message || 'Reset failed'); }
     };
@@ -194,6 +203,7 @@ export default function TeachersPage() {
             const matchSearch = !search ||
                 `${t.firstName} ${t.lastName}`.toLowerCase().includes(q) ||
                 t.email.toLowerCase().includes(q) ||
+                (t.username || '').toLowerCase().includes(q) ||
                 (t.profile?.designation || '').toLowerCase().includes(q) ||
                 (t.profile?.department || '').toLowerCase().includes(q);
             const matchStatus = !filterStatus || t.status === filterStatus;

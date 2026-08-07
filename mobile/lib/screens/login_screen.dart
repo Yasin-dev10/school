@@ -5,7 +5,9 @@ import '../providers/theme_provider.dart';
 import '../widgets/theme_toggle_button.dart';
 import '../widgets/custom_button.dart';
 import '../utils/app_colors.dart';
+import '../utils/validation.dart';
 import 'drawer/zoom_drawer_screen.dart';
+import 'forgot_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -16,7 +18,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen>
     with SingleTickerProviderStateMixin {
-  final _emailController = TextEditingController();
+  final _identifierController = TextEditingController();
   final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _obscurePassword = true;
@@ -44,7 +46,7 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   void dispose() {
-    _emailController.dispose();
+    _identifierController.dispose();
     _passwordController.dispose();
     _animController.dispose();
     super.dispose();
@@ -55,7 +57,7 @@ class _LoginScreenState extends State<LoginScreen>
 
     final auth = Provider.of<AuthProvider>(context, listen: false);
     final success = await auth.login(
-      _emailController.text.trim(),
+      _identifierController.text.trim(),
       _passwordController.text,
     );
 
@@ -113,123 +115,141 @@ class _LoginScreenState extends State<LoginScreen>
                 padding: const EdgeInsets.all(AppSpacing.xxl),
                 child: Form(
                   key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Align(
-                        alignment: Alignment.centerRight,
-                        child: ThemeToggleButton(showLabel: true),
-                      ),
-                      const SizedBox(height: AppSpacing.xxxl),
-                      Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: AppColors.primaryGradient,
-                          ),
-                          borderRadius: BorderRadius.circular(AppRadii.lg),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.primary.withValues(alpha: 0.3),
-                              blurRadius: 16,
-                              offset: const Offset(0, 8),
+                  child: AutofillGroup(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Align(
+                          alignment: Alignment.centerRight,
+                          child: ThemeToggleButton(showLabel: true),
+                        ),
+                        const SizedBox(height: AppSpacing.xxxl),
+                        Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: AppColors.primaryGradient,
                             ),
+                            borderRadius: BorderRadius.circular(AppRadii.lg),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.primary.withValues(alpha: 0.3),
+                                blurRadius: 16,
+                                offset: const Offset(0, 8),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.school_rounded,
+                            color: Colors.white,
+                            size: 28,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.xxl),
+                        Text(
+                          'Welcome back',
+                          style: Theme.of(context).textTheme.headlineMedium
+                              ?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.8,
+                              ),
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        Text(
+                          'Teachers and students sign in with their generated username. Parents and staff can use email.',
+                          style: Theme.of(context).textTheme.bodyLarge
+                              ?.copyWith(
+                                color: AppColors.mutedText(context),
+                                height: 1.4,
+                              ),
+                        ),
+                        const SizedBox(height: AppSpacing.huge),
+                        TextFormField(
+                          controller: _identifierController,
+                          keyboardType: TextInputType.text,
+                          textInputAction: TextInputAction.next,
+                          autofillHints: const [
+                            AutofillHints.username,
+                            AutofillHints.email,
                           ],
-                        ),
-                        child: const Icon(
-                          Icons.school_rounded,
-                          color: Colors.white,
-                          size: 28,
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.xxl),
-                      Text(
-                        'Welcome back',
-                        style: Theme.of(context).textTheme.headlineMedium
-                            ?.copyWith(
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.8,
-                            ),
-                      ),
-                      const SizedBox(height: AppSpacing.sm),
-                      Text(
-                        'Sign in to your school account — teachers, students, and parents.',
-                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          color: AppColors.mutedText(context),
-                          height: 1.4,
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.huge),
-                      TextFormField(
-                        controller: _emailController,
-                        keyboardType: TextInputType.emailAddress,
-                        textInputAction: TextInputAction.next,
-                        autofillHints: const [AutofillHints.email],
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'Email is required';
-                          }
-                          if (!value.contains('@')) {
-                            return 'Enter a valid email';
-                          }
-                          return null;
-                        },
-                        decoration: const InputDecoration(
-                          labelText: 'Email address',
-                          hintText: 'you@school.edu',
-                          prefixIcon: Icon(Icons.email_outlined),
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.lg),
-                      TextFormField(
-                        controller: _passwordController,
-                        obscureText: _obscurePassword,
-                        textInputAction: TextInputAction.done,
-                        onFieldSubmitted: (_) => _handleLogin(),
-                        autofillHints: const [AutofillHints.password],
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Password is required';
-                          }
-                          if (value.length < 4) {
-                            return 'Password is too short';
-                          }
-                          return null;
-                        },
-                        decoration: InputDecoration(
-                          labelText: 'Password',
-                          prefixIcon: const Icon(Icons.lock_outlined),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _obscurePassword
-                                  ? Icons.visibility_outlined
-                                  : Icons.visibility_off_outlined,
-                            ),
-                            onPressed: () {
-                              setState(() {
-                                _obscurePassword = !_obscurePassword;
-                              });
-                            },
+                          validator: (value) {
+                            final result =
+                                ValidationUtils.validateLoginIdentifier(value);
+                            return result.isValid ? null : result.message;
+                          },
+                          decoration: const InputDecoration(
+                            labelText: 'Username or email',
+                            hintText: 'TCH-SCHOOL-0001 or you@school.edu',
+                            prefixIcon: Icon(Icons.person_outline_rounded),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: AppSpacing.xxxl),
-                      CustomButton(
-                        label: 'Sign in',
-                        icon: Icons.arrow_forward_rounded,
-                        isLoading: auth.isLoading,
-                        onPressed: auth.isLoading ? null : _handleLogin,
-                      ),
-                      const SizedBox(height: AppSpacing.xxl),
-                      Center(
-                        child: Text(
-                          'Use the same credentials as the web dashboard',
-                          textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(color: AppColors.mutedText(context)),
+                        const SizedBox(height: AppSpacing.lg),
+                        TextFormField(
+                          controller: _passwordController,
+                          obscureText: _obscurePassword,
+                          textInputAction: TextInputAction.done,
+                          onFieldSubmitted: (_) => _handleLogin(),
+                          autofillHints: const [AutofillHints.password],
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Password is required';
+                            }
+                            if (value.length < 4) {
+                              return 'Password is too short';
+                            }
+                            return null;
+                          },
+                          decoration: InputDecoration(
+                            labelText: 'Password',
+                            prefixIcon: const Icon(Icons.lock_outlined),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscurePassword
+                                    ? Icons.visibility_outlined
+                                    : Icons.visibility_off_outlined,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _obscurePassword = !_obscurePassword;
+                                });
+                              },
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      const ForgotPasswordScreen(),
+                                ),
+                              );
+                            },
+                            child: const Text('Forgot password?'),
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.lg),
+                        CustomButton(
+                          label: 'Sign in',
+                          icon: Icons.arrow_forward_rounded,
+                          isLoading: auth.isLoading,
+                          onPressed: auth.isLoading ? null : _handleLogin,
+                        ),
+                        const SizedBox(height: AppSpacing.xxl),
+                        Center(
+                          child: Text(
+                            'Use the same credentials as the web dashboard',
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(
+                                  color: AppColors.mutedText(context),
+                                ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

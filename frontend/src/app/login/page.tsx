@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { GraduationCap, Eye, EyeOff } from 'lucide-react';
 
 export default function LoginPage() {
-    const [email, setEmail] = useState('');
+    const [identifier, setIdentifier] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
@@ -21,7 +21,10 @@ export default function LoginPage() {
         setLoading(true);
 
         try {
-            const { data } = await api.post('/auth/login', { email, password });
+            const { data } = await api.post('/auth/login', {
+                identifier: identifier.trim(),
+                password,
+            });
 
             localStorage.setItem('token', data.token);
             localStorage.setItem('user', JSON.stringify(data.user));
@@ -60,7 +63,7 @@ export default function LoginPage() {
                             Welcome back
                         </h1>
                         <p className="text-slate-500 dark:text-slate-400 mt-2 text-sm leading-relaxed">
-                            Sign in to your school account — teachers, students, and parents.
+                            Teachers and students sign in with their generated username. Parents and staff can use email.
                         </p>
                     </div>
 
@@ -73,16 +76,16 @@ export default function LoginPage() {
 
                         <div>
                             <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5 ml-0.5">
-                                Email address
+                                Username or email
                             </label>
                             <input
-                                type="email"
+                                type="text"
                                 required
-                                autoComplete="email"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
+                                autoComplete="username"
+                                value={identifier}
+                                onChange={(e) => setIdentifier(e.target.value)}
                                 className="w-full px-4 py-3 rounded-xl bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
-                                placeholder="you@school.edu"
+                                placeholder="TCH-SCHOOL-0001 or you@school.edu"
                             />
                         </div>
 

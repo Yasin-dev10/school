@@ -62,14 +62,14 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> login(String email, String password) async {
+  Future<bool> login(String identifier, String password) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
       final response = await _apiService.post('/auth/login', {
-        'email': email,
+        'identifier': identifier.trim(),
         'password': password,
       });
 
@@ -116,6 +116,78 @@ class AuthProvider with ChangeNotifier {
     _isLoading = false;
     notifyListeners();
     return false;
+  }
+
+  /// Request a password-reset email. Always returns a user-facing message.
+  Future<({bool success, String message})> forgotPassword(String email) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final response = await _apiService.post('/auth/forgot-password', {
+        'email': email.trim().toLowerCase(),
+      });
+      final data = jsonDecode(response.body);
+      final message = data['message']?.toString() ??
+          'If an active account exists, password reset instructions have been sent.';
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        _isLoading = false;
+        notifyListeners();
+        return (success: true, message: message);
+      }
+
+      _errorMessage = message;
+      _isLoading = false;
+      notifyListeners();
+      return (success: false, message: message);
+    } catch (e) {
+      _errorMessage = 'Network error: Unable to connect to server';
+      debugPrint('Forgot password error: $e');
+      _isLoading = false;
+      notifyListeners();
+      return (success: false, message: _errorMessage!);
+    }
+  }
+
+  /// Complete password reset with the emailed token.
+  Future<({bool success, String message})> resetPassword({
+    required String token,
+    required String password,
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final response = await _apiService.post('/auth/reset-password', {
+        'token': token.trim(),
+        'password': password,
+      });
+      final data = jsonDecode(response.body);
+      final message = data['message']?.toString() ??
+          (response.statusCode == 200
+              ? 'Password reset successfully. You can now log in.'
+              : 'Could not reset password');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        _isLoading = false;
+        notifyListeners();
+        return (success: true, message: message);
+      }
+
+      _errorMessage = message;
+      _isLoading = false;
+      notifyListeners();
+      return (success: false, message: message);
+    } catch (e) {
+      _errorMessage = 'Network error: Unable to connect to server';
+      debugPrint('Reset password error: $e');
+      _isLoading = false;
+      notifyListeners();
+      return (success: false, message: _errorMessage!);
+    }
   }
 
   Future<bool> logout() async {

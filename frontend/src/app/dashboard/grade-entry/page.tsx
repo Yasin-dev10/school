@@ -9,7 +9,7 @@ type GradeConfig = { grade: string; minPercentage: number; maxPercentage: number
 type Student = { _id: string; id?: string; firstName: string; lastName: string; rollNo?: string; admissionNo?: string; profile?: { rollNo?: string; admissionNo?: string } };
 type MarkRow = { studentId: string; score: string; remarks: string; grade?: string; gpa?: number; gradeRemarks?: string; isDirty: boolean };
 type Exam = { _id: string; name: string; term: string; isApproved?: boolean; classes?: any[] };
-type AClass = { _id: string; name: string; section?: string; grade?: string };
+type AClass = { _id: string; name: string; section?: string; grade?: string; subjects?: { subject: Subject }[] };
 type Subject = { _id: string; name: string; code: string };
 
 const DEFAULT_GRADES: GradeConfig[] = [
@@ -65,6 +65,8 @@ export default function GradeEntryPage() {
     const [importErrors, setImportErrors] = useState<string[]>([]);
     const [search, setSearch]     = useState('');
     const importInputRef = useRef<HTMLInputElement>(null);
+    const schoolImportInputRef = useRef<HTMLInputElement>(null);
+    const [schoolExcelBusy, setSchoolExcelBusy] = useState(false);
 
     const showToast = (msg: string, ok = true) => {
         setToast({ msg, ok });
@@ -380,6 +382,166 @@ export default function GradeEntryPage() {
         reader.readAsArrayBuffer(file);
     };
 
+    /* Download one workbook containing every class and student for the selected exam. */
+    const handleDownloadSchoolTemplate = async () => {
+        if (!selExam) { showToast('Select an Exam first', false); return; }
+        setSchoolExcelBusy(true);
+        try {
+            const [studentResponses, existingResponse] = await Promise.all([
+                Promise.all(classes.map(c => api.get('/students', { params: { class: c._id } }))),
+                api.get('/exams/marks', { params: { examId: selExam } }),
+            ]);
+            const existingMarks: any[] = existingResponse.data.data || [];
+            const markMap = new Map<string, number>();
+            existingMarks.forEach(mark => {
+                const studentId = mark.student?._id || mark.student?.id || mark.studentId;
+                const subjectId = mark.subject?._id || mark.subject?.id || mark.subjectId;
+                if (studentId && subjectId) markMap.set(`${studentId}:${subjectId}`, mark.marksObtained);
+            });
+
+            const workbook = XLSX.utils.book_new();
+            const classSheets: { sheetName: string; classId: string; subjects: { id: string; name: string }[] }[] = [];
+            const usedSheetNames = new Set<string>();
+            let totalStudents = 0;
+            classes.forEach((schoolClass, classIndex) => {
+                const classStudents: Student[] = studentResponses[classIndex].data.data || [];
+                const classSubjects = (schoolClass.subjects || []).map(item => item.subject).filter(Boolean);
+                if (!classStudents.length || !classSubjects.length) return;
+                const baseName = `${schoolClass.name}${schoolClass.section ? `-${schoolClass.section}` : ''}`
+                    .replace(/[\\/?*\[\]:]/g, '-').slice(0, 31) || `Class-${classIndex + 1}`;
+                let sheetName = baseName;
+                let suffix = 2;
+                while (usedSheetNames.has(sheetName)) {
+                    const suffixText = `-${suffix++}`;
+                    sheetName = `${baseName.slice(0, 31 - suffixText.length)}${suffixText}`;
+                }
+                usedSheetNames.add(sheetName);
+                const rows = classStudents.map((student, studentIndex) => {
+                    const studentId = student._id || student.id || '';
+                    const row: Record<string, string | number> = {
+                        'Student ID': studentId,
+                        'Roll No': student.rollNo || student.profile?.rollNo || `S${String(studentIndex + 1).padStart(4, '0')}`,
+                        'First Name': student.firstName,
+                        'Last Name': student.lastName,
+                    };
+                    classSubjects.forEach(subject => {
+                        row[subject.name] = markMap.get(`${studentId}:${subject._id}`) ?? '';
+                    });
+                    return row;
+                });
+                const worksheet = XLSX.utils.json_to_sheet(rows, {
+                    header: ['Student ID', 'Roll No', 'First Name', 'Last Name', ...classSubjects.map(subject => subject.name)],
+                });
+                worksheet['!cols'] = [
+                    { wch: 28 }, { wch: 12 }, { wch: 18 }, { wch: 22 },
+                    ...classSubjects.map(() => ({ wch: 16 })),
+                ];
+                if (worksheet['!ref']) worksheet['!autofilter'] = { ref: worksheet['!ref'] };
+                XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+                classSheets.push({
+                    sheetName,
+                    classId: schoolClass._id,
+                    subjects: classSubjects.map(subject => ({ id: subject._id, name: subject.name })),
+                });
+                totalStudents += classStudents.length;
+            });
+            if (!classSheets.length) throw new Error('No classes with assigned subjects and students were found');
+            const current = exams.find(exam => exam._id === selExam);
+            const metadata = XLSX.utils.json_to_sheet([{
+                formatVersion: 2,
+                examId: selExam,
+                examName: current?.name || '',
+                maxMarks,
+                classSheets: JSON.stringify(classSheets),
+            }]);
+            XLSX.utils.book_append_sheet(workbook, metadata, '_meta');
+            const safeExamName = (current?.name || 'exam').replace(/[/\\?%*:|"<>]/g, '-');
+            XLSX.writeFile(workbook, `all-classes-marks_${safeExamName}.xlsx`);
+            showToast(`Excel downloaded: ${classSheets.length} class sheets, ${totalStudents} students`);
+        } catch (err: any) {
+            showToast(err.response?.data?.message || 'Could not download school Excel', false);
+        } finally { setSchoolExcelBusy(false); }
+    };
+
+    /* Validate and save a completed all-classes workbook directly to the system. */
+    const handleImportSchoolExcel = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        event.target.value = '';
+        const reader = new FileReader();
+        reader.onload = async ev => {
+            setSchoolExcelBusy(true);
+            try {
+                const workbook = XLSX.read(new Uint8Array(ev.target?.result as ArrayBuffer), { type: 'array' });
+                const metadataSheet = workbook.Sheets['_meta'];
+                if (!metadataSheet) throw new Error('This is not an All Classes marks template');
+                const [metadata] = XLSX.utils.sheet_to_json<any>(metadataSheet);
+                if (!metadata || metadata.examId !== selExam) throw new Error('This Excel belongs to a different exam');
+                const templateMaxMarks = Number(metadata.maxMarks);
+                if (!Number.isFinite(templateMaxMarks) || templateMaxMarks <= 0) throw new Error('Invalid maximum marks in template');
+                const classSheets: { sheetName: string; classId: string; subjects: { id: string; name: string }[] }[] = JSON.parse(metadata.classSheets || '[]');
+                if (!classSheets.length) throw new Error('Class sheet information is missing from the template');
+                const validClasses = new Set(classes.map(c => c._id));
+                const batches = new Map<string, { classId: string; subjectId: string; marks: { studentId: string; score: number }[] }>();
+                const warnings: string[] = [];
+
+                classSheets.forEach(classSheet => {
+                    const sheet = workbook.Sheets[classSheet.sheetName];
+                    if (!sheet) { warnings.push(`Sheet "${classSheet.sheetName}" is missing`); return; }
+                    if (!validClasses.has(classSheet.classId)) { warnings.push(`Sheet "${classSheet.sheetName}" has an invalid Class ID`); return; }
+                    const rows = XLSX.utils.sheet_to_json<any>(sheet, { defval: '' });
+                    rows.forEach((row, index) => {
+                        const studentId = String(row['Student ID'] || '').trim();
+                        if (!studentId) { warnings.push(`${classSheet.sheetName} row ${index + 2}: missing Student ID`); return; }
+                        classSheet.subjects.forEach(subject => {
+                            const raw = row[subject.name];
+                            if (raw === '' || raw === null || raw === undefined || String(raw).trim().toUpperCase() === 'M') return;
+                            const score = Number(raw);
+                            if (!Number.isFinite(score) || score < 0 || score > templateMaxMarks) {
+                                warnings.push(`${classSheet.sheetName} row ${index + 2}: ${subject.name} score "${raw}" must be 0–${templateMaxMarks} or M`);
+                                return;
+                            }
+                            const key = `${classSheet.classId}:${subject.id}`;
+                            if (!batches.has(key)) batches.set(key, { classId: classSheet.classId, subjectId: subject.id, marks: [] });
+                            batches.get(key)!.marks.push({ studentId, score });
+                        });
+                    });
+                });
+                if (!batches.size) throw new Error('No valid marks were found in the Excel file');
+
+                let saved = 0;
+                for (const batch of batches.values()) {
+                    await api.post('/exams/marks/bulk', {
+                        examId: selExam,
+                        classId: batch.classId,
+                        subjectId: batch.subjectId,
+                        maxMarks: templateMaxMarks,
+                        marks: batch.marks,
+                    });
+                    saved += batch.marks.length;
+                }
+                setImportErrors(warnings);
+                setMaxMarks(templateMaxMarks);
+                showToast(`Saved ${saved} marks from Excel${warnings.length ? ` (${warnings.length} warnings)` : ''}`);
+                if (selClass && selSubject) {
+                    const result = await api.get('/exams/marks', { params: { examId: selExam, classId: selClass, subjectId: selSubject } });
+                    const refreshed: any[] = result.data.data || [];
+                    setMarks(previous => {
+                        const next = { ...previous };
+                        refreshed.forEach(mark => {
+                            const sid = mark.student?._id || mark.student?.id || mark.studentId;
+                            if (next[sid]) next[sid] = { ...next[sid], score: String(mark.marksObtained), grade: mark.grade, gpa: mark.gpa, gradeRemarks: mark.gradeRemarks, isDirty: false };
+                        });
+                        return next;
+                    });
+                }
+            } catch (err: any) {
+                showToast(err.response?.data?.message || err.message || 'Could not import school Excel', false);
+            } finally { setSchoolExcelBusy(false); }
+        };
+        reader.readAsArrayBuffer(file);
+    };
+
     /* ── Render ─────────────────────────────────────────────────────────── */
     return (
         <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5">
@@ -406,6 +568,33 @@ export default function GradeEntryPage() {
                         className="hidden"
                         onChange={handleImportExcel}
                     />
+                    <input
+                        ref={schoolImportInputRef}
+                        type="file"
+                        accept=".xlsx,.xls"
+                        className="hidden"
+                        onChange={handleImportSchoolExcel}
+                    />
+                    {canEdit && selExam && (
+                        <>
+                            <button
+                                onClick={handleDownloadSchoolTemplate}
+                                disabled={schoolExcelBusy}
+                                className="flex items-center gap-1.5 px-4 py-2 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 rounded-lg text-sm font-medium hover:bg-indigo-100 transition disabled:opacity-50"
+                                title="Download every class and student in one Excel file"
+                            >
+                                {schoolExcelBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4" />} All Classes Excel
+                            </button>
+                            <button
+                                onClick={() => schoolImportInputRef.current?.click()}
+                                disabled={schoolExcelBusy}
+                                className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition disabled:opacity-50"
+                                title="Upload and save a completed All Classes Excel file"
+                            >
+                                {schoolExcelBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />} Upload All Classes
+                            </button>
+                        </>
+                    )}
                     {canEdit && selExam && selClass && selSubject && students.length > 0 && (
                         <>
                             <button
