@@ -36,8 +36,8 @@ export default function NotificationsPage() {
         try {
             const { data } = await api.get('/notifications/unread/count');
             setUnreadCount(data.count);
-        } catch (err) {
-            console.error("Failed to fetch unread count");
+        } catch {
+            // Keep the last known value if this supplementary request fails.
         }
     };
 

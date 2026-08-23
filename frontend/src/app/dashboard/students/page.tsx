@@ -3,10 +3,11 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import api from '../../utils/api';
 import Link from 'next/link';
 import {
-    Search, Plus, UserPlus, FileDown, Eye, EyeOff,
-    RotateCcw, Pencil, Trash2, X, ChevronDown,
-    ChevronLeft, ChevronRight, MessageSquare, Users
+    Search, Plus, UserPlus, FileDown, Eye,
+    Pencil, Trash2, X, ChevronDown,
+    ChevronLeft, ChevronRight, Users
 } from 'lucide-react';
+import { useAutosave } from '@/hooks/useAutosave';
 
 /* ─── Types ─────────────────────────────────────────────────────────────── */
 interface SchoolClass { _id: string; name: string; section?: string }
@@ -80,12 +81,10 @@ function ClassFilterDropdown({ classes, value, onChange }: {
 }
 
 /* ─── Quick-View Panel ──────────────────────────────────────────────────── */
-function QuickView({ student, classes, onClose }: { student: Student; classes: SchoolClass[]; onClose: () => void }) {
+function QuickView({ student, onClose }: { student: Student; onClose: () => void }) {
     const initials = `${student.firstName.charAt(0)}${student.lastName.charAt(0)}`.toUpperCase();
     const cls = student.profile?.class;
     const sec = student.profile?.section;
-    // student's classes: find all sections for their class name
-    const studentClasses = classes.filter(c => c.name === cls).map(c => `${c.name}${c.section ? ` ${c.section}` : ''}`);
 
     return (
         <div className="w-72 shrink-0 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col overflow-hidden shadow-lg">
@@ -160,7 +159,6 @@ export default function StudentsListPage() {
     const [page, setPage]           = useState(1);
     const [selected, setSelected]   = useState<string[]>([]);
     const [quickView, setQuickView] = useState<Student | null>(null);
-    const [visiblePw, setVisiblePw] = useState<Set<string>>(new Set());
     const [user, setUser]           = useState<any>(null);
 
     // Modals
@@ -170,6 +168,9 @@ export default function StudentsListPage() {
     const [promoteData,     setPromoteData]      = useState({ class: '', section: 'A' });
     const [bulkCsv,         setBulkCsv]         = useState('');
     const [editData,        setEditData]         = useState<any>(null);
+    const [lastArchived, setLastArchived] = useState<Student | null>(null);
+    const draftKey = `student-edit-${editData?._id || 'none'}`;
+    const { savedAt, clearDraft } = useAutosave(draftKey, editData, isEditOpen && !!editData);
 
     /* ── Fetch ──────────────────────────────────────────────────────────── */
     const fetchData = async () => {
@@ -236,23 +237,26 @@ export default function StudentsListPage() {
         a.download = `students_${Date.now()}.csv`; a.click();
     };
 
-    const handleResetPw = async (id: string) => {
-        if (!confirm("Reset this student's password?")) return;
+    const handleDelete = async (id: string) => {
+        if (!confirm('Archive this student? You can restore the record afterwards.')) return;
+        const student = students.find(item => item._id === id) || null;
         try {
-            const { data } = await api.post(`/students/${id}/reset-password`);
-            alert(
-                `Login credentials:\n` +
-                `Username: ${data.username || '—'}\n` +
-                `New password: ${data.password}`
-            );
-            fetchData();
-        } catch (err: any) { alert(err.response?.data?.message || 'Failed'); }
+            await api.delete(`/students/${id}`);
+            setStudents(current => current.filter(item => item._id !== id));
+            setLastArchived(student);
+        }
+        catch (err: any) { alert(err.response?.data?.message || 'Failed'); }
     };
 
-    const handleDelete = async (id: string) => {
-        if (!confirm('Delete this student?')) return;
-        try { await api.delete(`/students/${id}`); fetchData(); }
-        catch (err: any) { alert(err.response?.data?.message || 'Failed'); }
+    const handleUndoArchive = async () => {
+        if (!lastArchived) return;
+        try {
+            await api.post(`/students/${lastArchived._id}/restore`);
+            setLastArchived(null);
+            fetchData();
+        } catch (err: any) {
+            alert(err.response?.data?.message || 'Restore failed');
+        }
     };
 
     const handlePromote = async (e: React.FormEvent) => {
@@ -278,7 +282,7 @@ export default function StudentsListPage() {
     };
 
     const openEdit = (s: Student) => {
-        setEditData({
+        const initialData = {
             _id: s._id, firstName: s.firstName, lastName: s.lastName, email: s.email,
             class: s.profile?.class || '', section: s.profile?.section || 'A',
             admissionNo: s.profile?.admissionNo || '', studentId: s.profile?.studentId || '',
@@ -286,7 +290,13 @@ export default function StudentsListPage() {
             gender: s.profile?.gender || '', bloodGroup: s.profile?.bloodGroup || '',
             address: s.profile?.address || '', phone: s.profile?.phone || '',
             parentName: s.profile?.parentName || '', parentPhone: s.profile?.parentPhone || '', parentEmail: s.profile?.parentEmail || ''
-        });
+        };
+        try {
+            const stored = localStorage.getItem(`student-edit-${s._id}`);
+            setEditData(stored ? { ...initialData, ...JSON.parse(stored), _id: s._id } : initialData);
+        } catch {
+            setEditData(initialData);
+        }
         setIsEditOpen(true);
     };
 
@@ -297,6 +307,7 @@ export default function StudentsListPage() {
                 firstName: editData.firstName, lastName: editData.lastName, email: editData.email,
                 profile: { class: editData.class, section: editData.section, admissionNo: editData.admissionNo, studentId: editData.studentId, rollNo: editData.rollNo, dateOfBirth: editData.dateOfBirth, gender: editData.gender, bloodGroup: editData.bloodGroup, address: editData.address, phone: editData.phone, parentName: editData.parentName, parentPhone: editData.parentPhone, parentEmail: editData.parentEmail }
             });
+            clearDraft();
             setIsEditOpen(false); setEditData(null); fetchData();
         } catch (err: any) { alert(err.response?.data?.message || 'Failed'); }
     };
@@ -306,6 +317,15 @@ export default function StudentsListPage() {
     /* ── Render ─────────────────────────────────────────────────────────── */
     return (
         <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-4">
+            <div aria-live="polite" aria-atomic="true">
+                {lastArchived && (
+                    <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[70] flex items-center gap-4 rounded-xl bg-slate-900 text-white px-4 py-3 shadow-2xl" role="status">
+                        <span className="text-sm">{lastArchived.firstName} {lastArchived.lastName} archived.</span>
+                        <button type="button" onClick={handleUndoArchive} className="font-bold text-indigo-300 hover:text-indigo-200 underline underline-offset-2">Undo</button>
+                        <button type="button" onClick={() => setLastArchived(null)} aria-label="Dismiss notification" className="text-white/60 hover:text-white"><X className="w-4 h-4" /></button>
+                    </div>
+                )}
+            </div>
 
             {/* ── Bulk Actions Bar ────────────────────────────────────────── */}
             {selected.length > 0 && (
@@ -526,7 +546,7 @@ export default function StudentsListPage() {
 
                 {/* Quick View Panel */}
                 {quickView && (
-                    <QuickView student={quickView} classes={classes} onClose={() => setQuickView(null)} />
+                    <QuickView student={quickView} onClose={() => setQuickView(null)} />
                 )}
             </div>
 
@@ -582,9 +602,12 @@ export default function StudentsListPage() {
 
             {/* ── Edit Student Modal ───────────────────────────────────────── */}
             {isEditOpen && editData && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm overflow-y-auto">
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="edit-student-title">
                     <div className="bg-white dark:bg-slate-900 w-full max-w-3xl rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 p-6 my-8">
-                        <h2 className="text-lg font-bold text-slate-800 dark:text-white mb-4">Edit Student</h2>
+                        <div className="flex items-center justify-between mb-4 gap-4">
+                            <h2 id="edit-student-title" className="text-lg font-bold text-slate-800 dark:text-white">Edit Student</h2>
+                            <span className="text-xs text-slate-500" role="status">{savedAt ? 'Draft autosaved' : 'Autosave on'}</span>
+                        </div>
                         <form onSubmit={handleUpdate} className="space-y-5">
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 {[['First Name','firstName','text'],['Last Name','lastName','text'],['Email','email','email'],['Phone','phone','tel']].map(([label, key, type]) => (

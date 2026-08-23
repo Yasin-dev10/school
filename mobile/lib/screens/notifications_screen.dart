@@ -9,6 +9,7 @@ import '../widgets/app_card.dart';
 import '../widgets/app_loader.dart';
 import '../widgets/empty_state.dart';
 import 'package:flutter_zoom_drawer/flutter_zoom_drawer.dart';
+import '../services/push_notification_service.dart';
 
 class NotificationsScreen extends StatelessWidget {
   const NotificationsScreen({super.key});
@@ -46,6 +47,56 @@ class NotificationsScreen extends StatelessWidget {
     }
   }
 
+  Future<void> _showPreferences(BuildContext context) async {
+    final preferences = await PushNotificationService.instance.getPreferences();
+    if (!context.mounted) return;
+    if (preferences == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not load notification preferences')));
+      return;
+    }
+    final options = <String, String>{
+      'pushEnabled': 'Push notifications',
+      'attendanceAlerts': 'Attendance alerts',
+      'examResultAlerts': 'Exam result alerts',
+      'assignmentAlerts': 'Assignment alerts',
+      'feeAlerts': 'Fee reminders',
+      'announcementAlerts': 'Announcements',
+    };
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setModalState) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Notification preferences', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 8),
+                ...options.entries.map((option) => SwitchListTile.adaptive(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(option.value),
+                  value: preferences[option.key] != false,
+                  onChanged: (value) async {
+                    setModalState(() => preferences[option.key] = value);
+                    final saved = await PushNotificationService.instance.updatePreferences({option.key: value});
+                    if (!saved && context.mounted) {
+                      setModalState(() => preferences[option.key] = !value);
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not save preference')));
+                    }
+                  },
+                )),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Rebuild when either provider changes
@@ -57,6 +108,13 @@ class NotificationsScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
+        actions: [
+          IconButton(
+            tooltip: 'Notification preferences',
+            icon: const Icon(Icons.tune_rounded),
+            onPressed: () => _showPreferences(context),
+          ),
+        ],
         leading: Builder(
           builder: (context) {
             final drawer = ZoomDrawer.of(context);

@@ -4,10 +4,13 @@ import { useRouter } from 'next/navigation';
 import api from '../utils/api';
 import Link from 'next/link';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { LanguageToggle } from '@/components/LanguageToggle';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { Button } from '@/components/ui/Button';
 import { GraduationCap, Eye, EyeOff } from 'lucide-react';
 
 export default function LoginPage() {
+    const { translate: t } = useLanguage();
     const [identifier, setIdentifier] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -39,7 +42,7 @@ export default function LoginPage() {
         } catch (err: any) {
             console.error('Login error FULL:', err);
             console.error('Login error response data:', err.response?.data);
-            setError(err.response?.data?.message || 'Login failed. Please check your credentials.');
+            setError(err.response?.data?.message || t('Login failed. Please check your credentials.'));
         } finally {
             setLoading(false);
         }
@@ -47,7 +50,8 @@ export default function LoginPage() {
 
     return (
         <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
-            <div className="absolute top-4 right-4 z-50">
+            <div className="absolute top-4 right-4 z-50 flex items-center gap-2">
+                <LanguageToggle />
                 <ThemeToggle />
             </div>
             <div className="absolute top-0 -left-48 w-96 h-96 bg-indigo-600/20 rounded-full blur-[128px] pointer-events-none" />
@@ -60,10 +64,10 @@ export default function LoginPage() {
                             <GraduationCap className="w-7 h-7 text-white" />
                         </div>
                         <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
-                            Welcome back
+                            {t('Welcome back')}
                         </h1>
                         <p className="text-slate-500 dark:text-slate-400 mt-2 text-sm leading-relaxed">
-                            Teachers and students sign in with their generated username. Parents and staff can use email.
+                            {t('Teachers and students sign in with their generated username. Parents and staff can use email.')}
                         </p>
                     </div>
 
@@ -76,7 +80,7 @@ export default function LoginPage() {
 
                         <div>
                             <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5 ml-0.5">
-                                Username or email
+                                {t('Username or email')}
                             </label>
                             <input
                                 type="text"
@@ -91,7 +95,7 @@ export default function LoginPage() {
 
                         <div>
                             <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5 ml-0.5">
-                                Password
+                                {t('Password')}
                             </label>
                             <div className="relative">
                                 <input
@@ -101,13 +105,13 @@ export default function LoginPage() {
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     className="w-full px-4 py-3 pr-12 rounded-xl bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
-                                    placeholder="Enter your password"
+                                    placeholder={t('Enter your password')}
                                 />
                                 <button
                                     type="button"
                                     onClick={() => setShowPassword(!showPassword)}
                                     className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1"
-                                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                                    aria-label={t(showPassword ? 'Hide password' : 'Show password')}
                                 >
                                     {showPassword ? (
                                         <EyeOff className="w-5 h-5" />
@@ -124,29 +128,29 @@ export default function LoginPage() {
                                     type="checkbox"
                                     className="rounded bg-white dark:bg-slate-900 border-slate-300 dark:border-white/10 text-indigo-600 focus:ring-indigo-500"
                                 />
-                                <span>Remember me</span>
+                                <span>{t('Remember me')}</span>
                             </label>
                             <Link
                                 href="/forgot-password"
                                 className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 font-medium"
                             >
-                                Forgot password?
+                                {t('Forgot password?')}
                             </Link>
                         </div>
 
                         <Button type="submit" loading={loading} fullWidth size="lg">
-                            {loading ? 'Signing in…' : 'Sign in'}
+                            {t(loading ? 'Signing in…' : 'Sign in')}
                         </Button>
                     </form>
 
                     <p className="text-center text-slate-500 mt-8 text-sm leading-relaxed">
-                        Don&apos;t have an institution registered?
+                        {t("Don't have an institution registered?")}
                         <br />
                         <Link
                             href="/register"
                             className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 font-semibold"
                         >
-                            Contact sales
+                            {t('Contact sales')}
                         </Link>
                     </p>
                 </div>

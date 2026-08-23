@@ -13,7 +13,81 @@ const fonts = {
 
 const printer = new PdfPrinter(fonts);
 
+const getTenantBranding = (tenant = {}) => ({
+    name: tenant.name || 'School',
+    logoUrl: tenant.logoUrl || tenant.config?.logoUrl || null,
+    address: tenant.address || tenant.config?.address || '',
+    academicYear: tenant.academicYear || tenant.config?.academicYear || ''
+});
+
+const addExcelLogo = (workbook, worksheet, logoUrl) => {
+    if (!logoUrl?.startsWith('data:image/')) return false;
+    const match = logoUrl.match(/^data:image\/(png|jpe?g);base64,(.+)$/i);
+    if (!match) return false;
+    const extension = match[1].toLowerCase() === 'png' ? 'png' : 'jpeg';
+    const imageId = workbook.addImage({ base64: match[2], extension });
+    worksheet.addImage(imageId, { tl: { col: 0, row: 0 }, ext: { width: 72, height: 72 } });
+    return true;
+};
+
+exports.generateBrandedTabularExcel = async ({ title, columns, rows }, tenant) => {
+    const brand = getTenantBranding(tenant);
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = brand.name;
+    const worksheet = workbook.addWorksheet(String(title || 'Report').slice(0, 31));
+    worksheet.mergeCells(1, 1, 1, Math.max(columns.length, 2));
+    worksheet.getCell('A1').value = brand.name;
+    worksheet.getCell('A1').font = { bold: true, size: 18, color: { argb: 'FF1E293B' } };
+    worksheet.getCell('A1').alignment = { horizontal: 'center' };
+    worksheet.mergeCells(2, 1, 2, Math.max(columns.length, 2));
+    worksheet.getCell('A2').value = `${title}${brand.academicYear ? ` — ${brand.academicYear}` : ''}`;
+    worksheet.getCell('A2').font = { bold: true, size: 13, color: { argb: 'FF4F46E5' } };
+    worksheet.getCell('A2').alignment = { horizontal: 'center' };
+    worksheet.getRow(1).height = 42;
+    addExcelLogo(workbook, worksheet, brand.logoUrl);
+
+    const headerRow = worksheet.getRow(4);
+    columns.forEach((column, index) => {
+        const cell = headerRow.getCell(index + 1);
+        cell.value = column.header;
+        cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
+        cell.alignment = { horizontal: 'center' };
+        worksheet.getColumn(index + 1).width = column.width || 18;
+    });
+    rows.forEach(row => worksheet.addRow(columns.map(column => row[column.key] ?? '')));
+    worksheet.views = [{ state: 'frozen', ySplit: 4 }];
+    return workbook;
+};
+
+exports.generateBrandedTabularPDF = ({ title, columns, rows }, tenant) => {
+    const brand = getTenantBranding(tenant);
+    const content = [];
+    if (brand.logoUrl?.startsWith('data:image/')) {
+        content.push({ image: brand.logoUrl, width: 60, alignment: 'center', margin: [0, 0, 0, 6] });
+    }
+    content.push(
+        { text: brand.name, fontSize: 20, bold: true, alignment: 'center', color: '#1E293B' },
+        { text: brand.address, fontSize: 9, alignment: 'center', color: '#64748B' },
+        { text: title, fontSize: 15, bold: true, alignment: 'center', color: '#4F46E5', margin: [0, 10, 0, 12] },
+        {
+            table: {
+                headerRows: 1,
+                widths: columns.map(() => '*'),
+                body: [
+                    columns.map(column => ({ text: column.header, bold: true, color: 'white', fillColor: '#4F46E5' })),
+                    ...rows.map(row => columns.map(column => String(row[column.key] ?? '')))
+                ]
+            },
+            layout: 'lightHorizontalLines',
+            fontSize: 8
+        }
+    );
+    return printer.createPdfKitDocument({ content, pageOrientation: columns.length > 6 ? 'landscape' : 'portrait', defaultStyle: { font: 'Roboto' } });
+};
+
 exports.generateExcelMatrix = async (data, tenant) => {
+    const brand = getTenantBranding(tenant);
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Grades Matrix');
 
@@ -61,14 +135,29 @@ exports.generateExcelMatrix = async (data, tenant) => {
         }
     });
 
+    worksheet.insertRows(1, [[brand.name], ['Grades Matrix'], []]);
+    worksheet.mergeCells(1, 1, 1, Math.max(columns.length, 2));
+    worksheet.mergeCells(2, 1, 2, Math.max(columns.length, 2));
+    worksheet.getCell('A1').font = { bold: true, size: 18 };
+    worksheet.getCell('A1').alignment = { horizontal: 'center' };
+    worksheet.getCell('A2').font = { bold: true, size: 13, color: { argb: 'FF4F46E5' } };
+    worksheet.getCell('A2').alignment = { horizontal: 'center' };
+    worksheet.getRow(1).height = 42;
+    const matrixHeader = worksheet.getRow(4);
+    matrixHeader.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    matrixHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
+    addExcelLogo(workbook, worksheet, brand.logoUrl);
+
     return workbook;
 };
 
 exports.generateReportCardPDF = (data, tenant) => {
+    const brand = getTenantBranding(tenant);
     const docDefinition = {
         content: [
-            { text: tenant.name, style: 'header' },
-            { text: tenant.config?.address || '', style: 'subheader' },
+            ...(brand.logoUrl?.startsWith('data:image/') ? [{ image: brand.logoUrl, width: 70, alignment: 'center', margin: [0, 0, 0, 5] }] : []),
+            { text: brand.name, style: 'header' },
+            { text: brand.address, style: 'subheader' },
             { text: '\n' },
             { canvas: [{ type: 'line', x1: 0, y1: 5, x2: 515, y2: 5, lineWidth: 2, lineColor: '#6366F1' }] },
             { text: '\n' },
@@ -94,7 +183,7 @@ exports.generateReportCardPDF = (data, tenant) => {
                             {
                                 text: [
                                     { text: 'Academic Year: ', bold: true, color: '#6366F1' },
-                                    { text: `${tenant.config?.academicYear || '2025/26'}\n` },
+                                    { text: `${brand.academicYear || '2025/26'}\n` },
                                     { text: 'Rank: ', bold: true, color: '#6366F1' },
                                     { text: `${data.summary.rank} of ${data.summary.totalStudents}\n`, bold: true, fontSize: 14 },
                                     { text: 'Status: ', bold: true, color: '#6366F1' },
@@ -189,6 +278,7 @@ exports.generateReportCardPDF = (data, tenant) => {
 };
 
 exports.generateAttendanceReport = async (data, tenant) => {
+    const brand = getTenantBranding(tenant);
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Attendance Report');
 
@@ -234,6 +324,19 @@ exports.generateAttendanceReport = async (data, tenant) => {
             statusCell.font = { color: { argb: 'FFFFA500' }, bold: true };
         }
     });
+
+    worksheet.insertRows(1, [[brand.name], ['Attendance Report'], []]);
+    worksheet.mergeCells('A1:E1');
+    worksheet.mergeCells('A2:E2');
+    worksheet.getCell('A1').font = { bold: true, size: 18 };
+    worksheet.getCell('A1').alignment = { horizontal: 'center' };
+    worksheet.getCell('A2').font = { bold: true, size: 13, color: { argb: 'FF4F46E5' } };
+    worksheet.getCell('A2').alignment = { horizontal: 'center' };
+    worksheet.getRow(1).height = 42;
+    const attendanceHeader = worksheet.getRow(4);
+    attendanceHeader.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 };
+    attendanceHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
+    addExcelLogo(workbook, worksheet, brand.logoUrl);
 
     // Add borders to all cells
     worksheet.eachRow((row, rowNumber) => {

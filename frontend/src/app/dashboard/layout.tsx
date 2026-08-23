@@ -1,10 +1,13 @@
 "use client";
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import api from '../utils/api';
 import { disconnectSocket, initSocket } from '../utils/socket';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { LanguageToggle } from '@/components/LanguageToggle';
+import { AccessibilityControls } from '@/components/AccessibilityControls';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { normalizeRole } from '@/hooks/usePermission';
 import {
     LayoutDashboard,
@@ -41,6 +44,9 @@ import {
     ChevronDown,
     ClipboardList,
     Wallet,
+    CirclePlay,
+    BriefcaseBusiness,
+    Bot,
 } from 'lucide-react';
 
 type NavItem = {
@@ -74,6 +80,7 @@ export default function DashboardLayout({
 }) {
     const router = useRouter();
     const pathname = usePathname();
+    const { translate: t } = useLanguage();
 
     const [isAuthorized, setIsAuthorized] = useState(false);
     const [user, setUser] = useState<any>(null);
@@ -83,13 +90,16 @@ export default function DashboardLayout({
     const [unreadCount, setUnreadCount] = useState(0);
     const [navQuery, setNavQuery] = useState('');
     const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+    const menuButtonRef = useRef<HTMLButtonElement>(null);
 
     const fetchUnreadCount = async () => {
         try {
             const { data } = await api.get('/notifications/unread/count');
             setUnreadCount(data.count);
         } catch {
-            console.error('Failed to fetch unread count');
+            // The badge is supplementary UI. Keep the last known value when the
+            // API is temporarily unavailable instead of triggering Next's error
+            // overlay for an otherwise usable dashboard.
         }
     };
 
@@ -158,6 +168,22 @@ export default function DashboardLayout({
         setIsSidebarOpen(false);
     }, [pathname]);
 
+    useEffect(() => {
+        const handleKeyboard = (event: KeyboardEvent) => {
+            if (event.key === 'Escape' && isSidebarOpen) {
+                setIsSidebarOpen(false);
+                menuButtonRef.current?.focus();
+            }
+            if (event.altKey && event.key.toLowerCase() === 'm') {
+                event.preventDefault();
+                setIsSidebarOpen(true);
+                window.setTimeout(() => document.getElementById('dashboard-navigation')?.focus(), 0);
+            }
+        };
+        document.addEventListener('keydown', handleKeyboard);
+        return () => document.removeEventListener('keydown', handleKeyboard);
+    }, [isSidebarOpen]);
+
     const handleLogout = () => {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
@@ -167,11 +193,12 @@ export default function DashboardLayout({
     const getPageTitle = () => {
         const segments = pathname.split('/').filter(Boolean);
         const last = segments[segments.length - 1];
-        if (!last || last === 'dashboard') return 'Dashboard';
-        return last
+        if (!last || last === 'dashboard') return t('Dashboard');
+        const title = last
             .split('-')
             .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
             .join(' ');
+        return t(title);
     };
 
     const navGroups = useMemo((): NavGroup[] => {
@@ -189,6 +216,7 @@ export default function DashboardLayout({
                 groupIcon: <LayoutDashboard className="w-3.5 h-3.5" />,
                 items: [
                     { name: 'Dashboard', href: '/dashboard', icon: icon(<LayoutDashboard className="w-4 h-4" />) },
+                    { name: 'AI Assistant', href: '/dashboard/ai-assistant', icon: icon(<Bot className="w-4 h-4" />) },
                 ],
             });
             push({
@@ -211,9 +239,12 @@ export default function DashboardLayout({
                 groupIcon: <BookOpen className="w-3.5 h-3.5" />,
                 items: [
                     { name: 'Timetable', href: '/dashboard/timetable', icon: icon(<CalendarDays className="w-4 h-4" />) },
+                    { name: 'Calendar & Events', href: '/dashboard/calendar', icon: icon(<CalendarDays className="w-4 h-4" />) },
                     { name: 'Attendance', href: '/dashboard/attendance', icon: icon(<CalendarCheck className="w-4 h-4" />) },
                     { name: 'Assignments', href: '/dashboard/assignments', icon: icon(<FileText className="w-4 h-4" />) },
+                    { name: 'Online Learning', href: '/dashboard/online-learning', icon: icon(<CirclePlay className="w-4 h-4" />) },
                     { name: 'Library', href: '/dashboard/materials', icon: icon(<BookCopy className="w-4 h-4" />) },
+                    { name: 'Communication', href: '/dashboard/communication', icon: icon(<MessageSquare className="w-4 h-4" />) },
                 ],
             });
             push({
@@ -246,9 +277,11 @@ export default function DashboardLayout({
                 groupIcon: <Package className="w-3.5 h-3.5" />,
                 items: [
                     { name: 'Human Resources', href: '/dashboard/hr', icon: icon(<Users2 className="w-4 h-4" />) },
+                    { name: 'Alumni', href: '/dashboard/alumni', icon: icon(<BriefcaseBusiness className="w-4 h-4" />) },
                     { name: 'Inventory', href: '/dashboard/inventory', icon: icon(<Package className="w-4 h-4" />) },
                     { name: 'Certificates', href: '/dashboard/certificates', icon: icon(<FileBadge className="w-4 h-4" />) },
                     { name: 'Reports', href: '/dashboard/reports', icon: icon(<BarChart3 className="w-4 h-4" />) },
+                    { name: 'Advanced Analytics', href: '/dashboard/analytics', icon: icon(<TrendingUp className="w-4 h-4" />) },
                 ],
             });
             push({
@@ -286,6 +319,7 @@ export default function DashboardLayout({
                 groupIcon: <LayoutDashboard className="w-3.5 h-3.5" />,
                 items: [
                     { name: 'Dashboard', href: '/dashboard', icon: icon(<LayoutDashboard className="w-4 h-4" />) },
+                    { name: 'AI Assistant', href: '/dashboard/ai-assistant', icon: icon(<Bot className="w-4 h-4" />) },
                 ],
             });
             push({
@@ -297,8 +331,10 @@ export default function DashboardLayout({
                     { name: 'Classes', href: '/dashboard/classes', icon: icon(<Building2 className="w-4 h-4" />) },
                     { name: 'Subjects', href: '/dashboard/subjects', icon: icon(<BookOpen className="w-4 h-4" />) },
                     { name: 'Timetable', href: '/dashboard/timetable', icon: icon(<CalendarDays className="w-4 h-4" />) },
+                    { name: 'Calendar & Events', href: '/dashboard/calendar', icon: icon(<CalendarDays className="w-4 h-4" />) },
                     { name: 'Attendance', href: '/dashboard/attendance', icon: icon(<CalendarCheck className="w-4 h-4" />) },
                     { name: 'Assignments', href: '/dashboard/assignments', icon: icon(<FileText className="w-4 h-4" />) },
+                    { name: 'Online Learning', href: '/dashboard/online-learning', icon: icon(<CirclePlay className="w-4 h-4" />) },
                     { name: 'Materials', href: '/dashboard/materials', icon: icon(<FolderOpen className="w-4 h-4" />) },
                 ],
             });
@@ -350,6 +386,7 @@ export default function DashboardLayout({
                 items: [
                     { name: 'Dashboard', href: '/dashboard', icon: icon(<LayoutDashboard className="w-4 h-4" />) },
                     { name: 'My Profile', href: '/dashboard/profile', icon: icon(<Users className="w-4 h-4" />) },
+                    { name: 'AI Study Assistant', href: '/dashboard/ai-assistant', icon: icon(<Bot className="w-4 h-4" />) },
                 ],
             });
             push({
@@ -358,11 +395,14 @@ export default function DashboardLayout({
                 groupIcon: <BookOpen className="w-3.5 h-3.5" />,
                 items: [
                     { name: 'Timetable', href: '/dashboard/timetable', icon: icon(<CalendarDays className="w-4 h-4" />) },
+                    { name: 'Calendar & Events', href: '/dashboard/calendar', icon: icon(<CalendarDays className="w-4 h-4" />) },
                     { name: 'Attendance', href: '/dashboard/attendance', icon: icon(<CalendarCheck className="w-4 h-4" />) },
                     { name: 'Assignments', href: '/dashboard/assignments', icon: icon(<FileText className="w-4 h-4" />) },
+                    { name: 'Online Learning', href: '/dashboard/online-learning', icon: icon(<CirclePlay className="w-4 h-4" />) },
                     { name: 'Exams', href: '/dashboard/exams', icon: icon(<FileText className="w-4 h-4" />) },
                     { name: 'My Grades', href: '/dashboard/grades', icon: icon(<TrendingUp className="w-4 h-4" />) },
                     { name: 'Materials', href: '/dashboard/materials', icon: icon(<FolderOpen className="w-4 h-4" />) },
+                    ...(user.role === 'student' ? [{ name: 'Communication', href: '/dashboard/communication', icon: icon(<MessageSquare className="w-4 h-4" />) }] : []),
                 ],
             });
             push({
@@ -372,14 +412,28 @@ export default function DashboardLayout({
                 items: [
                     { name: 'Fees', href: '/dashboard/student-finance', icon: icon(<DollarSign className="w-4 h-4" />) },
                     { name: 'Certificates', href: '/dashboard/certificates', icon: icon(<FileBadge className="w-4 h-4" />) },
+                    ...(user.role === 'parent' ? [{ name: 'Communication', href: '/dashboard/communication', icon: icon(<MessageSquare className="w-4 h-4" />) }] : []),
                     { name: 'Notifications', href: '/dashboard/notifications', icon: icon(<Bell className="w-4 h-4" />) },
                     { name: 'About School', href: '/dashboard/about', icon: icon(<Info className="w-4 h-4" />) },
                 ],
             });
         }
 
-        return groups;
-    }, [user]);
+        if (user.role !== 'super-admin') {
+            push({
+                id: 'help',
+                label: 'Help & Feedback',
+                groupIcon: <HelpCircle className="w-3.5 h-3.5" />,
+                items: [{ name: 'Help & Feedback', href: '/dashboard/help', icon: icon(<HelpCircle className="w-4 h-4" />) }],
+            });
+        }
+
+        return groups.map((group) => ({
+            ...group,
+            label: t(group.label),
+            items: group.items.map((item) => ({ ...item, name: t(item.name) })),
+        }));
+    }, [user, t]);
 
     // Accordion group menu: keep active group open; others closed by default
     useEffect(() => {
@@ -449,6 +503,7 @@ export default function DashboardLayout({
 
     return (
         <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+            <a href="#main-content" className="skip-link">{t('Skip to main content')}</a>
             {isSidebarOpen && (
                 <div
                     className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-40 lg:hidden"
@@ -457,60 +512,49 @@ export default function DashboardLayout({
             )}
 
             <aside
+                aria-label="Dashboard navigation"
                 className={`
-                fixed inset-y-0 left-0 w-64 bg-slate-900 dark:bg-slate-950 flex flex-col z-50 shadow-xl border-r border-white/5
+                fixed inset-y-0 left-0 w-[17rem] bg-slate-900 dark:bg-slate-950 flex flex-col z-50 shadow-xl border-r border-white/10
                 transition-transform duration-300 transform lg:translate-x-0 lg:static lg:h-full
                 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
             `}
             >
-                <div className="flex flex-col items-center px-4 pt-4 pb-3 border-b border-white/10">
-                    <div className="flex items-center justify-between w-full mb-3">
-                        <div className="flex-1" />
+                <div className="px-3.5 py-3 border-b border-white/10">
+                    <div className="flex items-center gap-3">
+                        <Link href="/dashboard" className="flex min-w-0 flex-1 items-center gap-3 rounded-xl p-1 hover:bg-white/5 transition-colors">
+                            <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl border border-white/15 bg-white shadow-sm">
+                                {tenant?.logoUrl ? (
+                                    <img src={tenant.logoUrl} alt="School Logo" className="h-full w-full object-contain" />
+                                ) : (
+                                    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-indigo-500 to-violet-600 text-lg font-bold text-white">
+                                        {tenant?.name?.charAt(0) || 'S'}
+                                    </div>
+                                )}
+                            </div>
+                            <div className="min-w-0">
+                                <p className="truncate text-sm font-bold text-white">{tenant?.name || 'School Registry'}</p>
+                                <p className="mt-0.5 truncate text-[10px] font-medium uppercase tracking-wider text-white/40">
+                                    {tenant?.academicYear || t('School Management')}
+                                </p>
+                            </div>
+                        </Link>
                         <button
-                            className="lg:hidden p-1 text-white/50 hover:text-white transition-colors"
+                            type="button"
+                            aria-label={t('Close navigation menu')}
+                            className="lg:hidden rounded-lg p-2 text-white/50 hover:bg-white/10 hover:text-white transition-colors"
                             onClick={() => setIsSidebarOpen(false)}
                         >
                             <X className="w-4 h-4" />
                         </button>
                     </div>
-                    <Link href="/dashboard" className="flex flex-col items-center gap-2 w-full">
-                        <div
-                            className="w-full rounded-xl overflow-hidden border border-white/15 bg-white"
-                            style={{ aspectRatio: '3/1' }}
-                        >
-                            {tenant?.logoUrl ? (
-                                <img
-                                    src={tenant.logoUrl}
-                                    alt="School Logo"
-                                    className="w-full h-full object-cover"
-                                />
-                            ) : (
-                                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-indigo-600 to-violet-600">
-                                    <span className="text-white font-semibold text-2xl tracking-tight">
-                                        {tenant?.name?.charAt(0) || 'S'}
-                                    </span>
-                                </div>
-                            )}
-                        </div>
-                        <div className="text-center mt-1">
-                            <p className="text-white font-semibold text-sm leading-tight">
-                                {tenant?.name || 'School Registry'}
-                            </p>
-                            {tenant?.config?.mission && (
-                                <p className="text-white/50 text-[10px] mt-0.5 leading-tight line-clamp-1">
-                                    {tenant.config.mission}
-                                </p>
-                            )}
-                        </div>
-                    </Link>
                 </div>
 
                 {/* Group Menu header */}
-                <div className="px-3 pt-3 pb-2 space-y-2 border-b border-white/5">
+                <div className="px-3 pt-3 pb-2.5 space-y-2 border-b border-white/5">
                     <div className="flex items-center justify-between px-0.5">
                         <p className="text-[11px] font-black uppercase tracking-[0.14em] text-white/50 flex items-center gap-1.5">
                             <Menu className="w-3.5 h-3.5" />
-                            Group Menu
+                            {t('Group Menu')}
                         </p>
                         <div className="flex items-center gap-2">
                             <button
@@ -518,7 +562,7 @@ export default function DashboardLayout({
                                 onClick={expandAllMenus}
                                 className="text-[10px] font-semibold text-indigo-300/80 hover:text-indigo-200"
                             >
-                                Expand
+                                {t('Expand')}
                             </button>
                             <span className="text-white/20">·</span>
                             <button
@@ -526,17 +570,17 @@ export default function DashboardLayout({
                                 onClick={collapseAllMenus}
                                 className="text-[10px] font-semibold text-white/40 hover:text-white/70"
                             >
-                                Collapse
+                                {t('Collapse')}
                             </button>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-white/5 border border-white/10">
+                    <label className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white/[0.07] border border-white/10 focus-within:border-indigo-400/60 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all">
                         <Search className="w-3.5 h-3.5 text-white/40 shrink-0" />
                         <input
                             type="text"
                             value={navQuery}
                             onChange={(e) => setNavQuery(e.target.value)}
-                            placeholder="Search group menu..."
+                            placeholder={t('Search group menu...')}
                             className="bg-transparent text-xs text-white/80 placeholder-white/35 outline-none flex-1 min-w-0"
                         />
                         {navQuery && (
@@ -548,10 +592,10 @@ export default function DashboardLayout({
                                 <X className="w-3.5 h-3.5" />
                             </button>
                         )}
-                    </div>
+                    </label>
                 </div>
 
-                <nav className="flex-1 px-2.5 py-2.5 space-y-2 overflow-y-auto custom-scrollbar scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                <nav id="dashboard-navigation" tabIndex={-1} className="flex-1 px-3 py-3 space-y-1.5 overflow-y-auto custom-scrollbar scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
                     {filteredGroups.map((group) => {
                         const isOpen = navQuery ? true : !!openGroups[group.id];
                         const activeInGroup = groupContainsActive(pathname, group);
@@ -559,16 +603,18 @@ export default function DashboardLayout({
                         return (
                             <div
                                 key={group.id}
-                                className={`rounded-xl border overflow-hidden transition-colors ${
+                                className={`rounded-xl overflow-hidden transition-colors ${
                                     activeInGroup || isOpen
-                                        ? 'border-white/15 bg-white/[0.04]'
-                                        : 'border-white/5 bg-transparent'
+                                        ? 'bg-white/[0.05]'
+                                        : 'bg-transparent'
                                 }`}
                             >
                                 <button
                                     type="button"
                                     onClick={() => toggleGroup(group.id)}
-                                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors ${
+                                    aria-expanded={isOpen}
+                                    aria-controls={`nav-group-${group.id}`}
+                                    className={`w-full flex items-center gap-2.5 px-2.5 py-2 text-left rounded-xl transition-colors ${
                                         activeInGroup
                                             ? 'text-indigo-200'
                                             : 'text-white/70 hover:text-white hover:bg-white/[0.04]'
@@ -587,9 +633,6 @@ export default function DashboardLayout({
                                         <span className="block text-xs font-bold tracking-wide truncate">
                                             {group.label}
                                         </span>
-                                        <span className="block text-[10px] text-white/35 font-medium">
-                                            {group.items.length} item{group.items.length === 1 ? '' : 's'}
-                                        </span>
                                     </span>
                                     <ChevronDown
                                         className={`w-4 h-4 shrink-0 text-white/35 transition-transform ${
@@ -598,16 +641,16 @@ export default function DashboardLayout({
                                     />
                                 </button>
                                 {isOpen && (
-                                    <div className="px-1.5 pb-1.5 space-y-0.5 border-t border-white/5">
+                                    <div id={`nav-group-${group.id}`} className="ml-5 mt-0.5 space-y-0.5 border-l border-white/10 pl-2 pb-1">
                                         {group.items.map((item) => {
                                             const active = isItemActive(pathname, item.href);
                                             return (
                                                 <Link
                                                     key={item.href}
                                                     href={item.href}
-                                                    className={`flex items-center gap-3 px-2.5 py-2 rounded-lg transition-all duration-150 group text-[13px] mt-0.5 ${
+                                                    className={`relative flex items-center gap-2.5 px-2.5 py-2 rounded-lg transition-all duration-150 group text-[13px] ${
                                                         active
-                                                            ? 'bg-indigo-600 text-white font-semibold shadow-md shadow-indigo-500/20'
+                                                            ? 'bg-indigo-500/90 text-white font-semibold shadow-sm shadow-indigo-950/30 before:absolute before:-left-[11px] before:h-5 before:w-0.5 before:rounded-full before:bg-indigo-400'
                                                             : 'text-white/65 hover:text-white hover:bg-white/[0.07]'
                                                     }`}
                                                 >
@@ -630,12 +673,12 @@ export default function DashboardLayout({
                         );
                     })}
                     {filteredGroups.length === 0 && (
-                        <p className="px-3 py-8 text-center text-xs text-white/35">No menu items found</p>
+                        <p className="px-3 py-8 text-center text-xs text-white/35">{t('No menu items found')}</p>
                     )}
                 </nav>
 
-                <div className="px-3 py-3 border-t border-white/10">
-                    <div className="flex items-center gap-2 px-2 py-2 mb-1">
+                <div className="p-3 border-t border-white/10 bg-black/10">
+                    <div className="flex items-center gap-2 rounded-xl px-2 py-2 mb-1">
                         <div className="w-8 h-8 rounded-full bg-indigo-500/30 border border-indigo-400/30 flex items-center justify-center text-indigo-200 font-semibold text-sm shrink-0">
                             {user.firstName?.charAt(0) || user.email?.charAt(0)?.toUpperCase() || 'U'}
                         </div>
@@ -650,10 +693,10 @@ export default function DashboardLayout({
                     </div>
                     <button
                         onClick={handleLogout}
-                        className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-white/50 hover:text-rose-300 hover:bg-rose-500/10 transition-colors text-sm"
+                        className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl border border-white/5 text-white/50 hover:text-rose-300 hover:border-rose-400/20 hover:bg-rose-500/10 transition-colors text-sm"
                     >
                         <LogOut className="w-4 h-4" />
-                        <span>Logout</span>
+                        <span>{t('Logout')}</span>
                     </button>
                 </div>
             </aside>
@@ -662,6 +705,10 @@ export default function DashboardLayout({
                 <header className="h-14 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-4 lg:px-6 bg-white dark:bg-slate-900 sticky top-0 z-30 gap-3">
                     <div className="flex items-center gap-3 shrink-0">
                         <button
+                            ref={menuButtonRef}
+                            type="button"
+                            aria-label="Open navigation menu"
+                            aria-expanded={isSidebarOpen}
                             className="lg:hidden p-1.5 text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
                             onClick={() => setIsSidebarOpen(true)}
                         >
@@ -676,7 +723,7 @@ export default function DashboardLayout({
                         <Search className="w-4 h-4 text-slate-400 shrink-0" />
                         <input
                             type="text"
-                            placeholder="Search students, records, or files..."
+                            placeholder={t('Search students, records, or files...')}
                             className="bg-transparent text-sm text-slate-600 dark:text-slate-300 placeholder-slate-400 outline-none flex-1 min-w-0"
                         />
                     </div>
@@ -696,7 +743,7 @@ export default function DashboardLayout({
 
                         <Link
                             href="/dashboard/about"
-                            aria-label="Help and system information"
+                            aria-label={t('Help and system information')}
                             className="w-9 h-9 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400 transition-colors"
                         >
                             <HelpCircle className="w-4 h-4" />
@@ -707,7 +754,7 @@ export default function DashboardLayout({
                         {tenant?.academicYear && (
                             <div className="hidden md:flex flex-col items-end">
                                 <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
-                                    Academic Year
+                                    {t('Academic Year')}
                                 </span>
                                 <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
                                     {tenant.academicYear}
@@ -715,11 +762,13 @@ export default function DashboardLayout({
                             </div>
                         )}
 
+                        <AccessibilityControls />
+                        <LanguageToggle />
                         <ThemeToggle />
                     </div>
                 </header>
 
-                <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6">{children}</div>
+                <div id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6">{children}</div>
             </main>
         </div>
     );

@@ -243,7 +243,11 @@ exports.getStudents = async (req, res) => {
         const role = req.user.role;
         const { sortBy, order = 'asc' } = req.query;
 
-        let where = { tenantId, role: 'student' };
+        let where = {
+            tenantId,
+            role: 'student',
+            ...(req.query.includeInactive === 'true' ? {} : { status: 'active' })
+        };
 
         if (role === 'teacher') {
             const scope = await getTeacherScope(req.user.id, tenantId);
@@ -392,30 +396,43 @@ exports.updateStudent = async (req, res) => {
     }
 };
 
-// @desc    Delete student
+// @desc    Archive student (recoverable soft-delete)
 exports.deleteStudent = async (req, res) => {
     try {
         const student = await prisma.user.findFirst({ where: { id: req.params.id, tenantId: req.user.tenantId, role: 'student' } });
         if (!student) return res.status(404).json({ message: 'Student not found' });
 
-        // Delete all related records first (no cascade in schema)
-        await prisma.$transaction([
-            prisma.studentParent.deleteMany({ where: { studentId: req.params.id } }),
-            prisma.attendance.deleteMany({ where: { studentId: req.params.id } }),
-            prisma.mark.deleteMany({ where: { studentId: req.params.id } }),
-            prisma.submission.deleteMany({ where: { studentId: req.params.id } }),
-            prisma.examComplaint.deleteMany({ where: { studentId: req.params.id } }),
-            prisma.certificate.deleteMany({ where: { studentId: req.params.id } }),
-            prisma.notificationRead.deleteMany({ where: { userId: req.params.id } }),
-            prisma.invoice.deleteMany({ where: { studentId: req.params.id } }),
-            prisma.user.delete({ where: { id: req.params.id } }),
-        ]);
+        await prisma.user.update({
+            where: { id: req.params.id },
+            data: { status: 'inactive', tokenVersion: { increment: 1 } }
+        });
 
-        await logAction({ action: 'DELETE', module: 'USER', details: `Removed student: ${student.firstName} ${student.lastName}`, userId: req.user._id, tenantId: req.user.tenantId });
+        await logAction({ action: 'DELETE', module: 'USER', details: `Archived student: ${student.firstName} ${student.lastName}`, userId: req.user._id, tenantId: req.user.tenantId });
         emitToTenant(req.user.tenantId, 'student:deleted', { id: req.params.id });
-        res.status(200).json({ success: true, message: 'Student record deleted' });
+        res.status(200).json({ success: true, message: 'Student archived', undoable: true });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// @desc    Restore an archived student
+exports.restoreStudent = async (req, res) => {
+    try {
+        const student = await prisma.user.findFirst({
+            where: { id: req.params.id, tenantId: req.user.tenantId, role: 'student', status: 'inactive' }
+        });
+        if (!student) return res.status(404).json({ message: 'Archived student not found' });
+
+        const restored = await prisma.user.update({
+            where: { id: student.id },
+            data: { status: 'active' },
+            select: userSelect
+        });
+        await logAction({ action: 'UPDATE', module: 'USER', details: `Restored student: ${student.firstName} ${student.lastName}`, userId: req.user._id, tenantId: req.user.tenantId });
+        emitToTenant(req.user.tenantId, 'student:updated', formatUser(restored));
+        res.status(200).json({ success: true, message: 'Student restored', data: formatUser(restored) });
+    } catch (error) {
+        sendError(res, error);
     }
 };
 
@@ -459,15 +476,22 @@ exports.promoteStudents = async (req, res) => {
             const students = await prisma.user.findMany({ where: studentWhereForClass(tenantId, classDoc) });
             const promotedIds = [], retainedIds = [], debugDetails = [];
 
+            const passThreshold = 50;
+
             for (const student of students) {
-                let passedAll = true, failureReason = '';
+                let hasAllMarks = true, failureReason = '', totalObtained = 0, totalMax = 0;
                 for (const exam of exams) {
                     const marks = await prisma.mark.findMany({ where: { studentId: student.id, examId: exam.id, tenantId } });
-                    if (!marks.length) { passedAll = false; failureReason = `No marks for exam: ${exam.name}`; break; }
-                    const failed = marks.find(m => (m.marksObtained / m.maxMarks) * 100 < 50);
-                    if (failed) { passedAll = false; failureReason = `Failed subject in ${exam.name}`; break; }
+                    if (!marks.length) { hasAllMarks = false; failureReason = `No marks for exam: ${exam.name}`; break; }
+                    for (const mark of marks) {
+                        totalObtained += mark.marksObtained;
+                        totalMax += mark.maxMarks;
+                    }
                 }
-                if (passedAll) promotedIds.push(student.id);
+                const finalPercentage = totalMax > 0 ? (totalObtained / totalMax) * 100 : 0;
+                const eligible = hasAllMarks && totalMax > 0 && finalPercentage >= passThreshold;
+                if (!eligible && !failureReason) failureReason = `Final grade ${Math.round(finalPercentage)}% is below ${passThreshold}%`;
+                if (eligible) promotedIds.push(student.id);
                 else { retainedIds.push(student.id); debugDetails.push({ student: `${student.firstName} ${student.lastName}`, reason: failureReason }); }
             }
 
@@ -537,15 +561,8 @@ exports.getPromotionEligibility = async (req, res) => {
             where: { tenantId, status: 'completed', classes: { some: { classId: classDoc.id } } }
         });
 
-        // Fetch grade system thresholds
-        const gradeSystem = await prisma.gradeSystem.findFirst({
-            where: { tenantId, isActive: true },
-            include: { grades: true }
-        });
-        // Pass threshold: lowest minPercentage among non-F grades, default 50
-        const passThreshold = gradeSystem?.grades?.length
-            ? Math.min(...gradeSystem.grades.filter(g => g.grade !== 'F').map(g => g.minPercentage))
-            : 50;
+        // Promotion uses the school's explicit pass rule: 50% overall.
+        const passThreshold = 50;
 
         const result = [];
         for (const student of students) {
@@ -570,16 +587,17 @@ exports.getPromotionEligibility = async (req, res) => {
                     for (const m of marks) {
                         totalObtained += m.marksObtained;
                         totalMax += m.maxMarks;
-                        const pct = (m.marksObtained / m.maxMarks) * 100;
-                        if (pct < passThreshold) {
-                            eligible = false;
-                            reason = reason || `Failed subject in ${exam.name}`;
-                        }
                     }
                 }
             }
 
             const finalPercentage = totalMax > 0 ? Math.round((totalObtained / totalMax) * 100) : null;
+            if (eligible && (finalPercentage === null || finalPercentage < passThreshold)) {
+                eligible = false;
+                reason = finalPercentage === null
+                    ? 'No marks recorded'
+                    : `Final grade ${finalPercentage}% is below ${passThreshold}%`;
+            }
 
             result.push({
                 ...formatUser(student),

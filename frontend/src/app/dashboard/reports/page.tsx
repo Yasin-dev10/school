@@ -14,9 +14,6 @@ import {
     Download, FileSpreadsheet, AlertTriangle, ArrowUpRight,
     RefreshCw, Loader2, Search,
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 
 ChartJS.register(
     CategoryScale, LinearScale, PointElement, LineElement,
@@ -67,6 +64,24 @@ function Spinner() {
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+const downloadBrandedReport = async (
+    format: 'pdf' | 'xlsx',
+    title: string,
+    columns: { key: string; header: string; width?: number }[],
+    rows: Record<string, unknown>[],
+    filename: string
+) => {
+    const response = await api.post('/report-exports', { format, title, columns, rows }, { responseType: 'blob' });
+    const url = URL.createObjectURL(response.data);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${filename}.${format}`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+};
+
 /* ════════════════════════════════════════════════════════════════════════════
    ACADEMIC TAB
    data from: GET /analytics/class/:classId
@@ -107,34 +122,22 @@ function AcademicTab({ classes }: { classes: any[] }) {
         }],
     } : null;
 
-    const exportExcel = () => {
+    const getAcademicExportData = () => {
         if (!data?.gradeMatrix?.length) return;
         const subjects = data.marksBySubject.map((s: any) => s.subjectName);
+        const columns = [{ key: 'student', header: 'Student', width: 28 }, ...subjects.map((subject: string, index: number) => ({ key: `subject_${index}`, header: subject, width: 16 }))];
         const rows = data.gradeMatrix.map((row: any) => {
-            const obj: any = { Student: row.name };
-            subjects.forEach((s: string) => { obj[s] = row.marks.find((m: any) => m.subject === s)?.score ?? ''; });
+            const obj: Record<string, unknown> = { student: row.name };
+            subjects.forEach((subject: string, index: number) => { obj[`subject_${index}`] = row.marks.find((m: any) => m.subject === subject)?.score ?? ''; });
             return obj;
         });
-        const ws = XLSX.utils.json_to_sheet(rows);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Grades');
-        XLSX.writeFile(wb, `grades_${selectedClass?.name ?? 'report'}.xlsx`);
+        return { columns, rows };
     };
 
-    const exportPDF = () => {
-        if (!data?.gradeMatrix?.length) return;
-        const doc = new jsPDF();
-        const subjects = data.marksBySubject.map((s: any) => s.subjectName);
-        doc.text(`Grade Report — ${selectedClass?.name ?? ''}`, 14, 20);
-        autoTable(doc, {
-            head: [['Student', ...subjects]],
-            body: data.gradeMatrix.map((row: any) => [
-                row.name,
-                ...subjects.map((s: string) => row.marks.find((m: any) => m.subject === s)?.score ?? '-'),
-            ]),
-            startY: 28,
-        });
-        doc.save(`grades_${selectedClass?.name ?? 'report'}.pdf`);
+    const exportAcademic = async (format: 'pdf' | 'xlsx') => {
+        const exportData = getAcademicExportData();
+        if (!exportData) return;
+        await downloadBrandedReport(format, `Grade Report — ${selectedClass?.name ?? ''}`, exportData.columns, exportData.rows, `grades_${selectedClass?.name ?? 'report'}`);
     };
 
     return (
@@ -151,10 +154,10 @@ function AcademicTab({ classes }: { classes: any[] }) {
                 </select>
                 {data && (
                     <div className="flex gap-2">
-                        <button onClick={exportExcel} className="flex items-center gap-1.5 px-3 py-2 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded-lg hover:bg-emerald-500/20 transition text-xs font-semibold">
+                        <button onClick={() => exportAcademic('xlsx')} className="flex items-center gap-1.5 px-3 py-2 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded-lg hover:bg-emerald-500/20 transition text-xs font-semibold">
                             <FileSpreadsheet className="w-3.5 h-3.5" /> Excel
                         </button>
-                        <button onClick={exportPDF} className="flex items-center gap-1.5 px-3 py-2 bg-red-500/10 text-red-500 border border-red-500/20 rounded-lg hover:bg-red-500/20 transition text-xs font-semibold">
+                        <button onClick={() => exportAcademic('pdf')} className="flex items-center gap-1.5 px-3 py-2 bg-red-500/10 text-red-500 border border-red-500/20 rounded-lg hover:bg-red-500/20 transition text-xs font-semibold">
                             <Download className="w-3.5 h-3.5" /> PDF
                         </button>
                     </div>
@@ -399,27 +402,30 @@ function FinancialTab({ financeData, overview, loading }: { financeData: any; ov
     /* summary from overview */
     const finance = overview?.finance;
 
-    const exportFinancePDF = () => {
-        const doc = new jsPDF();
-        doc.text('Financial Report — Outstanding Dues', 14, 20);
-        autoTable(doc, {
-            head: [['Student', 'Amount Owed', 'Status', 'Due Date']],
-            body: (financeData.outstanding ?? []).map((inv: any) => [
-                `${inv.student?.firstName ?? ''} ${inv.student?.lastName ?? ''}`,
-                `$${((inv.totalAmount ?? 0) - (inv.paidAmount ?? 0)).toLocaleString()}`,
-                inv.status,
-                inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : '—',
-            ]),
-            startY: 28,
-        });
-        doc.save('financial_report.pdf');
+    const exportFinance = async (format: 'pdf' | 'xlsx') => {
+        const columns = [
+            { key: 'student', header: 'Student', width: 28 },
+            { key: 'amount', header: 'Amount Owed', width: 18 },
+            { key: 'status', header: 'Status', width: 15 },
+            { key: 'dueDate', header: 'Due Date', width: 16 },
+        ];
+        const rows = (financeData.outstanding ?? []).map((inv: any) => ({
+            student: `${inv.student?.firstName ?? ''} ${inv.student?.lastName ?? ''}`.trim(),
+            amount: `$${((inv.totalAmount ?? 0) - (inv.paidAmount ?? 0)).toLocaleString()}`,
+            status: inv.status,
+            dueDate: inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : '—',
+        }));
+        await downloadBrandedReport(format, 'Financial Report — Outstanding Dues', columns, rows, 'financial_report');
     };
 
     return (
         <div className="space-y-5">
-            <div className="flex justify-end">
-                <button onClick={exportFinancePDF} className="flex items-center gap-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-white rounded-xl font-semibold text-sm transition shadow-lg shadow-emerald-500/20">
-                    <Download className="w-4 h-4" /> Generate Full Financial Report
+            <div className="flex justify-end gap-2">
+                <button onClick={() => exportFinance('xlsx')} className="flex items-center gap-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-white rounded-xl font-semibold text-sm transition shadow-lg shadow-emerald-500/20">
+                    <FileSpreadsheet className="w-4 h-4" /> Excel
+                </button>
+                <button onClick={() => exportFinance('pdf')} className="flex items-center gap-2 px-5 py-2.5 bg-red-500 hover:bg-red-400 text-white rounded-xl font-semibold text-sm transition shadow-lg shadow-red-500/20">
+                    <Download className="w-4 h-4" /> PDF
                 </button>
             </div>
 

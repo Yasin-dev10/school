@@ -285,3 +285,79 @@ exports.getStaffAnalytics = async (req, res) => {
         res.status(500).json({ success: false, message: error.message });
     }
 };
+
+// @desc    Advanced, school-wide decision support analytics
+exports.getAdvancedAnalytics = async (req, res) => {
+    try {
+        const tenantId = req.user.tenantId;
+        const now = new Date();
+        const ninetyDaysAgo = new Date(now); ninetyDaysAgo.setDate(now.getDate() - 90);
+        const sixMonthsAgo = new Date(now); sixMonthsAgo.setMonth(now.getMonth() - 5); sixMonthsAgo.setDate(1);
+
+        const [students, marks, attendance, invoices, timetables, teachers] = await Promise.all([
+            prisma.user.findMany({ where: { tenantId, role: 'student', status: 'active' }, select: { id: true, firstName: true, lastName: true, profileClass: true } }),
+            prisma.mark.findMany({ where: { tenantId }, select: { studentId: true, marksObtained: true, maxMarks: true, subject: { select: { id: true, name: true } } } }),
+            prisma.attendance.findMany({ where: { tenantId, date: { gte: ninetyDaysAgo } }, select: { studentId: true, date: true, status: true } }),
+            prisma.invoice.findMany({ where: { tenantId }, select: { studentId: true, totalAmount: true, paidAmount: true, createdAt: true } }),
+            prisma.timetable.findMany({ where: { tenantId }, include: { teachers: { select: { teacherId: true } } } }),
+            prisma.user.findMany({ where: { tenantId, role: 'teacher', status: 'active' }, select: { id: true, firstName: true, lastName: true } })
+        ]);
+
+        const studentStats = new Map(students.map(s => [s.id, { student: s, scoreTotal: 0, scoreCount: 0, present: 0, attendance: 0, outstanding: 0 }]));
+        const subjectMap = new Map();
+        marks.forEach(m => {
+            const percentage = m.maxMarks > 0 ? (m.marksObtained / m.maxMarks) * 100 : 0;
+            const stat = studentStats.get(m.studentId);
+            if (stat) { stat.scoreTotal += percentage; stat.scoreCount++; }
+            const subject = subjectMap.get(m.subject.id) || { subjectId: m.subject.id, subjectName: m.subject.name, total: 0, count: 0 };
+            subject.total += percentage; subject.count++; subjectMap.set(m.subject.id, subject);
+        });
+        attendance.forEach(a => {
+            const stat = studentStats.get(a.studentId);
+            if (stat) { stat.attendance++; if (a.status === 'present') stat.present++; }
+        });
+        invoices.forEach(i => { const stat = studentStats.get(i.studentId); if (stat) stat.outstanding += Math.max(0, i.totalAmount - i.paidAmount); });
+
+        const studentsAtRisk = [...studentStats.values()].map(s => {
+            const averageScore = s.scoreCount ? s.scoreTotal / s.scoreCount : null;
+            const attendanceRate = s.attendance ? (s.present / s.attendance) * 100 : null;
+            const reasons = [];
+            if (averageScore !== null && averageScore < 50) reasons.push('Low academic performance');
+            if (attendanceRate !== null && attendanceRate < 75) reasons.push('Low attendance');
+            if (s.outstanding > 0) reasons.push('Outstanding fees');
+            const riskScore = Math.min(100, (averageScore !== null ? Math.max(0, 50 - averageScore) : 0) + (attendanceRate !== null ? Math.max(0, 75 - attendanceRate) : 0) * 1.5 + (s.outstanding > 0 ? 15 : 0));
+            return { studentId: s.student.id, studentName: `${s.student.firstName} ${s.student.lastName}`, className: s.student.profileClass || 'Unassigned', averageScore: averageScore === null ? null : +averageScore.toFixed(1), attendanceRate: attendanceRate === null ? null : +attendanceRate.toFixed(1), outstandingFees: +s.outstanding.toFixed(2), riskScore: +riskScore.toFixed(1), reasons };
+        }).filter(s => s.reasons.length && s.riskScore > 0).sort((a, b) => b.riskScore - a.riskScore).slice(0, 20);
+
+        const dailyMap = new Map();
+        attendance.forEach(a => {
+            const date = a.date.toISOString().slice(0, 10);
+            const day = dailyMap.get(date) || { date, present: 0, total: 0 };
+            day.total++; if (a.status === 'present') day.present++; dailyMap.set(date, day);
+        });
+        const attendanceTrend = [...dailyMap.values()].sort((a, b) => a.date.localeCompare(b.date)).map(d => ({ date: d.date, rate: +(d.present / d.total * 100).toFixed(1), total: d.total }));
+        const recent = attendanceTrend.slice(-7); const prior = attendanceTrend.slice(-14, -7);
+        const avg = arr => arr.length ? arr.reduce((sum, item) => sum + item.rate, 0) / arr.length : 0;
+        const recentAvg = avg(recent), priorAvg = avg(prior), change = recentAvg - priorAvg;
+        const attendanceAlerts = [];
+        if (recent.length && recentAvg < 80) attendanceAlerts.push({ severity: 'high', title: 'Attendance below target', message: `The 7-day average is ${recentAvg.toFixed(1)}%.` });
+        if (prior.length && change <= -5) attendanceAlerts.push({ severity: 'medium', title: 'Attendance is declining', message: `Attendance fell ${Math.abs(change).toFixed(1)} points versus the previous week.` });
+
+        const subjectPerformance = [...subjectMap.values()].map(s => ({ subjectId: s.subjectId, subjectName: s.subjectName, averageScore: +(s.total / s.count).toFixed(1), assessments: s.count })).sort((a, b) => b.averageScore - a.averageScore);
+        const periodMap = new Map(); timetables.forEach(slot => slot.teachers.forEach(link => periodMap.set(link.teacherId, (periodMap.get(link.teacherId) || 0) + 1)));
+        const teacherWorkload = teachers.map(t => ({ teacherId: t.id, teacherName: `${t.firstName} ${t.lastName}`, periodsPerWeek: periodMap.get(t.id) || 0 })).sort((a, b) => b.periodsPerWeek - a.periodsPerWeek);
+
+        const collectionMap = new Map();
+        for (let offset = 0; offset < 6; offset++) { const d = new Date(sixMonthsAgo); d.setMonth(d.getMonth() + offset); collectionMap.set(d.toISOString().slice(0, 7), 0); }
+        invoices.filter(i => i.createdAt >= sixMonthsAgo).forEach(i => { const key = i.createdAt.toISOString().slice(0, 7); if (collectionMap.has(key)) collectionMap.set(key, collectionMap.get(key) + i.paidAmount); });
+        const history = [...collectionMap.entries()].map(([month, collected]) => ({ month, collected: +collected.toFixed(2) }));
+        const values = history.map(h => h.collected); const n = values.length;
+        const slope = n > 1 ? (n * values.reduce((s, y, x) => s + x * y, 0) - values.reduce((a, b) => a + b, 0) * values.reduce((s, _, x) => s + x, 0)) / (n * values.reduce((s, _, x) => s + x * x, 0) - Math.pow(values.reduce((s, _, x) => s + x, 0), 2)) : 0;
+        const intercept = n ? (values.reduce((a, b) => a + b, 0) - slope * values.reduce((s, _, x) => s + x, 0)) / n : 0;
+        const forecast = [1, 2, 3].map(offset => { const d = new Date(now.getFullYear(), now.getMonth() + offset, 1); return { month: d.toISOString().slice(0, 7), projected: +Math.max(0, intercept + slope * (n - 1 + offset)).toFixed(2) }; });
+
+        res.status(200).json({ success: true, data: { generatedAt: now, studentsAtRisk, attendance: { trend: attendanceTrend, alerts: attendanceAlerts, recentAverage: +recentAvg.toFixed(1), change: +change.toFixed(1) }, subjectPerformance, teacherWorkload, feeForecast: { history, forecast } } });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};

@@ -1,6 +1,7 @@
 const prisma = require('../config/prismaClient');
 const { logAction } = require('../utils/logger');
 const { canTeacherAccessClassSubject, canTeacherAccessStudent } = require('../utils/teacherScope');
+const { notifyStudentAndParents } = require('../services/notification.service');
 
 const startOfDay = (value) => {
     const date = value ? new Date(value) : new Date();
@@ -122,6 +123,13 @@ exports.markAttendance = async (req, res) => {
         }
 
         await logAction({ action: 'CREATE', module: 'USER', details: `Marked attendance for class ${classId}`, userId: req.user._id, tenantId });
+        const alerts = results.filter(result => result.status === 'success' && ['absent', 'late'].includes(result.data.status));
+        await Promise.all(alerts.map(result => notifyStudentAndParents({
+            tenantId, senderId: req.user.id, studentId: result.studentId,
+            title: result.data.status === 'absent' ? 'Attendance alert: Absent' : 'Attendance alert: Late',
+            message: `Attendance was marked ${result.data.status} for ${attendanceDate.toLocaleDateString()}.`,
+            type: 'attendance_alert', eventType: 'attendance', deepLink: '/dashboard/attendance'
+        })));
         res.status(200).json({ success: true, results });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });

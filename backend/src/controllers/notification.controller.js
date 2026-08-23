@@ -1,25 +1,111 @@
 const prisma = require('../config/prismaClient');
+const { dispatchNotification, retryFailedPushDeliveries } = require('../services/notification.service');
 
 // @desc    Send notification
 exports.createNotification = async (req, res) => {
     try {
-        const { title, message, type, channels, targetRole, targetClass } = req.body;
+        const { title, message, type, channels, targetRole, targetClass, targetUserId, deepLink, data } = req.body;
         const tenantId = req.user.tenantId;
+        const selectedChannels = Array.isArray(channels) && channels.length ? channels : ['in_app'];
+        if (deepLink && (!deepLink.startsWith('/') || deepLink.startsWith('//'))) {
+            return res.status(400).json({ success: false, message: 'Deep link must be an internal application path' });
+        }
 
         const notification = await prisma.notification.create({
             data: {
                 title, message,
                 type: type || 'announcement',
-                channels: channels || [],
+                channels: selectedChannels,
                 targetRole: targetRole || 'all',
                 targetClass: targetClass || null,
                 senderId: req.user.id,
                 tenantId,
-                status: 'sent'
+                targetUserId: targetUserId || null,
+                deepLink: deepLink || null,
+                data: data || undefined,
+                status: selectedChannels.some(channel => channel !== 'in_app') ? 'pending' : 'sent'
             }
         });
 
-        res.status(201).json({ success: true, data: notification });
+        let delivery = null;
+        if (selectedChannels.some(channel => channel !== 'in_app')) {
+            delivery = await dispatchNotification(notification);
+        }
+
+        res.status(201).json({ success: true, data: notification, delivery });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.registerDeviceToken = async (req, res) => {
+    try {
+        const { token, platform, deviceName } = req.body;
+        if (!token || !['android', 'ios', 'web'].includes(platform)) {
+            return res.status(400).json({ success: false, message: 'A valid token and platform are required' });
+        }
+        const device = await prisma.deviceToken.upsert({
+            where: { token },
+            update: { userId: req.user.id, tenantId: req.user.tenantId, platform, deviceName: deviceName || null, active: true, lastSeenAt: new Date() },
+            create: { token, userId: req.user.id, tenantId: req.user.tenantId, platform, deviceName: deviceName || null }
+        });
+        res.status(200).json({ success: true, data: { id: device.id, platform: device.platform, active: device.active } });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.unregisterDeviceToken = async (req, res) => {
+    try {
+        await prisma.deviceToken.updateMany({ where: { token: req.body.token, userId: req.user.id }, data: { active: false } });
+        res.status(200).json({ success: true, message: 'Device unregistered' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.getPreferences = async (req, res) => {
+    try {
+        const preferences = await prisma.notificationPreference.upsert({
+            where: { userId: req.user.id }, update: {}, create: { userId: req.user.id, tenantId: req.user.tenantId }
+        });
+        res.status(200).json({ success: true, data: preferences });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.updatePreferences = async (req, res) => {
+    try {
+        const allowed = ['pushEnabled', 'emailEnabled', 'smsEnabled', 'attendanceAlerts', 'examResultAlerts', 'assignmentAlerts', 'feeAlerts', 'announcementAlerts'];
+        const values = Object.fromEntries(allowed.filter(key => typeof req.body[key] === 'boolean').map(key => [key, req.body[key]]));
+        const preferences = await prisma.notificationPreference.upsert({
+            where: { userId: req.user.id }, update: values, create: { userId: req.user.id, tenantId: req.user.tenantId, ...values }
+        });
+        res.status(200).json({ success: true, data: preferences });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.getDeliveryStatus = async (req, res) => {
+    try {
+        const notification = await prisma.notification.findFirst({ where: { id: req.params.id, tenantId: req.user.tenantId } });
+        if (!notification) return res.status(404).json({ success: false, message: 'Notification not found' });
+        const deliveries = await prisma.notificationDelivery.findMany({
+            where: { notificationId: notification.id },
+            select: { id: true, userId: true, status: true, attempts: true, sentAt: true, nextRetryAt: true, errorCode: true, errorMessage: true }
+        });
+        res.status(200).json({ success: true, data: deliveries });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.retryDeliveries = async (_req, res) => {
+    try {
+        const count = await retryFailedPushDeliveries();
+        res.status(200).json({ success: true, retried: count });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -30,15 +116,32 @@ exports.getNotifications = async (req, res) => {
     try {
         const tenantId = req.user.tenantId;
         const role = req.user.role;
-        let where = { tenantId };
+        if (!tenantId && role !== 'super-admin') {
+            return res.status(400).json({ success: false, message: 'User is not assigned to a school' });
+        }
+
+        // Platform super-admin accounts may legitimately have no tenant. Prisma
+        // rejects `tenantId: null` here because Notification.tenantId is required.
+        let where = tenantId ? { tenantId } : { senderId: req.user.id };
 
         if (role === 'student' || role === 'parent') {
-            where.OR = [
-                { targetRole: 'all' },
-                { targetRole: role }
+            const accessRules = [
+                { OR: [{ targetUserId: null }, { targetUserId: req.user.id }] },
+                { OR: [{ targetRole: 'all' }, { targetRole: role }] }
             ];
+            if (role === 'student' && req.user.profileClass) {
+                const cls = await prisma.class.findFirst({
+                    where: { tenantId, name: req.user.profileClass, section: req.user.profileSection || undefined },
+                    select: { id: true }
+                });
+                accessRules.push({ OR: [{ targetClass: null }, { targetClass: cls?.id || '__none__' }] });
+            }
+            where.AND = accessRules;
         } else if (role === 'teacher') {
-            where.OR = [{ targetRole: 'all' }, { targetRole: 'teacher' }];
+            where.AND = [
+                { OR: [{ targetUserId: null }, { targetUserId: req.user.id }] },
+                { OR: [{ targetRole: 'all' }, { targetRole: 'teacher' }] }
+            ];
         }
 
         const notifications = await prisma.notification.findMany({

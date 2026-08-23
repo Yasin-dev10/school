@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../services/api_service.dart';
 import '../services/socket_service.dart';
+import '../services/push_notification_service.dart';
 
 class AuthProvider with ChangeNotifier {
   final _apiService = ApiService();
@@ -40,6 +41,7 @@ class AuthProvider with ChangeNotifier {
             SocketService().initSocket(_user!['tenantId']);
             // fire-and-forget; socket auth uses stored token
           }
+          await PushNotificationService.instance.syncDeviceToken(role: _user?['role']?.toString() ?? 'student');
 
           debugPrint(
             'User authenticated: ${_user?['firstName']} ${_user?['lastName']}',
@@ -89,6 +91,7 @@ class AuthProvider with ChangeNotifier {
             SocketService().initSocket(_user!['tenantId']);
             // fire-and-forget; socket auth uses stored token
           }
+          await PushNotificationService.instance.syncDeviceToken(role: _user?['role']?.toString() ?? 'student');
 
           _isLoading = false;
           _isInitialized = true;
@@ -203,6 +206,7 @@ class AuthProvider with ChangeNotifier {
     }
 
     try {
+      await PushNotificationService.instance.unregister();
       // Disconnect socket
       SocketService().disconnect();
 

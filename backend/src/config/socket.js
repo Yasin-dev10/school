@@ -1,6 +1,7 @@
 const { Server } = require("socket.io");
 const { verifyAccessToken, parseAllowedOrigins, normalizeRole } = require('../utils/security');
 const { isRevoked } = require('../utils/tokenStore');
+const prisma = require('./prismaClient');
 
 let io;
 
@@ -60,6 +61,23 @@ const initSocket = (server) => {
             }
             socket.join(String(tenantId));
         });
+
+        socket.on('chat:join', async (conversationId) => {
+            try {
+                const allowed = await prisma.chatConversation.findFirst({
+                    where: {
+                        id: String(conversationId), tenantId: socket.user.tenantId,
+                        ...(['school-admin', 'super-admin'].includes(socket.user.role) ? {} : { participants: { some: { userId: socket.user.id } } })
+                    }, select: { id: true }
+                });
+                if (!allowed) return socket.emit('chat:error', { message: 'Conversation access denied' });
+                socket.join(`chat:${allowed.id}`);
+            } catch (_) {
+                socket.emit('chat:error', { message: 'Could not join conversation' });
+            }
+        });
+
+        socket.on('chat:leave', (conversationId) => socket.leave(`chat:${String(conversationId)}`));
 
         socket.on("disconnect", () => {
             console.log("User disconnected:", socket.id);

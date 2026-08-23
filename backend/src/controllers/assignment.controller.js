@@ -2,6 +2,20 @@ const prisma = require('../config/prismaClient');
 const { logAction } = require('../utils/logger');
 const { emitToTenant } = require('../config/socket');
 const { canTeacherAccessClassSubject } = require('../utils/teacherScope');
+const { createAutomatedNotification } = require('../services/notification.service');
+
+const similarity = (left = '', right = '') => {
+    const words = (value) => String(value).toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
+    const shingles = (value) => {
+        const list = words(value); const result = new Set();
+        for (let i = 0; i < list.length - 2; i += 1) result.add(list.slice(i, i + 3).join(' '));
+        return result;
+    };
+    const a = shingles(left); const b = shingles(right);
+    if (!a.size || !b.size) return 0;
+    let common = 0; a.forEach((item) => { if (b.has(item)) common += 1; });
+    return Math.round((common / (a.size + b.size - common)) * 10000) / 100;
+};
 
 // @desc    Create assignment
 exports.createAssignment = async (req, res) => {
@@ -32,6 +46,13 @@ exports.createAssignment = async (req, res) => {
         });
 
         emitToTenant(tenantId, 'assignment:created', assignment);
+        if (assignment.status === 'published') {
+            await createAutomatedNotification({
+                tenantId, senderId: req.user.id, targetRole: 'student', targetClass: classId,
+                title: 'New assignment', message: `${title} is due ${new Date(dueDate).toLocaleDateString()}.`,
+                eventType: 'assignment', deepLink: `/dashboard/assignments?assignment=${assignment.id}`
+            });
+        }
         res.status(201).json({ success: true, data: assignment });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -180,6 +201,19 @@ exports.submitAssignment = async (req, res) => {
         });
 
         let submission;
+        let plagiarismScore = 0;
+        let plagiarismMatchId = null;
+        if (content && content.trim().split(/\s+/).length >= 10) {
+            const comparisons = await prisma.submission.findMany({
+                where: { tenantId, assignmentId, studentId: { not: req.user.id }, content: { not: null } },
+                select: { id: true, content: true }
+            });
+            comparisons.forEach((candidate) => {
+                const score = similarity(content, candidate.content);
+                if (score > plagiarismScore) { plagiarismScore = score; plagiarismMatchId = candidate.id; }
+            });
+        }
+        const plagiarismData = { plagiarismScore, plagiarismMatchId, plagiarismCheckedAt: new Date() };
         if (existing) {
             submission = await prisma.submission.update({
                 where: { id: existing.id },
@@ -188,6 +222,7 @@ exports.submitAssignment = async (req, res) => {
                     ...(filePath && { filePath }),
                     status: 'submitted',
                     submittedAt: new Date()
+                    , ...plagiarismData
                 }
             });
         } else {
@@ -199,6 +234,7 @@ exports.submitAssignment = async (req, res) => {
                     content: content || null,
                     filePath,
                     status: 'submitted'
+                    , ...plagiarismData
                 }
             });
         }

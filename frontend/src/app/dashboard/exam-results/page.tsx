@@ -2,13 +2,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '@/app/utils/api';
 import { toast } from 'react-hot-toast';
-import { FileDown, Trophy, TrendingUp, Grid, List, Edit2, Trash2, X } from 'lucide-react';
+import { FileDown, Trophy, TrendingUp, Grid, List, Edit2, Trash2, X, Sparkles, ArrowUp, ArrowDown, Minus } from 'lucide-react';
 
 interface ExamOption {
     id?: string;
     _id?: string;
     name: string;
     term?: string;
+    startDate?: string;
+    isApproved?: boolean;
 }
 
 interface ClassOption {
@@ -42,6 +44,17 @@ interface ApiMark {
     gradeRemarks?: string | null;
     student?: MarkStudent | null;
     subject: SubjectOption;
+    exam?: ExamOption;
+}
+
+interface PredictedResult {
+    student: MarkStudent;
+    predictedPercentage: number;
+    previousAverage: number;
+    trend: number;
+    examCount: number;
+    grade: string;
+    confidence: 'High' | 'Medium' | 'Low';
 }
 
 interface SubjectMark {
@@ -84,6 +97,15 @@ const getApiErrorMessage = (error: unknown, fallback: string) => {
     return fallback;
 };
 
+const getPredictedGrade = (percentage: number) => {
+    if (percentage >= 90) return 'A+';
+    if (percentage >= 80) return 'A';
+    if (percentage >= 70) return 'B';
+    if (percentage >= 60) return 'C';
+    if (percentage >= 50) return 'D';
+    return 'F';
+};
+
 export default function ExamResultsPage() {
     const [exams, setExams] = useState<ExamOption[]>([]);
     const [classes, setClasses] = useState<ClassOption[]>([]);
@@ -91,9 +113,10 @@ export default function ExamResultsPage() {
     const [selectedClass, setSelectedClass] = useState('');
 
     const [results, setResults] = useState<StudentResult[]>([]);
+    const [predictions, setPredictions] = useState<PredictedResult[]>([]);
     const [subjects, setSubjects] = useState<SubjectOption[]>([]);
     const [loading, setLoading] = useState(false);
-    const [viewMode, setViewMode] = useState<'list' | 'matrix'>('list');
+    const [viewMode, setViewMode] = useState<'list' | 'matrix' | 'estimate'>('list');
     const [editingStudent, setEditingStudent] = useState<StudentResult | null>(null);
     const [editingMark, setEditingMark] = useState<SelectedMark | null>(null);
     const [editFormData, setEditFormData] = useState({ marksObtained: '', maxMarks: '', remarks: '' });
@@ -122,12 +145,14 @@ export default function ExamResultsPage() {
         setLoading(true);
         try {
             // Fetch all marks for this class/exam
-            const res = await api.get<{ data: ApiMark[] }>('/exams/marks', {
-                params: {
-                    examId: selectedExam,
-                    classId: selectedClass
-                }
-            });
+            const [res, historyRes] = await Promise.all([
+                api.get<{ data: ApiMark[] }>('/exams/marks', {
+                    params: { examId: selectedExam, classId: selectedClass }
+                }),
+                api.get<{ data: ApiMark[] }>('/exams/marks', {
+                    params: { classId: selectedClass }
+                })
+            ]);
 
             const marks = res.data.data; // Array of Mark objects populated with student
 
@@ -197,13 +222,53 @@ export default function ExamResultsPage() {
 
             setResults(resultArray);
 
+            // Estimate the next result from exams that happened before the selected
+            // exam. Approval is not required; any exam with recorded marks can be used.
+            const targetExam = exams.find(e => (e.id || e._id) === selectedExam);
+            const targetDate = targetExam?.startDate ? new Date(targetExam.startDate).getTime() : Number.POSITIVE_INFINITY;
+            const historyByStudent: Record<string, { student: MarkStudent; exams: Record<string, { date: number; obtained: number; max: number }> }> = {};
+
+            historyRes.data.data.forEach(mark => {
+                if (!mark.student || !mark.exam || (mark.exam.id || mark.exam._id) === selectedExam) return;
+                const examDate = mark.exam.startDate ? new Date(mark.exam.startDate).getTime() : 0;
+                if (examDate >= targetDate) return;
+                const studentHistory = historyByStudent[mark.student.id] ||= { student: mark.student, exams: {} };
+                const examId = mark.exam.id || mark.exam._id || mark.exam.name;
+                const examSummary = studentHistory.exams[examId] ||= { date: examDate, obtained: 0, max: 0 };
+                examSummary.obtained += Number(mark.marksObtained) || 0;
+                examSummary.max += Number(mark.maxMarks) || 0;
+            });
+
+            const estimated = Object.values(historyByStudent).map(({ student, exams: studentExams }) => {
+                const scores = Object.values(studentExams)
+                    .filter(exam => exam.max > 0)
+                    .sort((a, b) => a.date - b.date)
+                    .map(exam => (exam.obtained / exam.max) * 100);
+                const weightedTotal = scores.reduce((sum, score, index) => sum + score * (index + 1), 0);
+                const weight = scores.reduce((sum, _score, index) => sum + index + 1, 0);
+                const previousAverage = scores.reduce((sum, score) => sum + score, 0) / scores.length;
+                const trend = scores.length > 1 ? scores[scores.length - 1] - scores[scores.length - 2] : 0;
+                // Keep the projection conservative by applying only 25% of the latest trend.
+                const predictedPercentage = Math.min(100, Math.max(0, weightedTotal / weight + trend * 0.25));
+                return {
+                    student,
+                    predictedPercentage,
+                    previousAverage,
+                    trend,
+                    examCount: scores.length,
+                    grade: getPredictedGrade(predictedPercentage),
+                    confidence: scores.length >= 3 ? 'High' as const : scores.length === 2 ? 'Medium' as const : 'Low' as const
+                };
+            }).sort((a, b) => b.predictedPercentage - a.predictedPercentage);
+            setPredictions(estimated);
+
         } catch (error) {
             console.error(error);
             toast.error('Failed to fetch results');
         } finally {
             setLoading(false);
         }
-    }, [selectedExam, selectedClass]);
+    }, [selectedExam, selectedClass, exams]);
 
     useEffect(() => {
         if (selectedExam && selectedClass) {
@@ -211,6 +276,7 @@ export default function ExamResultsPage() {
         } else {
             setResults([]);
             setSubjects([]);
+            setPredictions([]);
         }
     }, [selectedExam, selectedClass, fetchResults]);
 
@@ -360,6 +426,16 @@ export default function ExamResultsPage() {
                         <Grid className="w-4 h-4" />
                         Matrix View
                     </button>
+                    <button
+                        onClick={() => setViewMode('estimate')}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${viewMode === 'estimate'
+                            ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/20'
+                            : 'text-slate-500 hover:text-white hover:bg-white/5'
+                            }`}
+                    >
+                        <Sparkles className="w-4 h-4" />
+                        Auto Estimate
+                    </button>
                 </div>
             </div>
 
@@ -409,7 +485,7 @@ export default function ExamResultsPage() {
                         <div className="w-20 h-20 bg-white/5 rounded-[2rem] flex items-center justify-center text-4xl mb-6 shadow-2xl opacity-50">🔍</div>
                         <p className="text-center font-bold">Select an Exam and Class to view the performance ledger.</p>
                     </div>
-                ) : results.length === 0 ? (
+                ) : viewMode !== 'estimate' && results.length === 0 ? (
                     <div className="flex flex-col items-center justify-center p-20 text-slate-500">
                         <div className="w-20 h-20 bg-red-500/10 rounded-[2rem] flex items-center justify-center text-4xl mb-6 shadow-2xl">🚫</div>
                         <p className="text-center font-bold">No academic records found for this specific query.</p>
@@ -482,7 +558,7 @@ export default function ExamResultsPage() {
                                     ))}
                                 </tbody>
                             </table>
-                        ) : (
+                        ) : viewMode === 'matrix' ? (
                             <table className="w-full text-left min-w-max border-collapse">
                                 <thead className="text-[10px] uppercase bg-slate-950/50 text-slate-500 font-black tracking-widest border-b border-white/5 sticky top-0 z-10">
                                     <tr>
@@ -561,6 +637,60 @@ export default function ExamResultsPage() {
                                     ))}
                                 </tbody>
                             </table>
+                        ) : predictions.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center p-20 text-slate-500">
+                                <Sparkles className="w-12 h-12 text-violet-400 mb-5" />
+                                <p className="font-bold text-center">No previous exam marks are available for this estimate.</p>
+                                <p className="text-xs text-slate-600 mt-2 text-center">Enter marks for at least one earlier exam in this class, then the estimate will fill automatically.</p>
+                            </div>
+                        ) : (
+                            <div>
+                                <div className="px-7 py-5 border-b border-white/5 bg-violet-500/5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                                    <div>
+                                        <h2 className="text-white font-black flex items-center gap-2"><Sparkles className="w-4 h-4 text-violet-400" /> Estimated Exam Result</h2>
+                                        <p className="text-xs text-slate-500 mt-1">Automatically calculated from previous exams with recorded marks. This is a forecast, not an official mark.</p>
+                                    </div>
+                                    <span className="text-[10px] uppercase tracking-widest font-black text-violet-300 bg-violet-500/10 border border-violet-500/20 rounded-full px-3 py-1.5">Auto-filled</span>
+                                </div>
+                                <table className="w-full text-left min-w-[820px]">
+                                    <thead className="text-[10px] uppercase bg-slate-950/50 text-slate-500 font-black tracking-widest border-b border-white/5">
+                                        <tr>
+                                            <th className="px-7 py-4">Rank</th>
+                                            <th className="px-7 py-4">Student</th>
+                                            <th className="px-7 py-4 text-center">Previous Exams</th>
+                                            <th className="px-7 py-4 text-center">Previous Avg</th>
+                                            <th className="px-7 py-4 text-center">Trend</th>
+                                            <th className="px-7 py-4 text-center">Estimated Result</th>
+                                            <th className="px-7 py-4 text-center">Grade</th>
+                                            <th className="px-7 py-4 text-center">Confidence</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-white/5">
+                                        {predictions.map((prediction, index) => (
+                                            <tr key={prediction.student.id} className="hover:bg-white/5 transition-colors">
+                                                <td className="px-7 py-4 text-slate-500 font-black">#{index + 1}</td>
+                                                <td className="px-7 py-4">
+                                                    <div className="font-bold text-white">{prediction.student.firstName} {prediction.student.lastName}</div>
+                                                    <div className="text-[10px] text-slate-500 mt-0.5">Adm: {prediction.student.admissionNo || '-'}</div>
+                                                </td>
+                                                <td className="px-7 py-4 text-center text-white font-bold">{prediction.examCount}</td>
+                                                <td className="px-7 py-4 text-center text-slate-300 font-bold">{prediction.previousAverage.toFixed(1)}%</td>
+                                                <td className="px-7 py-4 text-center">
+                                                    <span className={`inline-flex items-center gap-1 font-black ${prediction.trend > 0.5 ? 'text-emerald-400' : prediction.trend < -0.5 ? 'text-red-400' : 'text-slate-500'}`}>
+                                                        {prediction.trend > 0.5 ? <ArrowUp className="w-3.5 h-3.5" /> : prediction.trend < -0.5 ? <ArrowDown className="w-3.5 h-3.5" /> : <Minus className="w-3.5 h-3.5" />}
+                                                        {Math.abs(prediction.trend).toFixed(1)}%
+                                                    </span>
+                                                </td>
+                                                <td className="px-7 py-4 text-center"><span className="text-xl font-black text-violet-300">{prediction.predictedPercentage.toFixed(1)}%</span></td>
+                                                <td className="px-7 py-4 text-center"><span className="px-3 py-1 rounded-lg bg-indigo-500/10 text-indigo-300 font-black">{prediction.grade}</span></td>
+                                                <td className="px-7 py-4 text-center">
+                                                    <span className={`text-[10px] uppercase tracking-wider font-black px-2.5 py-1 rounded-full ${prediction.confidence === 'High' ? 'bg-emerald-500/10 text-emerald-400' : prediction.confidence === 'Medium' ? 'bg-amber-500/10 text-amber-400' : 'bg-slate-500/10 text-slate-400'}`}>{prediction.confidence}</span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         )}
                     </div>
                 )}

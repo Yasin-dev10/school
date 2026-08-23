@@ -22,13 +22,14 @@ export function EmptyState({
 }: EmptyStateProps) {
   return (
     <div
+      role="status"
       className={cn(
         'flex flex-col items-center justify-center text-center py-12 px-6',
         className,
       )}
     >
       <div className="w-14 h-14 rounded-2xl bg-indigo-50 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 flex items-center justify-center mb-4">
-        {icon ?? <Inbox className="w-7 h-7" />}
+        <span aria-hidden="true">{icon ?? <Inbox className="w-7 h-7" />}</span>
       </div>
       <h3 className="text-base font-semibold text-slate-800 dark:text-white">
         {title}

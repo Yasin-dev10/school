@@ -66,6 +66,20 @@ enum AttendanceStatus {
   excused
 }
 
+enum SupportTicketStatus {
+  open
+  in_progress
+  resolved
+  closed
+}
+
+enum SupportTicketPriority {
+  low
+  normal
+  high
+  urgent
+}
+
 enum DayOfWeek {
   Monday
   Tuesday
@@ -122,6 +136,19 @@ enum NotificationChannel {
   in_app @map("in-app")
   sms
   email
+  push
+}
+
+enum DevicePlatform {
+  android
+  ios
+  web
+}
+
+enum DeliveryStatus {
+  pending
+  sent
+  failed
 }
 
 enum TargetRole {
@@ -276,6 +303,43 @@ enum ContactMessageRole {
   Other
 }
 
+enum ConversationType {
+  private
+  group
+  class
+}
+
+enum ChatMessageType {
+  text
+  file
+  audio
+}
+
+enum MessageReceiptStatus {
+  delivered
+  read
+}
+
+enum MessageReportStatus {
+  pending
+  reviewed
+  dismissed
+  actioned
+}
+
+enum SchoolEventType {
+  holiday
+  exam
+  parent_meeting
+  school_event
+}
+
+enum RsvpStatus {
+  going
+  maybe
+  not_going
+}
+
 enum ClassStatus {
   active
   inactive
@@ -340,24 +404,97 @@ model Tenant {
   marks           Mark[]
   submissions     Submission[]
   assignmentPerms AssignmentPermission[]
+  courses         Course[]
+  supportTickets SupportTicket[]
+  satisfactionSurveys SatisfactionSurvey[]
+  alumni          Alumni[]
+  alumniEvents    AlumniEvent[]
+  alumniDonations AlumniDonation[]
 
   @@map("tenants")
 }
 
+model Alumni {
+  id             String   @id @default(cuid())
+  tenantId       String
+  firstName      String
+  lastName       String
+  email          String?
+  phone          String?
+  graduationYear Int
+  program        String?
+  currentCity    String?
+  employmentStatus String @default("unknown")
+  employer       String?
+  jobTitle       String?
+  university     String?
+  degree         String?
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant    Tenant           @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+  donations AlumniDonation[]
+
+  @@index([tenantId, graduationYear])
+  @@index([tenantId, employmentStatus])
+  @@map("alumni")
+}
+
+model AlumniEvent {
+  id          String   @id @default(cuid())
+  tenantId    String
+  title       String
+  description String?
+  location    String?
+  startsAt    DateTime
+  capacity    Int?
+  attendeeCount Int    @default(0)
+  status      String   @default("upcoming")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+
+  @@index([tenantId, startsAt])
+  @@map("alumni_events")
+}
+
+model AlumniDonation {
+  id        String   @id @default(cuid())
+  tenantId  String
+  alumniId  String?
+  donorName String
+  amount    Decimal  @db.Decimal(12, 2)
+  currency  String   @default("USD")
+  purpose   String?
+  donatedAt DateTime @default(now())
+  status    String   @default("received")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant  @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+  alumni Alumni? @relation(fields: [alumniId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, donatedAt])
+  @@index([alumniId])
+  @@map("alumni_donations")
+}
+
 model User {
-  id            String     @id @default(cuid())
-  tenantId      String?
-  firstName     String
-  lastName      String
-  email         String?
-  username      String?     @unique
-  password      String
+  id                     String     @id @default(cuid())
+  tenantId               String?
+  firstName              String
+  lastName               String
+  email                  String?
+  username               String?    @unique
+  password               String
   /// Admin-recoverable login password (shown on student/teacher profile). Hashed `password` remains authoritative for auth.
-  passwordPlain String?
-  role          UserRole
-  status        UserStatus @default(active)
-  tokenVersion  Int        @default(0)
-  lastLogin     DateTime?
+  passwordPlain          String?
+  role                   UserRole
+  status                 UserStatus @default(active)
+  tokenVersion           Int        @default(0)
+  lastLogin              DateTime?
   resetPasswordTokenHash String?
   resetPasswordExpires   DateTime?
 
@@ -429,8 +566,11 @@ model User {
   submissions        Submission[]
   assignmentPerms    AssignmentPermission[]
 
-  notificationsSent Notification[]
-  notificationsRead NotificationRead[]
+  notificationsSent      Notification[]
+  notificationsRead      NotificationRead[]
+  deviceTokens           DeviceToken[]
+  notificationPreference NotificationPreference?
+  notificationDeliveries NotificationDelivery[]
 
   invoicesStudent Invoice[]
   paymentsMarked  Payment[]
@@ -442,8 +582,23 @@ model User {
 
   contactMessagesReplied ContactMessage[] @relation("MessageReplier")
 
-  examApprovals Exam[]
-  materials     Material[]
+  examApprovals           Exam[]
+  materials               Material[]
+  conversationsCreated    ChatConversation[]   @relation("ConversationCreator")
+  conversationMemberships ChatParticipant[]
+  chatMessages            ChatMessage[]        @relation("MessageSender")
+  chatReceipts            ChatMessageReceipt[]
+  messageReports          ChatMessageReport[]  @relation("ReportReporter")
+  messageReportsReviewed  ChatMessageReport[]  @relation("ReportReviewer")
+  messagesModerated       ChatMessage[]        @relation("MessageModerator")
+  schoolEventsCreated     SchoolEvent[]        @relation("EventCreator")
+  eventRsvps              EventRsvp[]
+  coursesCreated          Course[]             @relation("CourseCreator")
+  lessonProgress          LessonProgress[]
+  quizAttempts            QuizAttempt[]
+  supportTickets          SupportTicket[]       @relation("SupportRequester")
+  supportTicketsAssigned  SupportTicket[]       @relation("SupportAssignee")
+  satisfactionSurveys     SatisfactionSurvey[]
 
   @@index([tenantId])
   @@index([email])
@@ -491,6 +646,7 @@ model Class {
   materials   Material[]
   invoices    Invoice[]
   examClasses ExamClass[]
+  courses     Course[]
 
   @@unique([name, section, tenantId])
   @@index([tenantId])
@@ -547,6 +703,7 @@ model Subject {
   materials      Material[]
   examComplaints ExamComplaint[]
   assignments    Assignment[]
+  courses        Course[]
 
   @@unique([name, code, tenantId])
   @@index([tenantId])
@@ -796,27 +953,254 @@ model Payment {
 }
 
 model Notification {
-  id          String                @id @default(cuid())
-  title       String
-  message     String
-  type        NotificationType      @default(announcement)
-  channels    NotificationChannel[]
-  targetRole  TargetRole            @default(all)
-  targetClass String?
-  senderId    String
-  tenantId    String
-  status      NotificationStatus    @default(sent)
+  id           String                @id @default(cuid())
+  title        String
+  message      String
+  type         NotificationType      @default(announcement)
+  channels     NotificationChannel[]
+  targetRole   TargetRole            @default(all)
+  targetClass  String?
+  senderId     String
+  tenantId     String
+  status       NotificationStatus    @default(sent)
+  targetUserId String?
+  deepLink     String?
+  data         Json?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // Relations
-  tenant Tenant             @relation(fields: [tenantId], references: [tenantId])
-  sender User               @relation(fields: [senderId], references: [id])
-  readBy NotificationRead[]
+  tenant     Tenant                 @relation(fields: [tenantId], references: [tenantId])
+  sender     User                   @relation(fields: [senderId], references: [id])
+  readBy     NotificationRead[]
+  deliveries NotificationDelivery[]
 
   @@index([tenantId])
   @@map("notifications")
+}
+
+model DeviceToken {
+  id         String         @id @default(cuid())
+  userId     String
+  tenantId   String
+  token      String         @unique
+  platform   DevicePlatform
+  deviceName String?
+  active     Boolean        @default(true)
+  lastSeenAt DateTime       @default(now())
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  user       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries NotificationDelivery[]
+
+  @@index([userId, active])
+  @@index([tenantId])
+  @@map("device_tokens")
+}
+
+model NotificationPreference {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  tenantId           String
+  pushEnabled        Boolean  @default(true)
+  emailEnabled       Boolean  @default(true)
+  smsEnabled         Boolean  @default(true)
+  attendanceAlerts   Boolean  @default(true)
+  examResultAlerts   Boolean  @default(true)
+  assignmentAlerts   Boolean  @default(true)
+  feeAlerts          Boolean  @default(true)
+  announcementAlerts Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("notification_preferences")
+}
+
+model NotificationDelivery {
+  id             String         @id @default(cuid())
+  notificationId String
+  userId         String
+  deviceTokenId  String?
+  status         DeliveryStatus @default(pending)
+  attempts       Int            @default(0)
+  nextRetryAt    DateTime?
+  sentAt         DateTime?
+  errorCode      String?
+  errorMessage   String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceToken  DeviceToken? @relation(fields: [deviceTokenId], references: [id], onDelete: SetNull)
+
+  @@unique([notificationId, deviceTokenId])
+  @@index([status, nextRetryAt])
+  @@index([userId])
+  @@map("notification_deliveries")
+}
+
+model ChatConversation {
+  id          String           @id @default(cuid())
+  type        ConversationType
+  title       String?
+  classId     String?
+  tenantId    String
+  createdById String
+  archived    Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  createdBy    User              @relation("ConversationCreator", fields: [createdById], references: [id])
+  participants ChatParticipant[]
+  messages     ChatMessage[]
+
+  @@index([tenantId, updatedAt])
+  @@index([classId])
+  @@map("chat_conversations")
+}
+
+model ChatParticipant {
+  id             String    @id @default(cuid())
+  conversationId String
+  userId         String
+  lastReadAt     DateTime?
+  joinedAt       DateTime  @default(now())
+  muted          Boolean   @default(false)
+
+  conversation ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+  @@map("chat_participants")
+}
+
+model ChatMessage {
+  id             String          @id @default(cuid())
+  conversationId String
+  senderId       String
+  body           String?
+  type           ChatMessageType @default(text)
+  replyToId      String?
+  deletedAt      DateTime?
+  moderatedAt    DateTime?
+  moderatedById  String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  conversation ChatConversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User                 @relation("MessageSender", fields: [senderId], references: [id])
+  replyTo      ChatMessage?         @relation("MessageReplies", fields: [replyToId], references: [id])
+  replies      ChatMessage[]        @relation("MessageReplies")
+  moderatedBy  User?                @relation("MessageModerator", fields: [moderatedById], references: [id])
+  attachments  ChatAttachment[]
+  receipts     ChatMessageReceipt[]
+  reports      ChatMessageReport[]
+
+  @@index([conversationId, createdAt])
+  @@index([senderId])
+  @@map("chat_messages")
+}
+
+model ChatAttachment {
+  id        String @id @default(cuid())
+  messageId String
+  fileName  String
+  fileUrl   String
+  mimeType  String
+  size      Int
+  duration  Int?
+
+  message ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@map("chat_attachments")
+}
+
+model ChatMessageReceipt {
+  id          String               @id @default(cuid())
+  messageId   String
+  userId      String
+  status      MessageReceiptStatus @default(delivered)
+  deliveredAt DateTime             @default(now())
+  readAt      DateTime?
+
+  message ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@index([userId, status])
+  @@map("chat_message_receipts")
+}
+
+model ChatMessageReport {
+  id           String              @id @default(cuid())
+  messageId    String
+  reporterId   String
+  reason       String
+  details      String?
+  status       MessageReportStatus @default(pending)
+  reviewedById String?
+  reviewedAt   DateTime?
+  createdAt    DateTime            @default(now())
+
+  message    ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  reporter   User        @relation("ReportReporter", fields: [reporterId], references: [id])
+  reviewedBy User?       @relation("ReportReviewer", fields: [reviewedById], references: [id])
+
+  @@unique([messageId, reporterId])
+  @@index([status, createdAt])
+  @@map("chat_message_reports")
+}
+
+model SchoolEvent {
+  id              String          @id @default(cuid())
+  tenantId        String
+  title           String
+  description     String?
+  type            SchoolEventType
+  startAt         DateTime
+  endAt           DateTime
+  allDay          Boolean         @default(false)
+  location        String?
+  classId         String?
+  targetRoles     UserRole[]
+  createdById     String
+  reminderMinutes Int             @default(1440)
+  reminderSentAt  DateTime?
+  cancelled       Boolean         @default(false)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  createdBy User        @relation("EventCreator", fields: [createdById], references: [id])
+  rsvps     EventRsvp[]
+
+  @@index([tenantId, startAt])
+  @@index([classId])
+  @@index([reminderSentAt, startAt])
+  @@map("school_events")
+}
+
+model EventRsvp {
+  id        String     @id @default(cuid())
+  eventId   String
+  userId    String
+  status    RsvpStatus
+  note      String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  event SchoolEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([userId])
+  @@map("event_rsvps")
 }
 
 model NotificationRead {
@@ -948,16 +1332,19 @@ model AssignmentPermission {
 }
 
 model Submission {
-  id           String           @id @default(cuid())
-  tenantId     String
-  assignmentId String
-  studentId    String
-  content      String?
-  filePath     String?
-  submittedAt  DateTime         @default(now())
-  grade        String?
-  feedback     String?
-  status       SubmissionStatus @default(submitted)
+  id                  String           @id @default(cuid())
+  tenantId            String
+  assignmentId        String
+  studentId           String
+  content             String?
+  filePath            String?
+  submittedAt         DateTime         @default(now())
+  grade               String?
+  feedback            String?
+  status              SubmissionStatus @default(submitted)
+  plagiarismScore     Float?
+  plagiarismMatchId   String?
+  plagiarismCheckedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -969,6 +1356,117 @@ model Submission {
 
   @@index([tenantId])
   @@map("submissions")
+}
+
+model Course {
+  id          String   @id @default(cuid())
+  tenantId    String
+  title       String
+  description String?
+  classId     String
+  subjectId   String?
+  createdById String
+  published   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant    Tenant   @relation(fields: [tenantId], references: [tenantId])
+  class     Class    @relation(fields: [classId], references: [id])
+  subject   Subject? @relation(fields: [subjectId], references: [id])
+  createdBy User     @relation("CourseCreator", fields: [createdById], references: [id])
+  lessons   Lesson[]
+  quizzes   Quiz[]
+
+  @@index([tenantId, classId])
+  @@map("courses")
+}
+
+model Lesson {
+  id          String   @id @default(cuid())
+  courseId    String
+  title       String
+  description String?
+  videoUrl    String
+  durationMin Int?
+  position    Int      @default(0)
+  published   Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  course   Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  progress LessonProgress[]
+
+  @@index([courseId, position])
+  @@map("lessons")
+}
+
+model LessonProgress {
+  id          String   @id @default(cuid())
+  lessonId    String
+  studentId   String
+  completed   Boolean  @default(false)
+  watchedSecs Int      @default(0)
+  updatedAt   DateTime @updatedAt
+  lesson      Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  student     User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([lessonId, studentId])
+  @@map("lesson_progress")
+}
+
+model Quiz {
+  id          String         @id @default(cuid())
+  courseId    String
+  title       String
+  description String?
+  passPercent Int            @default(50)
+  published   Boolean        @default(true)
+  durationMin Int?
+  availableFrom DateTime?
+  deadline    DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  course      Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  questions   QuizQuestion[]
+  attempts    QuizAttempt[]
+
+  @@index([courseId])
+  @@map("quizzes")
+}
+
+model QuizQuestion {
+  id           String @id @default(cuid())
+  quizId       String
+  prompt       String
+  options      Json
+  correctIndex Int
+  points       Int    @default(1)
+  position     Int    @default(0)
+  questionType String @default("multiple_choice")
+  modelAnswer  String?
+  keywords     String[]
+  quiz         Quiz   @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@index([quizId, position])
+  @@map("quiz_questions")
+}
+
+model QuizAttempt {
+  id          String   @id @default(cuid())
+  quizId      String
+  studentId   String
+  answers     Json
+  score       Int
+  totalPoints Int
+  percentage  Float
+  passed      Boolean
+  submittedAt DateTime @default(now())
+  completedAt DateTime?
+  quiz        Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  student     User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([quizId, studentId])
+  @@map("quiz_attempts")
 }
 
 model Material {
@@ -1198,6 +1696,48 @@ model ContactMessage {
   @@index([status])
   @@index([email])
   @@map("contact_messages")
+}
+
+model SupportTicket {
+  id           String                @id @default(cuid())
+  tenantId     String
+  requesterId  String
+  assignedToId String?
+  category     String
+  subject      String
+  description  String
+  priority     SupportTicketPriority @default(normal)
+  status       SupportTicketStatus   @default(open)
+  adminReply   String?
+  resolvedAt   DateTime?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  tenant      Tenant @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+  requester   User   @relation("SupportRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  assignedTo  User?  @relation("SupportAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status, createdAt])
+  @@index([requesterId, createdAt])
+  @@index([tenantId, category])
+  @@map("support_tickets")
+}
+
+model SatisfactionSurvey {
+  id        String   @id @default(cuid())
+  tenantId  String
+  userId    String
+  rating    Int
+  comment   String?
+  context   String   @default("general")
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([userId, createdAt])
+  @@map("satisfaction_surveys")
 }
 
 model AuditLog {

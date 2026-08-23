@@ -1,4 +1,5 @@
 const prisma = require('../config/prismaClient');
+const { createAutomatedNotification } = require('../services/notification.service');
 const { logAction } = require('../utils/logger');
 const { emitToTenant } = require('../config/socket');
 const { generateExcelMatrix, generateReportCardPDF } = require('../utils/reportGenerator');
@@ -310,6 +311,12 @@ exports.approveResults = async (req, res) => {
             where: { id: req.params.id },
             data: { isApproved: true, approvedById: req.user.id, approvalDate: new Date(), status: 'completed' }
         });
+        const classes = await prisma.examClass.findMany({ where: { examId: exam.id }, select: { classId: true } });
+        await Promise.all(classes.map(item => createAutomatedNotification({
+            tenantId: req.user.tenantId, senderId: req.user.id, targetRole: 'student', targetClass: item.classId,
+            title: 'Exam results published', message: `${exam.name} results are now available.`,
+            eventType: 'exam_result', deepLink: `/dashboard/exam-results?exam=${exam.id}`
+        })));
         res.status(200).json({ success: true, data: exam });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });

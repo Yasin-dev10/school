@@ -9,22 +9,21 @@ import {
     Phone,
     MapPin,
     GraduationCap,
-    BookOpen,
     TrendingUp,
     Clock,
     CheckCircle2,
-    AlertCircle,
     FileText,
     DollarSign,
     Bell,
     School,
     BarChart3,
     CalendarDays,
-    Users,
     ArrowRight
 } from 'lucide-react';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 export default function StudentPortalPage() {
+    const { language, translate: t } = useLanguage();
     const [user, setUser] = useState<any>(null);
     const [studentData, setStudentData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -67,7 +66,7 @@ export default function StudentPortalPage() {
             <div className="flex items-center justify-center min-h-[60vh]">
                 <div className="flex flex-col items-center gap-3">
                     <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
-                    <p className="text-sm text-slate-500 dark:text-slate-400">Loading your portal…</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">{t('Loading your portal…')}</p>
                 </div>
             </div>
         );
@@ -92,10 +91,10 @@ export default function StudentPortalPage() {
         <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-6 sm:space-y-10">
             <div className="animate-in fade-in slide-in-from-top-4 duration-500">
                 <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
-                    Student Portal
+                    {t('Student Portal')}
                 </h1>
                 <p className="text-sm sm:text-base text-slate-500 dark:text-slate-400 mt-1">
-                    Welcome back, <span className="text-indigo-600 dark:text-indigo-400 font-semibold">{user?.firstName}</span>. Manage your academic journey.
+                    {t('Welcome back')}, <span className="text-indigo-600 dark:text-indigo-400 font-semibold">{user?.firstName}</span>. {t('Manage your academic journey.')}
                 </p>
             </div>
 
@@ -135,7 +134,7 @@ export default function StudentPortalPage() {
                         <div className={`${item.bg} w-12 h-12 rounded-2xl flex items-center justify-center text-xl mb-4 group-hover:scale-105 transition-transform`}>
                             {item.icon}
                         </div>
-                        <p className="text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wide">{item.label}</p>
+                        <p className="text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wide">{t(item.label)}</p>
                         <p className={`text-3xl font-bold mt-1 tracking-tight ${item.color}`}>{item.value}</p>
                     </div>
                 ))}
@@ -147,7 +146,7 @@ export default function StudentPortalPage() {
                     <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-500 border border-indigo-500/20">
                         <GraduationCap className="w-5 h-5" />
                     </div>
-                    <span>Academic Services</span>
+                    <span>{t('Academic Services')}</span>
                 </h2>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -158,7 +157,7 @@ export default function StudentPortalPage() {
                             icon: <User className="w-8 h-8" />,
                             href: '/dashboard/profile',
                             color: 'bg-indigo-500',
-                            stats: `Class ${profile.profile?.class || 'N/A'}`
+                            stats: `${t('Class')} ${profile.profile?.class || 'N/A'}`
                         },
                         {
                             title: 'Attendance Records',
@@ -166,7 +165,7 @@ export default function StudentPortalPage() {
                             icon: <Calendar className="w-8 h-8" />,
                             href: '/dashboard/attendance',
                             color: 'bg-green-500',
-                            stats: `${attendancePercent}% Present`
+                            stats: `${attendancePercent}% ${t('Present')}`
                         },
                         {
                             title: 'Academic Grades',
@@ -182,7 +181,7 @@ export default function StudentPortalPage() {
                             icon: <FileText className="w-8 h-8" />,
                             href: '/dashboard/reports',
                             color: 'bg-purple-500',
-                            stats: 'View Reports'
+                            stats: t('View Reports')
                         },
                         {
                             title: 'Fee Management',
@@ -190,7 +189,7 @@ export default function StudentPortalPage() {
                             icon: <DollarSign className="w-8 h-8" />,
                             href: '/dashboard/finance',
                             color: 'bg-orange-500',
-                            stats: pendingFees > 0 ? `$${pendingFees} Due` : 'Up to Date'
+                            stats: pendingFees > 0 ? `$${pendingFees} ${t('Due')}` : t('Up to Date')
                         },
                         {
                             title: 'Class Timetable',
@@ -198,7 +197,7 @@ export default function StudentPortalPage() {
                             icon: <CalendarDays className="w-8 h-8" />,
                             href: '/dashboard/timetable',
                             color: 'bg-rose-500',
-                            stats: `${timetable.length} Classes/Week`
+                            stats: `${timetable.length} ${t('Classes/Week')}`
                         },
                         {
                             title: 'Online Examinations',
@@ -206,7 +205,7 @@ export default function StudentPortalPage() {
                             icon: <School className="w-8 h-8" />,
                             href: '/dashboard/exams',
                             color: 'bg-cyan-500',
-                            stats: 'Take Exams'
+                            stats: t('Take Exams')
                         },
                         {
                             title: 'Notifications',
@@ -214,7 +213,7 @@ export default function StudentPortalPage() {
                             icon: <Bell className="w-8 h-8" />,
                             href: '/dashboard/notifications',
                             color: 'bg-amber-500',
-                            stats: 'Stay Updated'
+                            stats: t('Stay Updated')
                         }
                     ].map((service, i) => (
                         <Link key={i} href={service.href} className="group">
@@ -223,10 +222,10 @@ export default function StudentPortalPage() {
                                     {service.icon}
                                 </div>
                                 <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                                    {service.title}
+                                    {t(service.title)}
                                 </h3>
                                 <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 leading-relaxed">
-                                    {service.description}
+                                    {t(service.description)}
                                 </p>
                                 <div className="flex items-center justify-between">
                                     <span className="text-xs font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-white/5 px-3 py-1 rounded-full">
@@ -247,7 +246,7 @@ export default function StudentPortalPage() {
                         <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-400 border border-blue-500/20">
                             <User className="w-5 h-5" />
                         </div>
-                        <span>Personal Information</span>
+                        <span>{t('Personal Information')}</span>
                     </h2>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -257,7 +256,7 @@ export default function StudentPortalPage() {
                                     <User className="w-4 h-4 text-slate-600 dark:text-slate-400" />
                                 </div>
                                 <div>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase">Full Name</p>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase">{t('Full Name')}</p>
                                     <p className="text-slate-900 dark:text-white font-semibold">{profile.firstName} {profile.lastName}</p>
                                 </div>
                             </div>
@@ -267,7 +266,7 @@ export default function StudentPortalPage() {
                                     <Mail className="w-4 h-4 text-slate-600 dark:text-slate-400" />
                                 </div>
                                 <div>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase">Email</p>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase">{t('Email')}</p>
                                     <p className="text-slate-900 dark:text-white font-semibold">{profile.email}</p>
                                 </div>
                             </div>
@@ -277,8 +276,8 @@ export default function StudentPortalPage() {
                                     <Phone className="w-4 h-4 text-slate-600 dark:text-slate-400" />
                                 </div>
                                 <div>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase">Phone</p>
-                                    <p className="text-slate-900 dark:text-white font-semibold">{profile.phone || 'Not provided'}</p>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase">{t('Phone')}</p>
+                                    <p className="text-slate-900 dark:text-white font-semibold">{profile.phone || t('Not provided')}</p>
                                 </div>
                             </div>
                         </div>
@@ -289,7 +288,7 @@ export default function StudentPortalPage() {
                                     <GraduationCap className="w-4 h-4 text-slate-600 dark:text-slate-400" />
                                 </div>
                                 <div>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase">Class</p>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase">{t('Class')}</p>
                                     <p className="text-slate-900 dark:text-white font-semibold">{profile.profile?.class} - {profile.profile?.section}</p>
                                 </div>
                             </div>
@@ -299,8 +298,8 @@ export default function StudentPortalPage() {
                                     <Calendar className="w-4 h-4 text-slate-600 dark:text-slate-400" />
                                 </div>
                                 <div>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase">Date of Birth</p>
-                                    <p className="text-slate-900 dark:text-white font-semibold">{profile.profile?.dateOfBirth ? new Date(profile.profile.dateOfBirth).toLocaleDateString() : 'Not provided'}</p>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase">{t('Date of Birth')}</p>
+                                    <p className="text-slate-900 dark:text-white font-semibold">{profile.profile?.dateOfBirth ? new Date(profile.profile.dateOfBirth).toLocaleDateString(language === 'so' ? 'so-SO' : 'en-US') : t('Not provided')}</p>
                                 </div>
                             </div>
                             
@@ -309,8 +308,8 @@ export default function StudentPortalPage() {
                                     <MapPin className="w-4 h-4 text-slate-600 dark:text-slate-400" />
                                 </div>
                                 <div>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase">Address</p>
-                                    <p className="text-slate-900 dark:text-white font-semibold">{profile.profile?.address || 'Not provided'}</p>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase">{t('Address')}</p>
+                                    <p className="text-slate-900 dark:text-white font-semibold">{profile.profile?.address || t('Not provided')}</p>
                                 </div>
                             </div>
                         </div>
@@ -322,7 +321,7 @@ export default function StudentPortalPage() {
                         <div className="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center text-green-400 border border-green-500/20">
                             <Clock className="w-5 h-5" />
                         </div>
-                        <span>Today's Schedule</span>
+                        <span>{t("Today's Schedule")}</span>
                     </h2>
                     
                     <div className="space-y-4">
@@ -337,12 +336,12 @@ export default function StudentPortalPage() {
                                     </div>
                                     <div className="flex-1">
                                         <h4 className="text-sm font-bold text-slate-900 dark:text-white">{slot.subject?.name}</h4>
-                                        <p className="text-xs text-slate-500">Room {slot.room || 'TBA'}</p>
+                                        <p className="text-xs text-slate-500">{t('Room')} {slot.room || 'TBA'}</p>
                                     </div>
                                 </div>
                             ))}
                         {timetable.filter((t: any) => t.day === new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date())).length === 0 && (
-                            <div className="text-center py-8 text-slate-500 italic">No classes today!</div>
+                            <div className="text-center py-8 text-slate-500 italic">{t('No classes today!')}</div>
                         )}
                     </div>
                 </div>

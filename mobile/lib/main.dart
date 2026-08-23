@@ -8,12 +8,14 @@ import 'providers/parent_provider.dart';
 import 'providers/theme_provider.dart';
 import 'services/offline_service.dart';
 import 'services/connectivity_service.dart';
+import 'services/push_notification_service.dart';
 import 'screens/splash_screen.dart';
 import 'utils/app_themes.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await OfflineService.init();
+  await PushNotificationService.instance.initialize();
 
   debugPrint('Mobile API: ${AppConfig.apiBaseUrl}');
   debugPrint('Mobile Socket: ${AppConfig.socketUrl}');
@@ -45,6 +47,7 @@ class MyApp extends StatelessWidget {
     return Consumer<ThemeProvider>(
       builder: (context, themeProvider, child) {
         return MaterialApp(
+          navigatorKey: PushNotificationService.navigatorKey,
           title: 'School Registry Mobile',
           debugShowCheckedModeBanner: false,
           theme: AppThemes.lightTheme,

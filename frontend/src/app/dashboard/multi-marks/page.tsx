@@ -8,12 +8,15 @@ import {
   ChevronDown,
   Loader2,
   Save,
+  Sparkles,
+  RefreshCw,
+  Eraser,
   Circle,
   CircleDot,
 } from "lucide-react";
 
-type Exam = { _id: string; name: string; term: string; isApproved?: boolean };
-type Subject = { _id: string; name: string; code?: string };
+type Exam = { _id: string; name: string; term: string; isApproved?: boolean; startDate?: string };
+type Subject = { _id: string; id?: string; name: string; code?: string };
 type AClass = {
   _id: string;
   name: string;
@@ -33,14 +36,40 @@ type Student = {
 /** scores[studentId][subjectId] = string score or "" */
 type ScoreGrid = Record<string, Record<string, string>>;
 
+type HistoricalMark = {
+  studentId?: string;
+  subjectId?: string;
+  marksObtained: number;
+  maxMarks: number;
+  student?: { id?: string; _id?: string };
+  subject?: { id?: string; _id?: string };
+  exam?: { id?: string; _id?: string; startDate?: string };
+};
+
+const getStudentId = (student: Student) => student._id || student.id || "";
+
+const compareStudentsByName = (a: Student, b: Student) => {
+  const nameComparison = `${a.firstName} ${a.lastName}`.localeCompare(
+    `${b.firstName} ${b.lastName}`,
+    undefined,
+    { sensitivity: "base" }
+  );
+
+  // Keep students with the same name in a deterministic order as well.
+  return nameComparison || getStudentId(a).localeCompare(getStudentId(b));
+};
+
 export default function MultiMarksPage() {
   const [exams, setExams] = useState<Exam[]>([]);
   const [classes, setClasses] = useState<AClass[]>([]);
   const [selExam, setSelExam] = useState("");
   const [selClass, setSelClass] = useState("");
   const [maxMarks, setMaxMarks] = useState(20);
+  const [appliedMaxMarks, setAppliedMaxMarks] = useState(20);
   const [students, setStudents] = useState<Student[]>([]);
   const [scores, setScores] = useState<ScoreGrid>({});
+  const [historicalMarks, setHistoricalMarks] = useState<HistoricalMark[]>([]);
+  const [autoFilledCells, setAutoFilledCells] = useState<Set<string>>(new Set());
   const [dirty, setDirty] = useState<Record<string, Set<string>>>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -75,9 +104,10 @@ export default function MultiMarksPage() {
     const list: Subject[] = [];
     for (const item of cls.subjects) {
       const sub = item?.subject;
-      if (!sub?._id || seen.has(sub._id)) continue;
-      seen.add(sub._id);
-      list.push(sub);
+      const subjectId = sub?._id || sub?.id;
+      if (!subjectId || seen.has(subjectId)) continue;
+      seen.add(subjectId);
+      list.push({ ...sub, _id: subjectId });
     }
     return list.sort((a, b) => a.name.localeCompare(b.name));
   }, [classes, selClass]);
@@ -113,18 +143,38 @@ export default function MultiMarksPage() {
     if (!selExam || !selClass) {
       setStudents([]);
       setScores({});
+      setHistoricalMarks([]);
+      setAutoFilledCells(new Set());
       setDirty({});
       return;
     }
     (async () => {
       setLoading(true);
       try {
-        const [stuRes, mrkRes] = await Promise.all([
+        const [stuRes, mrkRes, historyRes] = await Promise.all([
           api.get(`/students?class=${selClass}`),
           api.get("/exams/marks", { params: { examId: selExam, classId: selClass } }),
+          api.get("/exams/marks", { params: { classId: selClass } }),
         ]);
         const stus: Student[] = stuRes.data.data || [];
         const existing: any[] = mrkRes.data.data || [];
+        const history: HistoricalMark[] = historyRes.data.data || [];
+
+        // Prefer the Max Marks already used in this exam/class. If this is a new
+        // exam, carry forward the most commonly used Max Marks from prior records.
+        const maxMarkCandidates = (existing.length ? existing : history)
+          .map((mark) => Number(mark.maxMarks))
+          .filter((value) => Number.isFinite(value) && value > 0);
+        const inferredMaxMarks = maxMarkCandidates.length
+          ? Number(Object.entries(
+              maxMarkCandidates.reduce<Record<string, number>>((counts, value) => {
+                counts[String(value)] = (counts[String(value)] || 0) + 1;
+                return counts;
+              }, {})
+            ).sort((a, b) => b[1] - a[1])[0][0])
+          : maxMarks;
+        setMaxMarks(inferredMaxMarks);
+        setAppliedMaxMarks(inferredMaxMarks);
 
         const grid: ScoreGrid = {};
         stus.forEach((s) => {
@@ -140,7 +190,17 @@ export default function MultiMarksPage() {
         });
         setStudents(stus);
         setScores(grid);
+        setHistoricalMarks(history);
         setDirty({});
+        setAutoFilledCells(new Set());
+        // As soon as both filters are selected, bring forward previous performance
+        // into every blank cell. Existing marks for the selected exam stay untouched.
+        handleAutoFillMissing(false, {
+          studentList: stus,
+          baseScores: grid,
+          history,
+          targetMaxMarks: inferredMaxMarks,
+        });
       } catch (e) {
         console.error(e);
         showToast("Failed to load students/marks", false);
@@ -148,17 +208,38 @@ export default function MultiMarksPage() {
         setLoading(false);
       }
     })();
+  // This loader intentionally runs only when the two filters change; including the
+  // auto-fill callback would re-fetch after it updates the score grid.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selExam, selClass]);
 
-  const filteredStudents = useMemo(() => {
-    if (!search.trim()) return students;
-    const q = search.trim().toLowerCase();
-    return students.filter((s) => {
-      const name = `${s.firstName} ${s.lastName}`.toLowerCase();
-      const roll = (s.rollNo || s.profile?.rollNo || "").toLowerCase();
-      return name.includes(q) || roll.includes(q);
+  const orderedStudents = useMemo(
+    () => [...students].sort(compareStudentsByName),
+    [students]
+  );
+
+  const fallbackRolls = useMemo(() => {
+    const rolls = new Map<string, string>();
+    orderedStudents.forEach((student, index) => {
+      rolls.set(getStudentId(student), `S${String(index + 1).padStart(4, "0")}`);
     });
-  }, [students, search]);
+    return rolls;
+  }, [orderedStudents]);
+
+  const filteredStudents = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return orderedStudents.filter((s) => {
+        if (!q) return true;
+        const name = `${s.firstName} ${s.lastName}`.toLowerCase();
+        const roll = (
+          s.rollNo ||
+          s.profile?.rollNo ||
+          fallbackRolls.get(getStudentId(s)) ||
+          ""
+        ).toLowerCase();
+        return name.includes(q) || roll.includes(q);
+      });
+  }, [orderedStudents, fallbackRolls, search]);
 
   const dirtySubjectCount = useMemo(() => {
     const set = new Set<string>();
@@ -186,6 +267,178 @@ export default function MultiMarksPage() {
       next[studentId] = set;
       return next;
     });
+    // Once edited by hand, this cell is no longer managed by Auto-fill.
+    setAutoFilledCells((prev) => {
+      const next = new Set(prev);
+      next.delete(`${studentId}:${subjectId}`);
+      return next;
+    });
+  };
+
+  const handleAutoFillMissing = (
+    askForConfirmation = true,
+    source?: {
+      studentList: Student[];
+      baseScores: ScoreGrid;
+      history: HistoricalMark[];
+      targetMaxMarks?: number;
+    },
+    updateExistingAutoFill = false
+  ) => {
+    const studentList = source?.studentList || students;
+    const baseScores = source?.baseScores || scores;
+    const history = source?.history || historicalMarks;
+    const effectiveMaxMarks = source?.targetMaxMarks || maxMarks;
+    if (!selExam || !selClass || !studentList.length || !classSubjects.length) return;
+
+    const selectedExam = exams.find((exam) => exam._id === selExam);
+    const selectedDate = selectedExam?.startDate
+      ? new Date(selectedExam.startDate).getTime()
+      : Number.POSITIVE_INFINITY;
+    const usableHistory = history.filter((mark) => {
+      const examId = mark.exam?.id || mark.exam?._id;
+      if (!mark.maxMarks) return false;
+      // Existing marks in the selected exam are useful evidence for estimating
+      // that same student's other, still-empty subjects.
+      if (examId === selExam) return true;
+      const examDate = mark.exam?.startDate ? new Date(mark.exam.startDate).getTime() : 0;
+      return examDate < selectedDate;
+    });
+
+    const byStudentSubject = new Map<string, number[]>();
+    const byStudent = new Map<string, number[]>();
+    const bySubject = new Map<string, number[]>();
+    const classPercentages: number[] = [];
+    for (const mark of usableHistory) {
+      const studentId = mark.student?.id || mark.student?._id || mark.studentId;
+      const subjectId = mark.subject?.id || mark.subject?._id || mark.subjectId;
+      if (!studentId || !subjectId) continue;
+      const percentage = (Number(mark.marksObtained) / Number(mark.maxMarks)) * 100;
+      if (!Number.isFinite(percentage)) continue;
+      const pairKey = `${studentId}:${subjectId}`;
+      byStudentSubject.set(pairKey, [...(byStudentSubject.get(pairKey) || []), percentage]);
+      byStudent.set(studentId, [...(byStudent.get(studentId) || []), percentage]);
+      bySubject.set(subjectId, [...(bySubject.get(subjectId) || []), percentage]);
+      classPercentages.push(percentage);
+    }
+
+    const average = (values?: number[]) => values?.length
+      ? values.reduce((sum, value) => sum + value, 0) / values.length
+      : null;
+    const nextScores: ScoreGrid = { ...baseScores };
+    const nextDirty: Record<string, Set<string>> = source ? {} : { ...dirty };
+    const nextAutoFilledCells = source ? new Set<string>() : new Set(autoFilledCells);
+    const classAverage = average(classPercentages) ?? 50;
+    let filled = 0;
+
+    for (const student of studentList) {
+      const studentId = student._id || student.id || "";
+      nextScores[studentId] = { ...(baseScores[studentId] || {}) };
+      const studentDirty = new Set(nextDirty[studentId] || []);
+      for (const subject of classSubjects) {
+        const current = nextScores[studentId][subject._id];
+        const cellKey = `${studentId}:${subject._id}`;
+        const isExistingAutoFill = nextAutoFilledCells.has(cellKey);
+        if (
+          current !== undefined &&
+          current !== "" &&
+          String(current).toUpperCase() !== "M" &&
+          !(updateExistingAutoFill && isExistingAutoFill)
+        ) continue;
+        const predictedPercentage =
+          average(byStudentSubject.get(`${studentId}:${subject._id}`)) ??
+          average(byStudent.get(studentId)) ??
+          average(bySubject.get(subject._id)) ??
+          classAverage;
+        const predictedMark = Math.min(effectiveMaxMarks, Math.max(0, (predictedPercentage / 100) * effectiveMaxMarks));
+        // Marks entered into the grid must be whole numbers (for example 15.3 → 15).
+        nextScores[studentId][subject._id] = String(Math.round(predictedMark));
+        studentDirty.add(subject._id);
+        nextAutoFilledCells.add(cellKey);
+        filled += 1;
+      }
+      if (studentDirty.size) nextDirty[studentId] = studentDirty;
+    }
+
+    if (!filled) {
+      showToast("There are no missing marks to fill", false);
+      return;
+    }
+    if (askForConfirmation && !window.confirm(`Fill ${filled} missing mark(s) from previous exam performance? Existing marks will not be changed.`)) return;
+    setScores(nextScores);
+    setDirty(nextDirty);
+    setAutoFilledCells(nextAutoFilledCells);
+    showToast(`${updateExistingAutoFill ? "Updated" : askForConfirmation ? "Auto-filled" : "Loaded"} ${filled} marks from previous exam performance. Review them, then click Save All.`);
+  };
+
+  const handleUpdateMaxMarks = () => {
+    const nextMax = Math.max(1, Math.round(Number(maxMarks)));
+    const previousMax = Math.max(1, Number(appliedMaxMarks));
+    if (nextMax === previousMax) {
+      showToast("Change Max Marks first, then click Update Max Marks", false);
+      return;
+    }
+    if (!window.confirm(
+      `Convert all displayed marks from a maximum of ${previousMax} to ${nextMax}? Existing score percentages will be preserved.`
+    )) return;
+
+    const nextScores: ScoreGrid = {};
+    const nextDirty: Record<string, Set<string>> = {};
+    let updated = 0;
+    for (const student of students) {
+      const studentId = student._id || student.id || "";
+      nextScores[studentId] = { ...(scores[studentId] || {}) };
+      const changedSubjects = new Set<string>();
+      for (const subject of classSubjects) {
+        const raw = scores[studentId]?.[subject._id];
+        if (raw === undefined || raw === "" || String(raw).toUpperCase() === "M") continue;
+        const oldScore = Number(raw);
+        if (!Number.isFinite(oldScore)) continue;
+        nextScores[studentId][subject._id] = String(
+          Math.min(nextMax, Math.max(0, Math.round((oldScore / previousMax) * nextMax)))
+        );
+        changedSubjects.add(subject._id);
+        updated += 1;
+      }
+      if (changedSubjects.size) nextDirty[studentId] = changedSubjects;
+    }
+
+    setMaxMarks(nextMax);
+    setAppliedMaxMarks(nextMax);
+    setScores(nextScores);
+    setDirty(nextDirty);
+    showToast(`Updated ${updated} marks to Max Marks ${nextMax}. Click Save All to save.`);
+  };
+
+  const handleRemoveDecimals = () => {
+    const nextScores: ScoreGrid = {};
+    const nextDirty: Record<string, Set<string>> = { ...dirty };
+    let updated = 0;
+
+    for (const student of students) {
+      const studentId = student._id || student.id || "";
+      nextScores[studentId] = { ...(scores[studentId] || {}) };
+      const changedSubjects = new Set(nextDirty[studentId] || []);
+      for (const subject of classSubjects) {
+        const raw = scores[studentId]?.[subject._id];
+        if (raw === undefined || raw === "" || String(raw).toUpperCase() === "M") continue;
+        const score = Number(raw);
+        if (!Number.isFinite(score) || Number.isInteger(score)) continue;
+        nextScores[studentId][subject._id] = String(Math.round(score));
+        changedSubjects.add(subject._id);
+        updated += 1;
+      }
+      if (changedSubjects.size) nextDirty[studentId] = changedSubjects;
+    }
+
+    if (!updated) {
+      showToast("All displayed marks are already whole numbers", false);
+      return;
+    }
+    if (!window.confirm(`Remove decimals from ${updated} mark(s) and convert them to whole numbers?`)) return;
+    setScores(nextScores);
+    setDirty(nextDirty);
+    showToast(`Removed decimals from ${updated} marks. Click Save All to save.`);
   };
 
   const handleSaveAll = async () => {
@@ -197,18 +450,20 @@ export default function MultiMarksPage() {
 
     // Build per-subject batches from dirty cells (and include empty? only dirty non-empty or allow clear?)
     // Save dirty cells that have a numeric score; skip blank dirty cells.
+    const normalizedMaxMarks = Math.max(1, Math.round(Number(maxMarks)));
     const bySubject = new Map<string, { studentId: string; score: number }[]>();
 
     for (const [studentId, subSet] of Object.entries(dirty)) {
       for (const subjectId of subSet) {
         const raw = scores[studentId]?.[subjectId];
         if (raw === undefined || raw === "" || String(raw).trim().toUpperCase() === "M") continue;
-        const score = Number(raw);
-        if (!Number.isFinite(score) || score < 0 || score > maxMarks) {
+        const numericScore = Number(raw);
+        const score = Math.round(numericScore);
+        if (!Number.isFinite(numericScore) || score < 0 || score > normalizedMaxMarks) {
           const stu = students.find((s) => (s._id || s.id) === studentId);
           const sub = classSubjects.find((s) => s._id === subjectId);
           showToast(
-            `Invalid score for ${stu ? `${stu.firstName} ${stu.lastName}` : "student"} / ${sub?.name || "subject"} (0–${maxMarks})`,
+            `Invalid score for ${stu ? `${stu.firstName} ${stu.lastName}` : "student"} / ${sub?.name || "subject"} (0–${normalizedMaxMarks})`,
             false
           );
           return;
@@ -231,15 +486,25 @@ export default function MultiMarksPage() {
           examId: selExam,
           classId: selClass,
           subjectId,
-          maxMarks,
-          marks,
+          maxMarks: normalizedMaxMarks,
+          marks: marks.map((mark) => ({
+            studentId: mark.studentId,
+            score: Math.min(normalizedMaxMarks, Math.max(0, Math.round(mark.score))),
+            maxMarks: normalizedMaxMarks,
+          })),
         });
         saved += marks.length;
       }
       setDirty({});
       showToast(`Saved ${saved} marks across ${bySubject.size} subject(s)`);
     } catch (err: any) {
-      showToast(err.response?.data?.message || "Failed to save marks", false);
+      const response = err.response?.data;
+      const firstError = response?.errors?.[0];
+      const detail = firstError
+        ? `${firstError.field}: ${firstError.message}`
+        : undefined;
+      console.error("Save marks failed:", response || err);
+      showToast(detail || response?.message || "Failed to save marks", false);
     } finally {
       setSaving(false);
     }
@@ -275,14 +540,42 @@ export default function MultiMarksPage() {
           </p>
         </div>
         {canShowSave(selExam, selClass, classSubjects.length) && (
-          <button
-            onClick={handleSaveAll}
-            disabled={saving || dirtyCellCount === 0}
-            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-semibold transition disabled:opacity-50"
-          >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            Save All{dirtyCellCount ? ` (${dirtyCellCount})` : ""}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={handleRemoveDecimals}
+              disabled={saving || loading || !students.length}
+              className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-semibold transition disabled:opacity-50"
+              title="Convert decimal marks to whole numbers"
+            >
+              <Eraser className="w-4 h-4" />
+              Remove Decimals
+            </button>
+            <button
+              onClick={() => handleAutoFillMissing()}
+              disabled={saving || loading || !students.length}
+              className="flex items-center gap-1.5 px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-sm font-semibold transition disabled:opacity-50"
+            >
+              <Sparkles className="w-4 h-4" />
+              Auto-fill Missing
+            </button>
+            <button
+              onClick={() => handleAutoFillMissing(false, undefined, true)}
+              disabled={saving || loading || autoFilledCells.size === 0}
+              className="flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-sm font-semibold transition disabled:opacity-50"
+              title="Recalculate only marks created by Auto-fill"
+            >
+              <Sparkles className="w-4 h-4" />
+              Update Auto-fill ({autoFilledCells.size})
+            </button>
+            <button
+              onClick={handleSaveAll}
+              disabled={saving || dirtyCellCount === 0}
+              className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-semibold transition disabled:opacity-50"
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Save All{dirtyCellCount ? ` (${dirtyCellCount})` : ""}
+            </button>
+          </div>
         )}
       </div>
 
@@ -333,13 +626,26 @@ export default function MultiMarksPage() {
           <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
             Max Marks (all subjects)
           </label>
-          <input
-            type="number"
-            min={1}
-            value={maxMarks}
-            onChange={(e) => setMaxMarks(Number(e.target.value) || 1)}
-            className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
-          />
+          <div className="flex gap-2">
+            <input
+              type="number"
+              min={1}
+              step={1}
+              value={maxMarks}
+              onChange={(e) => setMaxMarks(Number(e.target.value) || 1)}
+              className="min-w-0 flex-1 px-3 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button
+              type="button"
+              onClick={handleUpdateMaxMarks}
+              disabled={!selExam || !selClass || loading || Number(maxMarks) === Number(appliedMaxMarks)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-semibold transition disabled:opacity-40 whitespace-nowrap"
+              title="Convert displayed scores to the new Max Marks"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Update Max
+            </button>
+          </div>
         </div>
       </div>
 
@@ -475,10 +781,10 @@ export default function MultiMarksPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                {filteredStudents.map((s, idx) => {
-                  const sid = s._id || s.id || "";
+                {filteredStudents.map((s) => {
+                  const sid = getStudentId(s);
                   const roll =
-                    s.rollNo || s.profile?.rollNo || `S${String(idx + 1).padStart(4, "0")}`;
+                    s.rollNo || s.profile?.rollNo || fallbackRolls.get(sid);
                   return (
                     <tr
                       key={sid}

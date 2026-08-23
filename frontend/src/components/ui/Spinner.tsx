@@ -16,12 +16,16 @@ const sizes = {
 export function Spinner({ className, label, size = 'md' }: SpinnerProps) {
   return (
     <div
+      role="status"
+      aria-live="polite"
+      aria-label={label || 'Loading'}
       className={cn(
         'flex flex-col items-center justify-center gap-3',
         className,
       )}
     >
       <Loader2
+        aria-hidden="true"
         className={cn('animate-spin text-indigo-500', sizes[size])}
       />
       {label && (

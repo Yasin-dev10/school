@@ -29,6 +29,14 @@ const contactMessageRoutes = require('./routes/contactMessage.routes');
 const gradeRoutes = require('./routes/grade.routes');
 const stripeRoutes = require('./routes/stripe.routes');
 const inventoryRoutes = require('./routes/inventory.routes');
+const reportExportRoutes = require('./routes/reportExport.routes');
+const chatRoutes = require('./routes/chat.routes');
+const calendarRoutes = require('./routes/calendar.routes');
+const onlineLearningRoutes = require('./routes/onlineLearning.routes');
+const supportRoutes = require('./routes/support.routes');
+const aiAssistantRoutes = require('./routes/aiAssistant.routes');
+const alumniRoutes = require('./routes/alumni.routes');
+const path = require('path');
 const { handleValidationError } = require('./middlewares/validation.middleware');
 const { parseAllowedOrigins, redactSensitive } = require('./utils/security');
 const { getJwtSecret } = require('./utils/security');
@@ -62,7 +70,7 @@ const corsOptions = {
         return callback(new Error('CORS policy: origin not allowed'));
     },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
     optionsSuccessStatus: 200,
 };
@@ -75,6 +83,7 @@ app.options('*', cors(corsOptions));
 app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
 
 app.use(express.json({ limit: '1mb' }));
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads'), { index: false, dotfiles: 'deny', maxAge: '1h' }));
 app.use(cookieParser());
 app.use(morgan('dev'));
 
@@ -110,6 +119,13 @@ app.use('/api/contact-messages', contactMessageRoutes);
 app.use('/api/grades', gradeRoutes);
 app.use('/api/stripe', stripeRoutes);
 app.use('/api/inventory', inventoryRoutes);
+app.use('/api/report-exports', reportExportRoutes);
+app.use('/api/chat', chatRoutes);
+app.use('/api/calendar', calendarRoutes);
+app.use('/api/online-learning', onlineLearningRoutes);
+app.use('/api/support', supportRoutes);
+app.use('/api/ai-assistant', aiAssistantRoutes);
+app.use('/api/alumni', alumniRoutes);
 
 app.get('/', (req, res) => {
     res.json({ message: 'School Management System API is running' });

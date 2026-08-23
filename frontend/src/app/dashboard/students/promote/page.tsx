@@ -23,22 +23,6 @@ interface ClassOption {
     section?: string;
 }
 
-interface Mark {
-    studentId: string;
-    examId: string;
-    marksObtained: number;
-    maxMarks: number;
-}
-
-interface Exam {
-    _id: string;
-    name: string;
-    status: string;
-    classes?: { _id?: string; id?: string }[];
-}
-
-const PASS_THRESHOLD = 50; // fallback; ideally fetched from grade system
-
 export default function PromoteStudentsPage() {
     const [academicYear, setAcademicYear] = useState<string>('');
     const [classes, setClasses] = useState<ClassOption[]>([]);
@@ -87,76 +71,15 @@ export default function PromoteStudentsPage() {
         setStudents([]);
         setSelectedStudents([]);
         try {
-            // 1. Fetch students in this class (existing endpoint, always deployed)
-            const studentsRes = await api.get(`/students?class=${classId}`);
-            const rawStudents: RawStudent[] = studentsRes.data.data || [];
+            // The backend is the single source of truth for completed exams,
+            // missing marks, and the school's active passing threshold.
+            const response = await api.get('/students/promotion-eligibility', { params: { classId } });
+            const rows: StudentRow[] = response.data.data || [];
 
-            if (rawStudents.length === 0) {
+            if (rows.length === 0) {
                 toast('No students found in this class', { icon: 'ℹ️' });
-                setLoadingStudents(false);
                 return;
             }
-
-            // 2. Fetch all completed exams (existing endpoint)
-            const examsRes = await api.get('/exams');
-            const allExams: Exam[] = examsRes.data.data || [];
-
-            // Filter to completed exams that include this class
-            const completedExams = allExams.filter(e =>
-                e.status === 'completed' &&
-                e.classes?.some(c => (c._id || c.id) === classId)
-            );
-
-            // 3. Fetch marks for each student across completed exams
-            //    Use GET /exams/:id/marks or build from existing marks endpoints
-            //    We'll fetch marks per exam using the exam results endpoint
-            type MarksMap = Record<string, Mark[]>; // key: studentId
-            const marksByStudent: MarksMap = {};
-
-            for (const exam of completedExams) {
-                try {
-                    const marksRes = await api.get(`/exams/${exam._id}/marks?classId=${classId}`);
-                    const marks: Mark[] = marksRes.data.data || marksRes.data.marks || [];
-                    for (const m of marks) {
-                        if (!marksByStudent[m.studentId]) marksByStudent[m.studentId] = [];
-                        marksByStudent[m.studentId].push(m);
-                    }
-                } catch { /* skip if marks endpoint unavailable */ }
-            }
-
-            // 4. Compute eligibility per student
-            const rows: StudentRow[] = rawStudents.map(student => {
-                const marks = marksByStudent[student._id] || [];
-                let eligible = true;
-                let reason = '';
-                let totalObtained = 0;
-                let totalMax = 0;
-
-                if (completedExams.length === 0) {
-                    eligible = false;
-                    reason = 'No completed exams';
-                } else if (marks.length === 0) {
-                    eligible = false;
-                    reason = 'No marks recorded';
-                } else {
-                    for (const m of marks) {
-                        totalObtained += m.marksObtained;
-                        totalMax += m.maxMarks;
-                        const pct = m.maxMarks > 0 ? (m.marksObtained / m.maxMarks) * 100 : 0;
-                        if (pct < PASS_THRESHOLD) {
-                            eligible = false;
-                            reason = reason || 'Failed one or more subjects';
-                        }
-                    }
-                }
-
-                const finalGrade = totalMax > 0
-                    ? Math.round((totalObtained / totalMax) * 100)
-                    : null;
-
-                return { ...student, finalGrade, eligible, reason };
-            });
-
             setStudents(rows);
             // Pre-select all eligible students
             setSelectedStudents(rows.filter(s => s.eligible).map(s => s._id));
@@ -327,12 +250,9 @@ export default function PromoteStudentsPage() {
                                                         Eligible
                                                     </span>
                                                 ) : (
-                                                    <span
-                                                        className="inline-flex items-center gap-1.5 text-red-400 font-medium cursor-help"
-                                                        title={student.reason}
-                                                    >
-                                                        <XCircle className="w-4 h-4 shrink-0" />
-                                                        Not Eligible
+                                                    <span className="inline-flex flex-col gap-1 text-red-400 font-medium">
+                                                        <span className="inline-flex items-center gap-1.5"><XCircle className="w-4 h-4 shrink-0" />Not Eligible</span>
+                                                        {student.reason && <span className="max-w-56 text-xs font-normal text-red-300">{student.reason}</span>}
                                                     </span>
                                                 )}
                                             </td>

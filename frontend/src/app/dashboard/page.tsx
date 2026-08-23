@@ -12,6 +12,7 @@ import {
 import { Card, CardHeader } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageLoader } from '@/components/ui/Spinner';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 function Sparkline({ color, up }: { color: string; up?: boolean }) {
     const points = up
@@ -26,6 +27,7 @@ function Sparkline({ color, up }: { color: string; up?: boolean }) {
 
 export default function DashboardPage() {
     const router = useRouter();
+    const { language, translate: t } = useLanguage();
     const [user, setUser] = useState<any>(null);
     const [adminData, setAdminData] = useState<any>(null);
     const [exams, setExams] = useState<any[]>([]);
@@ -90,12 +92,12 @@ export default function DashboardPage() {
         .slice(0, 6)
         .map(e => ({
             label: e.name,
-            date: new Date(e.startDate).toLocaleDateString('en-US', { day: '2-digit', month: 'short' }),
+            date: new Date(e.startDate).toLocaleDateString(language === 'so' ? 'so-SO' : 'en-US', { day: '2-digit', month: 'short' }),
         }));
 
     const subjectPerf: Record<string, { total: number; count: number }> = {};
     marks.forEach((m: any) => {
-        const name = m.subject?.name || 'Unknown';
+        const name = m.subject?.name || t('Unknown');
         if (!subjectPerf[name]) subjectPerf[name] = { total: 0, count: 0 };
         subjectPerf[name].total += (m.marksObtained / m.maxMarks) * 100;
         subjectPerf[name].count++;
@@ -130,15 +132,15 @@ export default function DashboardPage() {
         { label: 'Materials', href: '/dashboard/materials', icon: <BookOpen className="w-5 h-5" />, color: 'text-rose-500 bg-rose-50 dark:bg-rose-900/30' },
     ];
 
-    if (loading) return <PageLoader label="Loading dashboard…" />;
+    if (loading) return <PageLoader label={t('Loading dashboard…')} />;
 
     if (isTeacher) {
         return (
             <div className="max-w-5xl mx-auto space-y-5">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">Faculty dashboard</h1>
+                    <h1 className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">{t('Faculty dashboard')}</h1>
                     <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                        Welcome back, <span className="font-semibold text-indigo-500">{user?.firstName}</span>
+                        {t('Welcome back')}, <span className="font-semibold text-indigo-500">{user?.firstName}</span>
                     </p>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -148,7 +150,7 @@ export default function DashboardPage() {
                             <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${s.color} group-hover:scale-105 transition-transform`}>
                                 {s.icon}
                             </div>
-                            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">{s.label}</span>
+                            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">{t(s.label)}</span>
                         </Link>
                     ))}
                 </div>
@@ -160,14 +162,14 @@ export default function DashboardPage() {
         <div className="max-w-7xl mx-auto space-y-5">
             <div className="flex items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">Dashboard</h1>
+                    <h1 className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">{t('Dashboard')}</h1>
                     <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-                        Welcome back, <span className="font-semibold text-indigo-500">{user?.firstName}</span>
+                        {t('Welcome back')}, <span className="font-semibold text-indigo-500">{user?.firstName}</span>
                     </p>
                 </div>
                 <div className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-sm text-slate-600 dark:text-slate-300">
                     <CalendarDays className="w-4 h-4 text-slate-400" />
-                    {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                    {new Date().toLocaleDateString(language === 'so' ? 'so-SO' : 'en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
                 </div>
             </div>
 
@@ -184,7 +186,7 @@ export default function DashboardPage() {
                                 </span>
                             </div>
                             <div>
-                                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">{s.label}</p>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">{t(s.label)}</p>
                                 <p className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">{s.value}</p>
                             </div>
                             <div className="mt-1 opacity-60">
@@ -198,11 +200,11 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 <Card className="lg:col-span-2" padding="md">
                     <CardHeader
-                        title="Recent Academic Performance"
+                        title={t('Recent Academic Performance')}
                         icon={<BookOpen className="w-4 h-4 text-indigo-500" />}
                         action={
                             <Link href="/dashboard/grade-entry" className="text-xs text-indigo-500 hover:underline flex items-center gap-0.5 font-semibold">
-                                View all <ChevronRight className="w-3 h-3" />
+                                {t('View all')} <ChevronRight className="w-3 h-3" />
                             </Link>
                         }
                     />
@@ -210,17 +212,17 @@ export default function DashboardPage() {
                     {perfRows.length === 0 ? (
                         <EmptyState
                             icon={<BookOpen className="w-7 h-7" />}
-                            title="No marks data yet"
-                            description="Grade entries will appear here once exams are recorded."
+                            title={t('No marks data yet')}
+                            description={t('Grade entries will appear here once exams are recorded.')}
                             className="py-8"
                         />
                     ) : (
                         <table className="w-full text-sm">
                             <thead>
                                 <tr className="text-xs font-semibold text-slate-400 uppercase tracking-wide border-b border-slate-100 dark:border-slate-700">
-                                    <th className="pb-2 text-left">Subject</th>
-                                    <th className="pb-2 text-left">Average Score</th>
-                                    <th className="pb-2 text-left">Trend</th>
+                                    <th className="pb-2 text-left">{t('Subject')}</th>
+                                    <th className="pb-2 text-left">{t('Average Score')}</th>
+                                    <th className="pb-2 text-left">{t('Trend')}</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
@@ -246,7 +248,7 @@ export default function DashboardPage() {
                             <Link key={item.href} href={item.href}
                                 className="p-3 bg-slate-50 dark:bg-slate-700/50 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition group">
                                 <p className="text-lg font-bold text-slate-800 dark:text-white group-hover:text-indigo-500 transition">{item.val}</p>
-                                <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wide mt-0.5">{item.label}</p>
+                                <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wide mt-0.5">{t(item.label)}</p>
                             </Link>
                         ))}
                     </div>
@@ -254,7 +256,7 @@ export default function DashboardPage() {
 
                 <Card className="flex flex-col" padding="md">
                     <CardHeader
-                        title="Upcoming Events"
+                        title={t('Upcoming Events')}
                         icon={<Bell className="w-4 h-4 text-amber-500" />}
                         action={
                             <button className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400">
@@ -267,8 +269,8 @@ export default function DashboardPage() {
                         {upcomingEvents.length === 0 ? (
                             <EmptyState
                                 icon={<CalendarCheck className="w-7 h-7" />}
-                                title="No upcoming events"
-                                description="Scheduled exams and deadlines will show up here."
+                                title={t('No upcoming events')}
+                                description={t('Scheduled exams and deadlines will show up here.')}
                                 className="py-6"
                             />
                         ) : upcomingEvents.map((ev, i) => {
@@ -297,19 +299,19 @@ export default function DashboardPage() {
 
                     <Link href="/dashboard/exams"
                         className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700 text-xs text-center text-indigo-500 hover:underline font-semibold">
-                        View all exams →
+                        {t('View all exams →')}
                     </Link>
                 </Card>
             </div>
 
             {isAdmin && (
                 <Card className="flex flex-col sm:flex-row items-start sm:items-center gap-4" padding="md">
-                    <span className="text-sm font-semibold text-slate-700 dark:text-white shrink-0">Quick actions</span>
+                    <span className="text-sm font-semibold text-slate-700 dark:text-white shrink-0">{t('Quick actions')}</span>
                     <div className="flex flex-wrap gap-2">
                         {quickActions.map((a) => (
                             <Link key={a.href} href={a.href}
                                 className={`px-4 py-2 rounded-xl border text-sm font-semibold transition ${a.className}`}>
-                                {a.label}
+                                {t(a.label)}
                             </Link>
                         ))}
                     </div>
@@ -330,7 +332,7 @@ export default function DashboardPage() {
                         <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${s.color} group-hover:scale-105 transition-transform`}>
                             {s.icon}
                         </div>
-                        <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">{s.label}</span>
+                        <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">{t(s.label)}</span>
                     </Link>
                 ))}
             </div>

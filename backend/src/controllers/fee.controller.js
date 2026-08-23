@@ -1,4 +1,5 @@
 const prisma = require('../config/prismaClient');
+const { notifyStudentAndParents } = require('../services/notification.service');
 const { logAction } = require('../utils/logger');
 
 // @desc    Create fee type
@@ -66,6 +67,11 @@ exports.createInvoice = async (req, res) => {
         });
 
         await logAction({ action: 'CREATE', module: 'TENANT', details: `Created invoice ${invoiceNumber}`, userId: req.user._id, tenantId });
+        await notifyStudentAndParents({
+            tenantId, senderId: req.user.id, studentId, title: 'Fee payment due',
+            message: `Invoice ${invoiceNumber} for $${totalAmount.toLocaleString()} is due ${new Date(dueDate).toLocaleDateString()}.`,
+            type: 'fee_reminder', eventType: 'fee_due', deepLink: `/dashboard/student-finance?invoice=${invoice.id}`
+        });
         res.status(201).json({ success: true, data: invoice });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -312,6 +318,11 @@ exports.generateClassInvoices = async (req, res) => {
                 }
             });
             created.push(invoice);
+            await notifyStudentAndParents({
+                tenantId, senderId: req.user.id, studentId: student.id, title: 'Fee payment due',
+                message: `Invoice ${invoiceNumber} for $${totalAmount.toLocaleString()} is due ${new Date(dueDate).toLocaleDateString()}.`,
+                type: 'fee_reminder', eventType: 'fee_due', deepLink: `/dashboard/student-finance?invoice=${invoice.id}`
+            });
         }
 
         res.status(201).json({
