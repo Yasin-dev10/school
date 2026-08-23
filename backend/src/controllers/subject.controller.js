@@ -38,6 +38,27 @@ const teacherSubjectWhere = (teacherId, tenantId) => ({
     ]
 });
 
+const getSubjectDeletionImpact = async (client, subjectId, tenantId) => {
+    const where = { subjectId, tenantId };
+    const [assignments, examComplaints, attendances, marks, materials, timetables, resources, teachers, classSubjects] = await Promise.all([
+        client.assignment.count({ where }),
+        client.examComplaint.count({ where }),
+        client.attendance.count({ where }),
+        client.mark.count({ where }),
+        client.material.count({ where }),
+        client.timetable.count({ where }),
+        client.subjectResource.count({ where: { subjectId } }),
+        client.subjectTeacher.count({ where: { subjectId } }),
+        client.classSubject.count({ where: { subjectId } })
+    ]);
+
+    return {
+        preserved: { assignments, attendances },
+        deleted: { examComplaints, marks, materials, timetables, resources, teachers, classSubjects },
+        totalAffected: assignments + examComplaints + attendances + marks + materials + timetables + resources + teachers + classSubjects
+    };
+};
+
 // @desc    Create subject
 exports.createSubject = async (req, res) => {
     try {
@@ -169,6 +190,24 @@ exports.updateSubject = async (req, res) => {
     }
 };
 
+// @desc    Preview every record affected by deleting a subject
+exports.getSubjectDeletionImpact = async (req, res) => {
+    try {
+        const subjectId = req.params.id;
+        const tenantId = req.user.tenantId;
+        const subject = await prisma.subject.findFirst({ where: { id: subjectId, tenantId } });
+        if (!subject) return res.status(404).json({ success: false, message: 'Subject not found' });
+
+        const impact = await getSubjectDeletionImpact(prisma, subjectId, tenantId);
+        res.status(200).json({
+            success: true,
+            data: { subject: { id: subject.id, name: subject.name, code: subject.code }, ...impact }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'Failed to inspect subject dependencies' });
+    }
+};
+
 // @desc    Delete subject
 exports.deleteSubject = async (req, res) => {
     try {
@@ -178,22 +217,29 @@ exports.deleteSubject = async (req, res) => {
         const subject = await prisma.subject.findFirst({ where: { id: subjectId, tenantId } });
         if (!subject) return res.status(404).json({ message: 'Subject not found' });
 
-        // Delete dependent records explicitly to avoid FK constraint errors and give clearer logs.
-        await prisma.$transaction(async (tx) => {
-            // Marks, materials, attendances, timetables, resources, teachers, class-subject links
+        const impact = await prisma.$transaction(async (tx) => {
+            // Recount inside the transaction so the deletion result reflects the records handled.
+            const deletionImpact = await getSubjectDeletionImpact(tx, subjectId, tenantId);
+
+            // Preserve records whose nullable relation supports a subject being retired.
+            await tx.assignment.updateMany({ where: { subjectId, tenantId }, data: { subjectId: null } });
+            await tx.attendance.updateMany({ where: { subjectId, tenantId }, data: { subjectId: null } });
+
+            // Required subject-owned relations cannot remain valid without their subject.
+            await tx.examComplaint.deleteMany({ where: { subjectId, tenantId } });
             await tx.mark.deleteMany({ where: { subjectId, tenantId } });
             await tx.material.deleteMany({ where: { subjectId, tenantId } });
-            await tx.attendance.deleteMany({ where: { subjectId, tenantId } });
             await tx.timetable.deleteMany({ where: { subjectId, tenantId } });
             await tx.subjectResource.deleteMany({ where: { subjectId } });
             await tx.subjectTeacher.deleteMany({ where: { subjectId } });
             await tx.classSubject.deleteMany({ where: { subjectId } });
 
             await tx.subject.delete({ where: { id: subjectId } });
+            return deletionImpact;
         });
 
-        await logAction({ action: 'DELETE', module: 'TENANT', details: `Deleted subject: ${subject.name} (${subjectId})`, userId: req.user._id, tenantId });
-        res.status(200).json({ success: true, message: 'Subject deleted successfully' });
+        await logAction({ action: 'DELETE', module: 'TENANT', details: `Deleted subject: ${subject.name} (${subjectId}); impact=${JSON.stringify(impact)}`, userId: req.user._id, tenantId });
+        res.status(200).json({ success: true, message: 'Subject deleted successfully', data: { impact } });
     } catch (error) {
         // Verbose logging for troubleshooting delete failures
         console.error('DELETE SUBJECT ERROR:', {

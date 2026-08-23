@@ -53,6 +53,13 @@ type ApiError = {
     };
 };
 
+type DeletionImpact = {
+    subject: { name: string; code: string };
+    preserved: { assignments: number; attendances: number };
+    deleted: Record<string, number>;
+    totalAffected: number;
+};
+
 const getTeacherId = (teacher: Teacher | string) => (
     typeof teacher === 'string' ? teacher : teacher._id || teacher.id || ''
 );
@@ -172,9 +179,27 @@ export default function SubjectsPage() {
     };
 
     const handleDelete = async (id: string) => {
-        if (!confirm('Delete this subject?')) return;
-        try { await api.delete(`/subjects/${id}`); fetchData(); }
-        catch { alert('Delete failed'); }
+        try {
+            const response = await api.get(`/subjects/${id}/deletion-impact`);
+            const impact = response.data.data as DeletionImpact;
+            const deletedCount = Object.values(impact.deleted).reduce((sum, count) => sum + count, 0);
+            const warning = [
+                `Permanently delete ${impact.subject.name} (${impact.subject.code})?`,
+                '',
+                `${deletedCount} dependent records will be permanently deleted:`,
+                ...Object.entries(impact.deleted).filter(([, count]) => count > 0).map(([name, count]) => `- ${count} ${name}`),
+                '',
+                `${impact.preserved.assignments} assignments and ${impact.preserved.attendances} attendance records will be preserved without a subject.`,
+                '',
+                'This action cannot be undone.'
+            ].join('\n');
+
+            if (!confirm(warning)) return;
+            await api.delete(`/subjects/${id}`);
+            fetchData();
+        } catch (err: unknown) {
+            alert(getErrorMessage(err, 'Delete failed'));
+        }
     };
 
     const handleAddResource = async (e: React.FormEvent) => {

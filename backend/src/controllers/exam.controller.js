@@ -189,31 +189,29 @@ exports.bulkMarkEntry = async (req, res) => {
             };
         });
 
-        await prisma.$transaction(
-            markRows.map((markRow) =>
-                prisma.mark.upsert({
-                    where: {
-                        studentId_examId_subjectId_tenantId: {
-                            studentId: markRow.studentId,
-                            examId,
-                            subjectId,
-                            tenantId
-                        }
-                    },
-                    update: {
-                        marksObtained: markRow.marksObtained,
-                        maxMarks: markRow.maxMarks,
-                        remarks: markRow.remarks,
-                        grade: markRow.grade,
-                        gpa: markRow.gpa,
-                        gradeRemarks: markRow.gradeRemarks,
-                        classId,
-                        gradedById: req.user.id
-                    },
-                    create: markRow
-                })
-            )
-        );
+        for (const markRow of markRows) {
+            await prisma.mark.upsert({
+                where: {
+                    studentId_examId_subjectId_tenantId: {
+                        studentId: markRow.studentId,
+                        examId,
+                        subjectId,
+                        tenantId
+                    }
+                },
+                update: {
+                    marksObtained: markRow.marksObtained,
+                    maxMarks: markRow.maxMarks,
+                    remarks: markRow.remarks,
+                    grade: markRow.grade,
+                    gpa: markRow.gpa,
+                    gradeRemarks: markRow.gradeRemarks,
+                    classId,
+                    gradedById: req.user.id
+                },
+                create: markRow
+            });
+        }
 
         await logAction({ action: 'UPDATE', module: 'TENANT', details: `Entered marks for Exam ${examId}, Subject ${subjectId}`, userId: req.user._id, tenantId });
         emitToTenant(tenantId, 'marks:updated', { examId, subjectId, classId });

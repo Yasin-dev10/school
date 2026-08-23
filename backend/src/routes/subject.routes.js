@@ -5,6 +5,7 @@ const {
     getSubjects,
     updateSubject,
     deleteSubject,
+    getSubjectDeletionImpact,
     addResource,
     removeResource
 } = require('../controllers/subject.controller');
@@ -19,6 +20,8 @@ router.route('/')
 router.route('/:id')
     .put(authorize('school-admin'), updateSubject)
     .delete(authorize('school-admin'), deleteSubject);
+
+router.get('/:id/deletion-impact', authorize('school-admin'), getSubjectDeletionImpact);
 
 router.post('/:id/resources', authorize('school-admin', 'teacher'), addResource);
 router.delete('/:id/resources/:resourceId', authorize('school-admin', 'teacher'), removeResource);
