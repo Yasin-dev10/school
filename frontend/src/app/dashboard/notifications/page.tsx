@@ -24,7 +24,11 @@ export default function NotificationsPage() {
         setLoading(true);
         try {
             const { data } = await api.get('/notifications');
-            setNotifications(data.data);
+            setNotifications((data.data || []).map((notification: any) => ({
+                ...notification,
+                _id: notification._id || notification.id,
+                isRead: notification.isRead ?? notification.readBy?.some((entry: any) => entry.userId),
+            })));
         } catch (err) {
             console.error("Failed to fetch notifications");
         } finally {
@@ -46,7 +50,7 @@ export default function NotificationsPage() {
             await api.put(`/notifications/${notificationId}/read`);
             // Update local state
             setNotifications(prev => prev.map(n =>
-                n._id === notificationId ? { ...n, isRead: true } : n
+                (n._id || n.id) === notificationId ? { ...n, isRead: true } : n
             ));
             fetchUnreadCount();
         } catch (err) {
@@ -65,7 +69,7 @@ export default function NotificationsPage() {
 
         if (socket) {
             socket.on('notification-received', (newNotif: any) => {
-                setNotifications((prev: any) => [newNotif, ...prev]);
+                setNotifications((prev: any) => [{ ...newNotif, _id: newNotif._id || newNotif.id, isRead: false }, ...prev]);
                 fetchUnreadCount();
             });
         }
@@ -128,8 +132,8 @@ export default function NotificationsPage() {
                     <div className="text-center py-20 text-slate-600 animate-pulse italic font-bold">Synchronizing feed...</div>
                 ) : notifications.length > 0 ? notifications.map((n: any) => (
                     <div
-                        key={n._id}
-                        onClick={() => !n.isRead && markAsRead(n._id)}
+                        key={n._id || n.id}
+                        onClick={() => !n.isRead && markAsRead(n._id || n.id)}
                         className={`glass-dark p-6 rounded-[2rem] border transition-all group ${n.isRead
                                 ? 'border-white/5 hover:border-white/10'
                                 : 'border-indigo-500/30 bg-indigo-500/5 hover:border-indigo-500/50 cursor-pointer'

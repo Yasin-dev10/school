@@ -31,6 +31,7 @@ const somali: Record<string, string> = {
   "Multi-Subject Marks": "Dhibcaha Maaddooyinka",
   "Exam Results": "Natiijooyinka Imtixaanka",
   "Combined Results": "Natiijooyinka Isku-dhafan",
+  "Top Students": "Ardayda Ugu Sarreysa",
   "Grades": "Darajooyinka",
   "My Grades": "Darajooyinkayga",
   "Finance": "Maaliyadda",

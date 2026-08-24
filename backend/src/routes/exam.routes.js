@@ -9,6 +9,7 @@ const {
     deleteMark,
     bulkDeleteMarks,
     getMarks,
+    getCombinedRankings,
     getStudentReport,
     approveResults,
     unapproveResults,
@@ -19,7 +20,13 @@ const {
     getComplaints,
     getExamAnalytics,
     getTopPerformers,
-    getStudentGrades
+    getStudentGrades,
+    createExamSchedule,
+    generateExamSchedule,
+    getExamSchedules,
+    updateExamSchedule,
+    deleteExamSchedule,
+    deleteFullExamSchedule
 } = require('../controllers/exam.controller');
 const { protect, authorize } = require('../middlewares/auth.middleware');
 const { validate, validateObjectId, validateMarks } = require('../middlewares/validation.middleware');
@@ -36,6 +43,14 @@ router.route('/grade-system')
 router.route('/')
     .get(authorize('school-admin', 'teacher', 'receptionist', 'student', 'parent'), getExams)
     .post(authorize('school-admin'), validate(examSchema), createExam);
+
+router.route('/schedule')
+    .get(authorize('school-admin', 'teacher', 'receptionist', 'student', 'parent'), getExamSchedules)
+    .post(authorize('school-admin'), createExamSchedule);
+router.post('/schedule/generate', authorize('school-admin'), generateExamSchedule);
+router.delete('/schedule/exam/:examId', authorize('school-admin'), validateObjectId('examId'), deleteFullExamSchedule);
+router.put('/schedule/:scheduleId', authorize('school-admin'), validateObjectId('scheduleId'), updateExamSchedule);
+router.delete('/schedule/:scheduleId', authorize('school-admin'), validateObjectId('scheduleId'), deleteExamSchedule);
 
 router.route('/:id')
     .put(authorize('school-admin'), validateObjectId('id'), updateExam)
@@ -73,6 +88,7 @@ router.get(
     authorize('school-admin', 'teacher', 'student', 'parent', 'receptionist'),
     getMarks
 );
+router.get('/combined-rankings', authorize('school-admin', 'teacher'), getCombinedRankings);
 router.get('/report/:examId/:studentId', authorize('school-admin', 'teacher', 'student', 'parent'), validateObjectId('examId'), validateObjectId('studentId'), getStudentReport);
 router.get('/student-grades/:studentId?', authorize('school-admin', 'teacher', 'student', 'parent'), getStudentGrades);
 router.get('/export-matrix', authorize('school-admin', 'teacher'), exportExcelMatrix);

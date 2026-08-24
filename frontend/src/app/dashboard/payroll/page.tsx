@@ -17,6 +17,7 @@ export default function PayrollPage() {
     const [salaries, setSalaries] = useState<Salary[]>([]);
     const [loading, setLoading] = useState(true);
     const [running, setRunning] = useState(false);
+    const [settingsOpen, setSettingsOpen] = useState(false);
 
     // Default to current month/year
     const [month, setMonth] = useState(new Date().toLocaleString('default', { month: 'long' }));
@@ -88,11 +89,38 @@ export default function PayrollPage() {
                     >
                         {running ? 'Processing...' : `Run ${month} Payroll`}
                     </button>
-                    <button className="flex-1 lg:flex-none px-6 py-3.5 bg-slate-900/50 border border-white/5 text-slate-400 rounded-2xl font-bold hover:bg-white/5 transition-all text-sm">
+                    <button onClick={() => setSettingsOpen(true)} className="flex-1 lg:flex-none px-6 py-3.5 bg-slate-900/50 border border-white/5 text-slate-400 rounded-2xl font-bold hover:bg-white/5 transition-all text-sm">
                         Payroll Settings
                     </button>
                 </div>
             </div>
+
+            {settingsOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm">
+                    <div className="w-full max-w-md rounded-3xl border border-white/10 bg-slate-900 p-6 shadow-2xl">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h2 className="text-xl font-black text-white">Payroll Settings</h2>
+                                <p className="mt-1 text-xs text-slate-400">Choose the payroll cycle shown on this page.</p>
+                            </div>
+                            <button onClick={() => setSettingsOpen(false)} aria-label="Close payroll settings" className="rounded-lg px-3 py-2 text-slate-400 hover:bg-white/5 hover:text-white">✕</button>
+                        </div>
+                        <div className="mt-6 grid grid-cols-2 gap-4">
+                            <label className="space-y-2 text-xs font-bold uppercase tracking-wider text-slate-400">
+                                Month
+                                <select value={month} onChange={(event) => setMonth(event.target.value)} className="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-sm normal-case text-white">
+                                    {Array.from({ length: 12 }, (_, index) => new Date(2000, index).toLocaleString('default', { month: 'long' })).map(name => <option key={name}>{name}</option>)}
+                                </select>
+                            </label>
+                            <label className="space-y-2 text-xs font-bold uppercase tracking-wider text-slate-400">
+                                Year
+                                <input type="number" min="2000" max="2100" value={year} onChange={(event) => setYear(Number(event.target.value))} className="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-sm normal-case text-white" />
+                            </label>
+                        </div>
+                        <button onClick={() => setSettingsOpen(false)} className="mt-6 w-full rounded-xl bg-indigo-600 px-4 py-3 text-sm font-black text-white hover:bg-indigo-500">Apply Cycle</button>
+                    </div>
+                </div>
+            )}
 
             {/* Stats */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">

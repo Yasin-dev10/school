@@ -55,6 +55,8 @@ export default function TimetablePage() {
     const [viewMode, setViewMode] = useState<'class' | 'personal'>('class');
     const [isGenerating, setIsGenerating] = useState(false);
     const [genStep, setGenStep] = useState('');
+    const [unschedulable, setUnschedulable] = useState<any[]>([]);
+    const [personalSlots, setPersonalSlots] = useState<any[]>([]);
 
     const [schedule, setSchedule] = useState<any>({});
     const [currentUser, setCurrentUser] = useState<any>(null);
@@ -101,6 +103,7 @@ export default function TimetablePage() {
     // Load timetable
     useEffect(() => {
         const fetchTimetable = async () => {
+            setUnschedulable([]);
             if (viewMode === 'class' && !selectedClassId) {
                 const initial: any = {};
                 DAYS.forEach(day => { initial[day] = {}; TIME_SLOTS.forEach((_, idx) => { initial[day][idx] = { subject: '', teachers: [] }; }); });
@@ -115,6 +118,7 @@ export default function TimetablePage() {
                     : `/timetable/class/${selectedClassId}`;
 
                 const { data } = await api.get(endpoint);
+                setPersonalSlots(viewMode === 'personal' ? data.data : []);
 
                 const newSchedule: any = {};
                 DAYS.forEach(day => {
@@ -133,7 +137,8 @@ export default function TimetablePage() {
                                 teachers: slot.teachers ? slot.teachers.map((t: any) => t._id || t) : [],
                                 subjectName: slot.subject?.name,
                                 teacherNames: slot.teachers ? slot.teachers.map((t: any) => `${t.firstName} ${t.lastName}`).join(', ') : '',
-                                className: slot.class?.name ? `${slot.class.name}-${slot.class.section}` : ''
+                                className: slot.class?.name ? `${slot.class.name}-${slot.class.section}` : '',
+                                room: slot.room || ''
                             };
                         }
                     }
@@ -202,59 +207,85 @@ export default function TimetablePage() {
         }
 
         setIsGenerating(true);
+        setUnschedulable([]);
         setGenStep('SOLVING MATRIX CONSTRAINTS...');
 
         try {
             const { data: globalData } = await api.get('/timetable');
             const globalSlots = globalData.data;
 
-            const isTeacherBusy = (teacherIds: string[], day: string, start: string) => {
+            const overlaps = (startA: string, endA: string, startB: string, endB: string) =>
+                startA < endB && endA > startB;
+            const externalSlots = globalSlots.filter((s: any) => (s.class?._id || s.classId) !== selectedClassId);
+            const isTeacherBusy = (teacherIds: string[], day: string, start: string, end: string) => {
                 return globalSlots.some((s: any) =>
                     s.teachers?.some((t: any) => teacherIds.includes(t._id || t)) &&
                     s.day === day &&
-                    s.startTime === start &&
-                    s.class?._id !== selectedClassId
+                    overlaps(start, end, s.startTime, s.endTime) &&
+                    (s.class?._id || s.classId) !== selectedClassId
                 );
             };
+            const isRoomBusy = (room: string, day: string, start: string, end: string) => !!room &&
+                externalSlots.some((s: any) => s.room?.trim().toLowerCase() === room.trim().toLowerCase() &&
+                    s.day === day && overlaps(start, end, s.startTime, s.endTime));
 
-            const classSubjects = [...currentClass.subjects];
+            const allocations = currentClass.subjects.map((entry: any) => {
+                const subjectId = entry.subject?._id || entry.subject;
+                const subject = subjects.find(s => s._id === subjectId) || entry.subject;
+                const teacherIds = entry.teachers?.map((t: any) => t._id || t) || [];
+                return {
+                    subjectId,
+                    subjectName: subject?.name || 'Unknown subject',
+                    teacherIds,
+                    teacherNames: teachers.filter(t => teacherIds.includes(t._id))
+                        .map(t => `${t.firstName} ${t.lastName}`).join(', '),
+                    room: (entry.room || currentClass.room || '').trim(),
+                    requested: Math.max(0, Number(entry.weeklyPeriods) || 0),
+                    remaining: Math.max(0, Number(entry.weeklyPeriods) || 0),
+                    placedDays: new Set<string>()
+                };
+            });
             const newSchedule: any = {};
-
             DAYS.forEach(day => {
                 newSchedule[day] = {};
-                // Shuffle to avoid predictable patterns
-                const dayPool = [...classSubjects].sort(() => Math.random() - 0.5);
-                let poolIdx = 0;
-
                 TIME_SLOTS.forEach((ts, idx) => {
-                    if (ts.type === 'break') {
-                        newSchedule[day][idx] = { subject: '', teachers: [] };
-                        return;
-                    }
-
-                    let match = null;
-                    let attempts = 0;
-                    while (!match && attempts < dayPool.length) {
-                        const candidate = dayPool[poolIdx % dayPool.length];
-                        const tIds = candidate.teachers?.map((t: any) => t._id || t) || [];
-                        const sId = candidate.subject?._id || candidate.subject;
-
-                        if (!isTeacherBusy(tIds, day, ts.start)) {
-                            const sub = subjects.find(s => s._id === sId);
-                            const selectedTeachers = teachers.filter(t => tIds.includes(t._id));
-                            match = {
-                                subject: sub?._id || '',
-                                teachers: tIds,
-                                subjectName: sub?.name,
-                                teacherNames: selectedTeachers.map(t => `${t.firstName} ${t.lastName}`).join(', ')
-                            };
-                        }
-                        poolIdx++;
-                        attempts++;
-                    }
-                    newSchedule[day][idx] = match || { subject: '', teachers: [], subjectName: 'Self-Study', teacherNames: 'Unsupervised' };
+                    newSchedule[day][idx] = { subject: '', teachers: [] };
                 });
             });
+
+            const teachingSlots = DAYS.flatMap(day => TIME_SLOTS
+                .map((ts, idx) => ({ day, ts, idx }))
+                .filter(({ ts }) => ts.type !== 'break'));
+            for (const slot of teachingSlots) {
+                const candidates = allocations
+                    .filter((a: any) => a.remaining > 0 && a.teacherIds.length > 0)
+                    .filter((a: any) => !isTeacherBusy(a.teacherIds, slot.day, slot.ts.start, slot.ts.end))
+                    .filter((a: any) => !isRoomBusy(a.room, slot.day, slot.ts.start, slot.ts.end))
+                    .sort((a: any, b: any) =>
+                        Number(a.placedDays.has(slot.day)) - Number(b.placedDays.has(slot.day)) ||
+                        (b.remaining / Math.max(1, b.requested)) - (a.remaining / Math.max(1, a.requested)) ||
+                        a.subjectName.localeCompare(b.subjectName));
+                const selected = candidates[0];
+                if (!selected) continue;
+                newSchedule[slot.day][slot.idx] = {
+                    subject: selected.subjectId,
+                    teachers: selected.teacherIds,
+                    subjectName: selected.subjectName,
+                    teacherNames: selected.teacherNames,
+                    room: selected.room
+                };
+                selected.remaining -= 1;
+                selected.placedDays.add(slot.day);
+            }
+
+            setUnschedulable(allocations.filter((a: any) => a.remaining > 0).map((a: any) => ({
+                subjectId: a.subjectId,
+                subjectName: a.subjectName,
+                requested: a.requested,
+                scheduled: a.requested - a.remaining,
+                unscheduled: a.remaining,
+                reason: a.teacherIds.length === 0 ? 'No teacher assigned' : 'No conflict-free teacher/room period available'
+            })));
 
             await new Promise(r => setTimeout(r, 1200));
             setSchedule(newSchedule);
@@ -285,7 +316,8 @@ export default function TimetablePage() {
                             startTime: ts.start,
                             endTime: ts.end,
                             subjectId: cell.subject,
-                            teacherIds: cell.teachers
+                            teachers: cell.teachers,
+                            room: cell.room || null
                         });
                     }
                 });
@@ -293,9 +325,10 @@ export default function TimetablePage() {
             await api.post('/timetable/bulk', { classId: selectedClassId, slots: slotsToSave });
             alert("MATRIX PUBLISHED: Timetable is now live for all students and faculty.");
             setIsEditMode(false);
-        } catch (err) {
-            console.error(err);
-            alert("Publishing Failed");
+        } catch (err: any) {
+            const message = err?.response?.data?.message || err?.message || "Publishing Failed";
+            console.error("Timetable publishing failed:", message);
+            alert(`Publishing Failed: ${message}`);
         } finally {
             setSaving(false);
         }
@@ -433,7 +466,7 @@ export default function TimetablePage() {
             </div>
 
             {/* Timetable Engine View */}
-            {!selectedClassId ? (
+            {viewMode === 'class' && !selectedClassId ? (
                 <div className="flex flex-col items-center justify-center py-52 bg-slate-950/40 rounded-[4rem] border border-dashed border-white/5 animate-in fade-in zoom-in-95 duration-[1.5s]">
                     <div className="w-44 h-44 bg-white/[0.01] rounded-[3.5rem] flex items-center justify-center text-4xl mb-12 shadow-[0_0_80px_rgba(79,70,229,0.1)] relative group cursor-default">
                         <div className="absolute inset-0 bg-indigo-500/5 blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-1000" />
@@ -458,6 +491,54 @@ export default function TimetablePage() {
                 </div>
             ) : (
                 <div className="space-y-6 animate-in fade-in slide-in-from-bottom-8 duration-1000">
+                    {viewMode === 'personal' && (
+                        <div className="rounded-[2.5rem] border border-indigo-500/20 bg-indigo-500/10 p-6 sm:p-8">
+                            <div className="mb-6 flex items-center justify-between gap-4">
+                                <div>
+                                    <h2 className="text-xl font-black text-white">My Teaching Schedule</h2>
+                                    <p className="mt-1 text-sm font-semibold text-indigo-200/70">
+                                        {personalSlots.length} assigned lesson{personalSlots.length === 1 ? '' : 's'}
+                                    </p>
+                                </div>
+                                <Calendar className="text-indigo-400" size={28} />
+                            </div>
+                            {personalSlots.length === 0 ? (
+                                <div className="rounded-2xl border border-dashed border-white/10 p-8 text-center text-sm font-bold text-slate-400">
+                                    No lessons have been assigned to your timetable yet.
+                                </div>
+                            ) : (
+                                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                                    {personalSlots.map((slot: any) => (
+                                        <div key={slot._id || slot.id} className="rounded-2xl border border-white/10 bg-slate-950/60 p-5 shadow-xl">
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div>
+                                                    <p className="text-xs font-black uppercase tracking-widest text-indigo-400">{slot.day}</p>
+                                                    <h3 className="mt-2 font-black text-white">{slot.subject?.name || 'Subject'}</h3>
+                                                </div>
+                                                <span className="rounded-xl bg-white/5 px-3 py-2 text-xs font-black text-slate-200">
+                                                    {slot.startTime}–{slot.endTime}
+                                                </span>
+                                            </div>
+                                            <div className="mt-4 flex flex-wrap gap-2 text-xs font-bold text-slate-400">
+                                                <span className="rounded-lg bg-white/5 px-2.5 py-1.5">{slot.class?.name} – {slot.class?.section}</span>
+                                                <span className="rounded-lg bg-white/5 px-2.5 py-1.5">Room: {slot.room || 'Not set'}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    {unschedulable.length > 0 && (
+                        <div className="rounded-3xl border border-amber-500/30 bg-amber-500/10 p-6 text-amber-100">
+                            <div className="mb-3 flex items-center gap-3 font-black"><AlertCircle size={20} /> Unschedulable allocations</div>
+                            <ul className="space-y-2 text-sm">
+                                {unschedulable.map((item: any) => (
+                                    <li key={item.subjectId}><strong>{item.subjectName}</strong>: {item.unscheduled} of {item.requested} period(s) unplaced — {item.reason}.</li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
                     {/* Auto-Gen Prompt for Empty Schedules */}
                     {scheduleIsEmpty && !isEditMode && canEdit && (
                         <div className="flex flex-col md:flex-row items-center justify-between p-8 bg-indigo-500/10 border border-indigo-500/20 rounded-[2.5rem] gap-6 overflow-hidden relative">
@@ -581,6 +662,7 @@ export default function TimetablePage() {
                                                                             <User size={14} className="shrink-0 opacity-40" />
                                                                             <span className="text-[11px] font-bold line-clamp-none italic tracking-tight">{viewMode === 'personal' ? cell.className : cell.teacherNames}</span>
                                                                         </div>
+                                                                        {cell.room && <div className="mt-2 text-[10px] font-black uppercase tracking-widest text-white/40">Room {cell.room}</div>}
                                                                     </div>
                                                                     <div className="flex items-center justify-between mt-5 relative z-10">
                                                                         <div className="flex items-center gap-1.5 text-[10px] font-black opacity-30 uppercase tracking-[0.2em]">

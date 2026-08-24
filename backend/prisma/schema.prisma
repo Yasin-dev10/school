@@ -384,6 +384,7 @@ model Tenant {
   classes         Class[]
   subjects        Subject[]
   exams           Exam[]
+  examSchedules   ExamSchedule[]
   attendances     Attendance[]
   timetables      Timetable[]
   assignments     Assignment[]
@@ -547,6 +548,7 @@ model User {
   subjectTeachings      SubjectTeacher[]
   classSubjectTeachings ClassSubjectTeacher[]
   timetableTeachings    TimetableTeacher[]
+  examInvigilations     ExamScheduleInvigilator[]
 
   marksGraded    Mark[] @relation("GradedBy")
   marksAsStudent Mark[] @relation("Student")
@@ -646,6 +648,7 @@ model Class {
   materials   Material[]
   invoices    Invoice[]
   examClasses ExamClass[]
+  examSchedules ExamSchedule[]
   courses     Course[]
 
   @@unique([name, section, tenantId])
@@ -658,6 +661,8 @@ model ClassSubject {
   id        String @id @default(cuid())
   classId   String
   subjectId String
+  weeklyPeriods Int?
+  room      String?
 
   class    Class                 @relation(fields: [classId], references: [id], onDelete: Cascade)
   subject  Subject               @relation(fields: [subjectId], references: [id], onDelete: Cascade)
@@ -704,6 +709,7 @@ model Subject {
   examComplaints ExamComplaint[]
   assignments    Assignment[]
   courses        Course[]
+  examSchedules  ExamSchedule[]
 
   @@unique([name, code, tenantId])
   @@index([tenantId])
@@ -818,6 +824,7 @@ model Exam {
   classes    ExamClass[]
   marks      Mark[]
   complaints ExamComplaint[]
+  schedules  ExamSchedule[]
 
   @@index([tenantId])
   @@map("exams")
@@ -834,6 +841,43 @@ model ExamClass {
 
   @@unique([examId, classId])
   @@map("exam_classes")
+}
+
+model ExamSchedule {
+  id        String   @id @default(cuid())
+  examId    String
+  classId   String
+  subjectId String
+  date      DateTime
+  startTime String
+  endTime   String
+  room      String?
+  tenantId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  exam        Exam                       @relation(fields: [examId], references: [id], onDelete: Cascade)
+  class       Class                      @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subject     Subject                    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  tenant      Tenant                     @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+  invigilators ExamScheduleInvigilator[]
+
+  @@unique([examId, classId, subjectId])
+  @@unique([examId, classId, date, startTime])
+  @@index([tenantId, date])
+  @@map("exam_schedules")
+}
+
+model ExamScheduleInvigilator {
+  id         String @id @default(cuid())
+  scheduleId String
+  teacherId  String
+
+  schedule ExamSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  teacher  User         @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@unique([scheduleId, teacherId])
+  @@map("exam_schedule_invigilators")
 }
 
 model Mark {

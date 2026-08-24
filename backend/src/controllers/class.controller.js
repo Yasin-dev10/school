@@ -20,7 +20,9 @@ const formatClass = (c) => ({
     classTeacher: withId(c.classTeacher),
     subjects: c.subjects?.map(cs => ({
         subject: withId(cs.subject),
-        teachers: cs.teachers?.map(t => withId(t.teacher)) || []
+        teachers: cs.teachers?.map(t => withId(t.teacher)) || [],
+        weeklyPeriods: cs.weeklyPeriods,
+        room: cs.room
     })) || []
 });
 
@@ -50,7 +52,12 @@ exports.createClass = async (req, res) => {
                     if (validTeachers.length !== teachers.length)
                         return res.status(400).json({ success: false, message: 'One or more teacher IDs are invalid' });
                 }
-                validatedSubjects.push({ subjectId: sub.subject, teachers });
+                validatedSubjects.push({
+                    subjectId: sub.subject,
+                    teachers,
+                    weeklyPeriods: Number.isFinite(Number(sub.weeklyPeriods)) ? Number(sub.weeklyPeriods) : null,
+                    room: sub.room ? String(sub.room).trim() : null
+                });
             }
         }
 
@@ -63,6 +70,8 @@ exports.createClass = async (req, res) => {
                 subjects: {
                     create: validatedSubjects.map(vs => ({
                         subject: { connect: { id: vs.subjectId } },
+                        weeklyPeriods: vs.weeklyPeriods,
+                        room: vs.room,
                         teachers: { create: vs.teachers.map(tId => ({ teacher: { connect: { id: tId } } })) }
                     }))
                 }
@@ -204,11 +213,18 @@ exports.updateClass = async (req, res) => {
                     const validTeachers = await prisma.user.findMany({ where: { id: { in: teachers }, tenantId: req.user.tenantId, role: 'teacher' } });
                     if (validTeachers.length !== teachers.length) return res.status(400).json({ success: false, message: 'Invalid teacher IDs' });
                 }
-                validatedSubjects.push({ subjectId: sub.subject, teachers });
+                validatedSubjects.push({
+                    subjectId: sub.subject,
+                    teachers,
+                    weeklyPeriods: Number.isFinite(Number(sub.weeklyPeriods)) ? Number(sub.weeklyPeriods) : null,
+                    room: sub.room ? String(sub.room).trim() : null
+                });
             }
 
             subjectCreate = validatedSubjects.map(vs => ({
                 subject: { connect: { id: vs.subjectId } },
+                weeklyPeriods: vs.weeklyPeriods,
+                room: vs.room,
                 teachers: { create: vs.teachers.map(tId => ({ teacher: { connect: { id: tId } } })) }
             }));
         }

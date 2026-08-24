@@ -110,6 +110,8 @@ export default function SubjectAllocationPage() {
         allocations.map(cs => ({
             subject: cs.subject._id,
             teachers: cs.teachers.map(tid),
+            weeklyPeriods: cs.weeklyPeriods,
+            room: cs.room,
         }));
 
     /* ── Save allocation to backend via PUT /classes/:id ───────────────── */

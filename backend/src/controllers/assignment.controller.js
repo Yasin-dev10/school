@@ -22,6 +22,11 @@ exports.createAssignment = async (req, res) => {
     try {
         const { title, description, classId, subjectId, dueDate, status } = req.body;
         const tenantId = req.user.tenantId;
+        const parsedDueDate = new Date(dueDate);
+
+        if (!title || !classId || !dueDate || Number.isNaN(parsedDueDate.getTime())) {
+            return res.status(400).json({ success: false, message: 'Title, class, and a valid due date are required' });
+        }
 
         if (req.user.role === 'teacher') {
             if (!subjectId) return res.status(400).json({ success: false, message: 'Subject is required' });
@@ -34,7 +39,7 @@ exports.createAssignment = async (req, res) => {
                 title, description,
                 classId, subjectId: subjectId || null,
                 teacherId: req.user.id,
-                dueDate: new Date(dueDate),
+                dueDate: parsedDueDate,
                 status: status || 'published',
                 tenantId
             },
@@ -49,7 +54,7 @@ exports.createAssignment = async (req, res) => {
         if (assignment.status === 'published') {
             await createAutomatedNotification({
                 tenantId, senderId: req.user.id, targetRole: 'student', targetClass: classId,
-                title: 'New assignment', message: `${title} is due ${new Date(dueDate).toLocaleDateString()}.`,
+                title: 'New assignment', message: `${title} is due ${parsedDueDate.toLocaleDateString()}.`,
                 eventType: 'assignment', deepLink: `/dashboard/assignments?assignment=${assignment.id}`
             });
         }
@@ -129,6 +134,10 @@ exports.updateAssignment = async (req, res) => {
             return res.status(403).json({ success: false, message: 'You can only update your own assignments' });
 
         const { title, description, classId, subjectId, dueDate, status } = req.body;
+        const parsedDueDate = dueDate ? new Date(dueDate) : null;
+        if (parsedDueDate && Number.isNaN(parsedDueDate.getTime())) {
+            return res.status(400).json({ success: false, message: 'A valid due date is required' });
+        }
         const targetClassId = classId || exists.classId;
         const targetSubjectId = subjectId !== undefined ? subjectId : exists.subjectId;
 
@@ -145,7 +154,7 @@ exports.updateAssignment = async (req, res) => {
                 ...(description && { description }),
                 ...(classId && { classId }),
                 ...(subjectId !== undefined && { subjectId }),
-                ...(dueDate && { dueDate: new Date(dueDate) }),
+                ...(parsedDueDate && { dueDate: parsedDueDate }),
                 ...(status && { status })
             }
         });

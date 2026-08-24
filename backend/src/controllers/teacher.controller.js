@@ -32,9 +32,14 @@ const formatTeacher = (teacher) => {
 
 exports.createTeacher = async (req, res) => {
     try {
-        const { firstName, lastName, password, profile } = req.body;
+        const { firstName, lastName, email, password, profile } = req.body;
         const tenantId = req.user.tenantId;
         if (!firstName || !lastName) return res.status(400).json({ message: 'First name and last name are required' });
+        const normalizedEmail = email ? String(email).trim().toLowerCase() : null;
+        if (normalizedEmail) {
+            const emailExists = await prisma.user.findFirst({ where: { email: normalizedEmail } });
+            if (emailExists) return res.status(409).json({ success: false, message: 'Email is already in use' });
+        }
         const username = await generateUsername(prisma, { role: 'teacher', tenantId });
 
         const generatedPassword = password || generatePassword();
@@ -44,7 +49,7 @@ exports.createTeacher = async (req, res) => {
         const teacher = await prisma.user.create({
             data: {
                 firstName, lastName,
-                email: null,
+                email: normalizedEmail,
                 username,
                 password: hashed,
                 role: 'teacher', tenantId,

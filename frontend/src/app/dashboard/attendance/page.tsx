@@ -207,15 +207,12 @@ export default function AttendancePage() {
         try {
             const subQ = selectedSubject ? `&subjectId=${selectedSubject._id}` : '';
             const [stuRes, attRes] = await Promise.all([
-                api.get('/students'),
+                api.get('/students', { params: { class: selectedClass._id, section: selectedClass.section } }),
                 api.get(`/attendance/class/${selectedClass._id}?date=${date}${subQ}`),
             ]);
 
             /* filter students that belong to this class */
-            const classStudents = (stuRes.data.data ?? []).filter((s: any) =>
-                String(s.profile?.class ?? '').trim() === String(selectedClass.name ?? '').trim() &&
-                String(s.profile?.section ?? '').trim() === String(selectedClass.section ?? '').trim()
-            );
+            const classStudents = stuRes.data.data ?? [];
             setStudents(classStudents);
 
             /* build records map — existing DB records take priority */

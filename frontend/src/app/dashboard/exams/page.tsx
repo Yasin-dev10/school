@@ -26,7 +26,7 @@ ChartJS.register(
 
 export default function ExamsPage() {
     const [user, setUser] = useState<any>(null);
-    const [view, setView] = useState('board'); // 'board', 'grades', 'grade-config', 'complaints', 'my-results', 'analytics', 'entry-status'
+    const [view, setView] = useState('board');
     const [maxMarks, setMaxMarks] = useState('100');
     const [exams, setExams] = useState<any[]>([]);
     const [classes, setClasses] = useState<any[]>([]);
@@ -83,6 +83,20 @@ export default function ExamsPage() {
     const [entryStatusLoading, setEntryStatusLoading] = useState(false);
     const [entryStatusRows, setEntryStatusRows] = useState<any[]>([]);
 
+    // Exam schedule
+    const [examSchedules, setExamSchedules] = useState<any[]>([]);
+    const [teachers, setTeachers] = useState<any[]>([]);
+    const [scheduleLoading, setScheduleLoading] = useState(false);
+    const [scheduleSaving, setScheduleSaving] = useState(false);
+    const [scheduleGenerating, setScheduleGenerating] = useState(false);
+    const [editingSchedule, setEditingSchedule] = useState<any>(null);
+    const [editScheduleForm, setEditScheduleForm] = useState({ classId: '', subjectId: '', date: '', startTime: '', endTime: '', room: '' });
+    const [scheduleExamFilter, setScheduleExamFilter] = useState('');
+    const [scheduleClassFilter, setScheduleClassFilter] = useState('');
+    const [scheduleForm, setScheduleForm] = useState({ examId: '', classId: '', subjectId: '', date: '', startTime: '', endTime: '', room: '', invigilators: [] as string[] });
+    const [generatorTimes, setGeneratorTimes] = useState({ firstStart: '08:00', firstEnd: '10:00', secondStart: '10:30', secondEnd: '12:30' });
+    const [generatorStartDate, setGeneratorStartDate] = useState('');
+
     useEffect(() => {
         const userStr = localStorage.getItem('user');
         if (userStr) {
@@ -104,16 +118,28 @@ export default function ExamsPage() {
                 const userData = userStr ? JSON.parse(userStr) : null;
                 const subjectQuery = userData?.role === 'teacher' ? '/subjects?assignedOnly=true' : '/subjects';
 
-                const [exRes, clRes, subRes, tenRes] = await Promise.all([
+                const [exRes, clRes, subRes, tenRes, scheduleRes] = await Promise.all([
                     api.get('/exams'),
                     api.get('/classes'),
                     api.get(subjectQuery),
-                    api.get('/tenants/me')
+                    api.get('/tenants/me'),
+                    api.get('/exams/schedule').catch(() => ({ data: { data: [] } }))
                 ]);
                 setExams(exRes.data.data);
                 setClasses(clRes.data.data);
                 setSubjects(subRes.data.data);
                 setTenant(tenRes.data.data);
+                const loadedSchedules = scheduleRes.data.data || [];
+                setExamSchedules(loadedSchedules);
+                if (loadedSchedules.length) {
+                    setScheduleExamFilter(loadedSchedules[0].exam?._id || loadedSchedules[0].exam?.id || '');
+                    setScheduleClassFilter('');
+                    setGeneratorStartDate(String(loadedSchedules[0].exam?.startDate || '').slice(0, 10));
+                }
+                if (userData?.role === 'school-admin') {
+                    const teacherRes = await api.get('/teachers');
+                    setTeachers(teacherRes.data.data || []);
+                }
             } catch (err) {
                 console.error("Base fetch failed");
             } finally {
@@ -511,9 +537,110 @@ export default function ExamsPage() {
         }
     };
 
+    const refreshExamSchedules = async () => {
+        setScheduleLoading(true);
+        try {
+            const { data } = await api.get('/exams/schedule');
+            setExamSchedules(data.data || []);
+        } finally {
+            setScheduleLoading(false);
+        }
+    };
+
+    const handleCreateSchedule = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setScheduleSaving(true);
+        try {
+            await api.post('/exams/schedule', scheduleForm);
+            setScheduleForm({ examId: '', classId: '', subjectId: '', date: '', startTime: '', endTime: '', room: '', invigilators: [] });
+            await refreshExamSchedules();
+        } catch (err: any) {
+            alert(err.response?.data?.message || 'Jadwalka lama kaydin karin');
+        } finally {
+            setScheduleSaving(false);
+        }
+    };
+
+    const handleDeleteSchedule = async (id: string) => {
+        if (!confirm('Ma hubtaa inaad tirtirayso jadwalkan?')) return;
+        try {
+            await api.delete(`/exams/schedule/${id}?applyToAllClasses=true`);
+            await refreshExamSchedules();
+        } catch (err: any) {
+            alert(err.response?.data?.message || 'Jadwalka lama tirtiri karin');
+        }
+    };
+
+    const handleDeleteFullSchedule = async () => {
+        if (!scheduleExamFilter) return;
+        const examName = exams.find((exam: any) => exam._id === scheduleExamFilter)?.name || 'imtixaankan';
+        if (!confirm(`Ma hubtaa inaad tirtirayso jadwalka ${examName} oo dhan?`)) return;
+        try {
+            await api.delete(`/exams/schedule/exam/${scheduleExamFilter}`);
+            setExamSchedules(rows => rows.filter((row: any) => (row.exam?._id || row.exam?.id) !== scheduleExamFilter));
+        } catch (err: any) {
+            alert(err.response?.data?.message || 'Jadwalka lama tirtiri karin');
+        }
+    };
+
+    const openScheduleEditor = (row: any) => {
+        setEditingSchedule(row);
+        setEditScheduleForm({
+            classId: row.class?._id || row.class?.id || '', subjectId: row.subject?._id || row.subject?.id || '',
+            date: String(row.date).slice(0, 10), startTime: row.startTime, endTime: row.endTime, room: row.room || ''
+        });
+    };
+
+    const handleUpdateSchedule = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            const id = editingSchedule._id || editingSchedule.id;
+            await api.put(`/exams/schedule/${id}`, { ...editScheduleForm, applyToAllClasses: true });
+            await refreshExamSchedules();
+            setEditingSchedule(null);
+        } catch (err: any) {
+            alert(err.response?.data?.message || 'Jadwalka lama cusboonaysiin karin');
+        }
+    };
+
+    const handleGenerateSchedule = async () => {
+        if (!scheduleExamFilter) return alert('Marka hore dooro imtixaanka');
+        if (examSchedules.some((row: any) => (row.exam?._id || row.exam?.id) === scheduleExamFilter) && !confirm('Imtixaankan jadwal ayuu leeyahay. Ma rabtaa in jadwalkii hore la beddelo?')) return;
+        setScheduleGenerating(true);
+        try {
+            const toMinutes = (time: string) => { const [hours, minutes] = time.split(':').map(Number); return hours * 60 + minutes; };
+            const fromMinutes = (total: number) => `${String(Math.floor(total / 60) % 24).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+            const firstDuration = Math.max(30, toMinutes(generatorTimes.firstEnd) - toMinutes(generatorTimes.firstStart));
+            const normalizedSecondStart = toMinutes(generatorTimes.secondStart) < toMinutes(generatorTimes.firstEnd) ? generatorTimes.firstEnd : generatorTimes.secondStart;
+            const normalizedSecondEnd = toMinutes(generatorTimes.secondEnd) <= toMinutes(normalizedSecondStart) ? fromMinutes(toMinutes(normalizedSecondStart) + firstDuration) : generatorTimes.secondEnd;
+            const normalizedTimes = { ...generatorTimes, secondStart: normalizedSecondStart, secondEnd: normalizedSecondEnd };
+            setGeneratorTimes(normalizedTimes);
+            const { data } = await api.post('/exams/schedule/generate', { examId: scheduleExamFilter, startDate: generatorStartDate || undefined, ...normalizedTimes, replaceExisting: true });
+            setExamSchedules(data.data || []);
+            setScheduleClassFilter('');
+        } catch (err: any) {
+            alert(err.response?.data?.message || 'Jadwalka otomaatiga ah lama samayn karin');
+        } finally {
+            setScheduleGenerating(false);
+        }
+    };
+
     const isStaff = user && ['school-admin', 'teacher', 'receptionist'].includes(user.role);
     const isActualAdmin = user && user.role === 'school-admin';
     const isAdmin = isStaff;
+    const visibleSchedules = examSchedules.filter((row: any) =>
+        (!scheduleExamFilter || (row.exam?._id || row.exam?.id) === scheduleExamFilter) &&
+        (!scheduleClassFilter || (row.class?._id || row.class?.id) === scheduleClassFilter)
+    );
+    const combinedScheduleRows = Object.values(visibleSchedules.reduce((groups: Record<string, any[]>, row: any) => {
+        const key = String(row.date).slice(0, 10);
+        const subjectId = row.subject?._id || row.subject?.id;
+        groups[key] ||= [];
+        if (!groups[key].some(item => (item.subject?._id || item.subject?.id) === subjectId)) groups[key].push(row);
+        groups[key].sort((a, b) => a.startTime.localeCompare(b.startTime));
+        return groups;
+    }, {})).sort((a: any, b: any) => String(a[0].date).localeCompare(String(b[0].date))) as any[][];
+    const displayedExam = exams.find((exam: any) => exam._id === scheduleExamFilter) || visibleSchedules[0]?.exam;
 
     return (
         <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-6 sm:space-y-8">
@@ -529,6 +656,7 @@ export default function ExamsPage() {
                 {isStaff && (
                     <div className="flex bg-slate-900/50 p-1 rounded-2xl border border-white/5 shadow-inner flex-wrap gap-1 w-full lg:w-auto">
                         <button onClick={() => setView('board')} className={`flex-1 lg:flex-none px-3 sm:px-4 py-2 rounded-xl text-[10px] sm:text-xs font-bold transition-all ${view === 'board' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Board</button>
+                        <button onClick={() => setView('schedule')} className={`flex-1 lg:flex-none px-3 sm:px-4 py-2 rounded-xl text-[10px] sm:text-xs font-bold transition-all ${view === 'schedule' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Jadwalka</button>
                         <button onClick={() => setView('grades')} className={`flex-1 lg:flex-none px-3 sm:px-4 py-2 rounded-xl text-[10px] sm:text-xs font-bold transition-all ${view === 'grades' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Grades</button>
                         <button onClick={() => setView('entry-status')} className={`flex-1 lg:flex-none px-3 sm:px-4 py-2 rounded-xl text-[10px] sm:text-xs font-bold transition-all ${view === 'entry-status' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Entry Status</button>
                         {isActualAdmin && <button onClick={() => setView('grade-config')} className={`flex-1 lg:flex-none px-3 sm:px-4 py-2 rounded-xl text-[10px] sm:text-xs font-bold transition-all ${view === 'grade-config' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Grading</button>}
@@ -536,15 +664,117 @@ export default function ExamsPage() {
                         <button onClick={() => setView('complaints')} className={`flex-1 lg:flex-none px-3 sm:px-4 py-2 rounded-xl text-[10px] sm:text-xs font-bold transition-all ${view === 'complaints' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Complaints</button>
                     </div>
                 )}
-                {!isAdmin && user?.role === 'student' && (
+                {!isAdmin && ['student', 'parent'].includes(user?.role) && (
                     <div className="flex bg-slate-900/50 p-1 rounded-2xl border border-white/5 shadow-inner w-full lg:w-auto">
                         <button onClick={() => setView('my-results')} className={`flex-1 lg:flex-none px-6 py-2 rounded-xl text-xs font-bold transition-all ${view === 'my-results' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Results</button>
-                        <button onClick={() => setView('complaints')} className={`flex-1 lg:flex-none px-6 py-2 rounded-xl text-xs font-bold transition-all ${view === 'complaints' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Complaints</button>
+                        <button onClick={() => setView('schedule')} className={`flex-1 lg:flex-none px-6 py-2 rounded-xl text-xs font-bold transition-all ${view === 'schedule' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Jadwalka</button>
+                        {user?.role === 'student' && <button onClick={() => setView('complaints')} className={`flex-1 lg:flex-none px-6 py-2 rounded-xl text-xs font-bold transition-all ${view === 'complaints' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Complaints</button>}
                     </div>
                 )}
             </div>
 
-            {view === 'my-results' ? (
+            {view === 'schedule' ? (
+                <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
+                    <style jsx global>{`
+                        @media print {
+                            body * { visibility: hidden !important; }
+                            #exam-schedule-poster, #exam-schedule-poster * { visibility: visible !important; }
+                            #exam-schedule-poster { position: absolute; inset: 0; width: 100%; min-height: 100vh; }
+                            @page { size: A4 landscape; margin: 0; }
+                        }
+                    `}</style>
+                    <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+                        <div><h2 className="text-3xl font-black text-white">Jadwalka Imtixaannada</h2><p className="text-sm text-slate-400 mt-1">Maalmaha, saacadaha, qolalka iyo ilaaliyeyaasha imtixaanka.</p></div>
+                        <button onClick={refreshExamSchedules} className="px-5 py-3 rounded-2xl bg-white/5 text-slate-300 text-xs font-bold hover:bg-white/10">Cusboonaysii</button>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-3 print:hidden">
+                        <select value={scheduleExamFilter} onChange={e => { const examId = e.target.value; const selected = exams.find((exam:any) => exam._id === examId); setScheduleExamFilter(examId); setScheduleClassFilter(''); setGeneratorStartDate(selected?.startDate ? String(selected.startDate).slice(0, 10) : ''); }} className="flex-1 px-5 py-3 bg-slate-950 border border-white/10 rounded-2xl text-white"><option value="">Dooro imtixaanka</option>{exams.map((x:any) => <option key={x._id} value={x._id}>{x.name}</option>)}</select>
+                        <button onClick={() => window.print()} className="px-8 py-3 bg-sky-600 hover:bg-sky-500 text-white rounded-2xl font-black">Daabac Jadwalka</button>
+                        {isActualAdmin && scheduleExamFilter && <button onClick={handleDeleteFullSchedule} className="px-8 py-3 bg-red-600 hover:bg-red-500 text-white rounded-2xl font-black">Tirtir Jadwalka</button>}
+                    </div>
+
+                    {isActualAdmin && scheduleExamFilter && (
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 rounded-[2rem] border border-cyan-500/20 bg-cyan-950/20 p-5 print:hidden">
+                            <label className="col-span-2 md:col-span-4 text-xs font-bold text-slate-400">Taariikhda bilowga jadwalka<input required type="date" value={generatorStartDate} onChange={e => setGeneratorStartDate(e.target.value)} className="mt-2 w-full rounded-xl border border-white/10 bg-slate-950 p-3 text-white" /></label>
+                            <label className="text-xs font-bold text-slate-400">Bilowga 1aad<input type="time" value={generatorTimes.firstStart} onChange={e => setGeneratorTimes({ ...generatorTimes, firstStart: e.target.value })} className="mt-2 w-full rounded-xl border border-white/10 bg-slate-950 p-3 text-white" /></label>
+                            <label className="text-xs font-bold text-slate-400">Dhammaadka 1aad<input type="time" value={generatorTimes.firstEnd} onChange={e => setGeneratorTimes({ ...generatorTimes, firstEnd: e.target.value })} className="mt-2 w-full rounded-xl border border-white/10 bg-slate-950 p-3 text-white" /></label>
+                            <label className="text-xs font-bold text-slate-400">Bilowga 2aad<input type="time" value={generatorTimes.secondStart} onChange={e => setGeneratorTimes({ ...generatorTimes, secondStart: e.target.value })} className="mt-2 w-full rounded-xl border border-white/10 bg-slate-950 p-3 text-white" /></label>
+                            <label className="text-xs font-bold text-slate-400">Dhammaadka 2aad<input type="time" value={generatorTimes.secondEnd} onChange={e => setGeneratorTimes({ ...generatorTimes, secondEnd: e.target.value })} className="mt-2 w-full rounded-xl border border-white/10 bg-slate-950 p-3 text-white" /></label>
+                            <button onClick={handleGenerateSchedule} disabled={scheduleGenerating} className="col-span-2 md:col-span-4 rounded-2xl bg-cyan-600 py-4 font-black text-white hover:bg-cyan-500 disabled:opacity-50">{scheduleGenerating ? 'Jadwalka ayaa la samaynayaa...' : '⚡ Soo qaado dhammaan fasallada iyo maaddooyinka'}</button>
+                            <p className="col-span-2 md:col-span-4 text-center text-xs text-cyan-200/70">Laba maaddo maalintii • Jimcaha waa laga boodayaa • Dhammaan fasalladu hal jadwal ayay ku wada jiraan</p>
+                        </div>
+                    )}
+
+                    <div className="space-y-8 overflow-x-auto rounded-[2.5rem]" id="exam-schedule-poster">
+                        {combinedScheduleRows.length > 0 && <section className="min-w-[850px] bg-gradient-to-b from-sky-200 via-sky-400 to-blue-700 px-14 py-10 text-white print:min-w-0 print:rounded-none print:p-10">
+                            <div className="mx-auto max-w-[820px] rounded-[2.5rem] bg-gradient-to-b from-blue-600/95 via-sky-500/90 to-sky-200/90 px-8 py-10 sm:px-12 sm:py-12 shadow-2xl">
+                                <div className="text-center">
+                                    {tenant?.logoUrl ? <img src={tenant.logoUrl} alt="Astaanta dugsiga" className="mx-auto mb-6 h-28 w-28 rounded-lg bg-white object-contain p-2 shadow-xl" /> : <div className="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-full border-4 border-white/80 bg-white/20 text-4xl font-black">{(tenant?.schoolName || tenant?.name || 'S').charAt(0)}</div>}
+                                    <h2 className="text-3xl sm:text-4xl font-black uppercase leading-tight tracking-tight">Jadwalka<br />{displayedExam?.name || 'Imtixaannada'}</h2>
+                                    <p className="mt-3 text-lg font-bold uppercase text-white/90">
+                                        {displayedExam?.startDate ? `${new Date(displayedExam.startDate).getFullYear()}-${new Date(displayedExam.endDate).getFullYear()}` : 'Sannad Dugsiyeedka'}
+                                    </p>
+                                </div>
+
+                                <div className="mt-12 overflow-hidden shadow-xl">
+                                    <table className="w-full table-fixed border-collapse text-[11px] sm:text-sm">
+                                        <thead className="bg-blue-950/85 text-[10px] sm:text-xs uppercase tracking-wider"><tr><th className="w-[6%] border border-white/15 p-3">TT</th><th className="w-[21%] border border-white/15 p-3">Taariikhda</th><th className="w-[18%] border border-white/15 p-3">Maaddada 1aad</th><th className="w-[14%] border border-white/15 p-3">Waqtiga</th><th className="w-[11%] border border-white/15 p-3">Dhex Taal</th><th className="w-[18%] border border-white/15 p-3">Maaddada 2aad</th><th className="w-[14%] border border-white/15 p-3">Waqtiga</th></tr></thead>
+                                        <tbody>
+                                            {combinedScheduleRows.map((slots, index) => {
+                                                const first = slots[0]; const second = slots[1];
+                                                const breakTime = second ? `${first.endTime}-${second.startTime}` : '—';
+                                                return <tr key={String(first.date)} className={index % 2 ? 'bg-blue-200/80 text-blue-950' : 'bg-sky-100/90 text-blue-950'}>
+                                                    <td className="border border-white/30 p-3 text-center font-bold">{index + 1}</td>
+                                                    <td className="border border-white/30 p-3 text-center font-bold">{new Intl.DateTimeFormat('so-SO', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(first.date))}</td>
+                                                    <td className="border border-white/30 p-3 font-bold">{first.subject?.name}{isActualAdmin && <span className="mt-1 flex gap-3 print:hidden"><button onClick={() => openScheduleEditor(first)} className="text-[9px] text-blue-700">Edit</button><button onClick={() => handleDeleteSchedule(first._id || first.id)} className="text-[9px] text-red-700">Tirtir</button></span>}</td>
+                                                    <td className="border border-white/30 p-3 text-center font-bold">{first.startTime}-{first.endTime}</td>
+                                                    <td className="border border-white/30 p-3 text-center font-bold">{breakTime}</td>
+                                                    <td className="border border-white/30 p-3 font-bold">{second?.subject?.name || '—'}{isActualAdmin && second && <span className="mt-1 flex gap-3 print:hidden"><button onClick={() => openScheduleEditor(second)} className="text-[9px] text-blue-700">Edit</button><button onClick={() => handleDeleteSchedule(second._id || second.id)} className="text-[9px] text-red-700">Tirtir</button></span>}</td>
+                                                    <td className="border border-white/30 p-3 text-center font-bold">{second ? `${second.startTime}-${second.endTime}` : '—'}</td>
+                                                </tr>;
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div className="mt-12 text-center"><p className="text-xl font-black">{tenant?.schoolName || tenant?.name || 'Maamulka Dugsiga'}</p><p className="mt-1 text-sm font-bold text-white/80">Waxbarasho tayo leh iyo mustaqbal ifaya</p></div>
+                            </div>
+                        </section>}
+                        {!scheduleLoading && combinedScheduleRows.length === 0 && <div className="min-w-[850px] bg-sky-100 p-20 text-center font-bold text-blue-950">Dooro imtixaan, kadibna riix “Soo qaado dhammaan fasallada iyo maaddooyinka”.</div>}
+                        {scheduleLoading && <div className="min-w-[850px] bg-sky-100 p-20 text-center font-bold text-blue-950 animate-pulse">Jadwalka ayaa soo raraya...</div>}
+                    </div>
+
+                    {isActualAdmin && (
+                        <form onSubmit={handleCreateSchedule} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 bg-slate-900/50 border border-white/5 p-6 rounded-[2.5rem] print:hidden">
+                            <h3 className="lg:col-span-4 text-xl font-black text-white">Ku dar jadwal gaar ah</h3>
+                            <select required value={scheduleForm.examId} onChange={e => setScheduleForm({ ...scheduleForm, examId: e.target.value })} className="px-4 py-3 bg-slate-950 border border-white/10 rounded-2xl text-white"><option value="">Dooro imtixaanka</option>{exams.map((x:any) => <option key={x._id} value={x._id}>{x.name}</option>)}</select>
+                            <select required value={scheduleForm.classId} onChange={e => setScheduleForm({ ...scheduleForm, classId: e.target.value })} className="px-4 py-3 bg-slate-950 border border-white/10 rounded-2xl text-white"><option value="">Dooro fasalka</option>{classes.map((x:any) => <option key={x._id} value={x._id}>{x.name} - {x.section}</option>)}</select>
+                            <select required value={scheduleForm.subjectId} onChange={e => setScheduleForm({ ...scheduleForm, subjectId: e.target.value })} className="px-4 py-3 bg-slate-950 border border-white/10 rounded-2xl text-white"><option value="">Dooro maaddada</option>{subjects.map((x:any) => <option key={x._id} value={x._id}>{x.name}</option>)}</select>
+                            <input required type="date" title="Taariikhda" value={scheduleForm.date} onChange={e => setScheduleForm({ ...scheduleForm, date: e.target.value })} className="px-4 py-3 bg-slate-950 border border-white/10 rounded-2xl text-white" />
+                            <label className="text-xs font-bold text-slate-400">Waqtiga bilowga<input required type="time" value={scheduleForm.startTime} onChange={e => setScheduleForm({ ...scheduleForm, startTime: e.target.value })} className="mt-2 w-full px-4 py-3 bg-slate-950 border border-white/10 rounded-2xl text-white" /></label>
+                            <label className="text-xs font-bold text-slate-400">Waqtiga dhammaadka<input required type="time" value={scheduleForm.endTime} onChange={e => setScheduleForm({ ...scheduleForm, endTime: e.target.value })} className="mt-2 w-full px-4 py-3 bg-slate-950 border border-white/10 rounded-2xl text-white" /></label>
+                            <input placeholder="Qolka (tusaale A-12)" value={scheduleForm.room} onChange={e => setScheduleForm({ ...scheduleForm, room: e.target.value })} className="px-4 py-3 bg-slate-950 border border-white/10 rounded-2xl text-white" />
+                            <select multiple value={scheduleForm.invigilators} onChange={e => setScheduleForm({ ...scheduleForm, invigilators: Array.from(e.target.selectedOptions, o => o.value) })} className="px-4 py-3 bg-slate-950 border border-white/10 rounded-2xl text-white min-h-24"><option disabled value="">Ilaaliyeyaasha (Ctrl si badan)</option>{teachers.map((x:any) => <option key={x._id} value={x._id}>{x.firstName} {x.lastName}</option>)}</select>
+                            <button disabled={scheduleSaving} className="lg:col-span-4 py-4 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-2xl font-black">{scheduleSaving ? 'Kaydinaya...' : '+ Ku dar jadwalka'}</button>
+                        </form>
+                    )}
+
+                    {editingSchedule && (
+                        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm print:hidden">
+                            <form onSubmit={handleUpdateSchedule} className="grid w-full max-w-2xl grid-cols-1 gap-4 rounded-[2.5rem] border border-white/10 bg-slate-900 p-8 sm:grid-cols-2">
+                                <h3 className="sm:col-span-2 text-2xl font-black text-white">Wax ka beddel jadwalka</h3>
+                                <select required value={editScheduleForm.subjectId} onChange={e => setEditScheduleForm({ ...editScheduleForm, subjectId: e.target.value })} className="sm:col-span-2 p-4 bg-slate-950 border border-white/10 rounded-2xl text-white">{subjects.map((x:any) => <option key={x._id} value={x._id}>{x.name}</option>)}</select>
+                                <input required type="date" value={editScheduleForm.date} onChange={e => setEditScheduleForm({ ...editScheduleForm, date: e.target.value })} className="p-4 bg-slate-950 border border-white/10 rounded-2xl text-white" />
+                                <div className="flex items-center rounded-2xl border border-cyan-500/20 bg-cyan-950/30 px-4 text-xs font-bold text-cyan-300">Isbeddelku dhammaan fasallada ayuu qabanayaa</div>
+                                <label className="text-xs font-bold text-slate-400">Waqtiga bilowga<input required type="time" value={editScheduleForm.startTime} onChange={e => setEditScheduleForm({ ...editScheduleForm, startTime: e.target.value })} className="mt-2 w-full p-4 bg-slate-950 border border-white/10 rounded-2xl text-white" /></label>
+                                <label className="text-xs font-bold text-slate-400">Waqtiga dhammaadka<input required type="time" value={editScheduleForm.endTime} onChange={e => setEditScheduleForm({ ...editScheduleForm, endTime: e.target.value })} className="mt-2 w-full p-4 bg-slate-950 border border-white/10 rounded-2xl text-white" /></label>
+                                <button type="button" onClick={() => setEditingSchedule(null)} className="py-4 bg-slate-700 text-white rounded-2xl font-bold">Jooji</button>
+                                <button className="py-4 bg-indigo-600 text-white rounded-2xl font-black">Update garee</button>
+                            </form>
+                        </div>
+                    )}
+                </div>
+            ) : view === 'my-results' ? (
                 <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div className="glass-dark p-8 rounded-[2.5rem] border border-white/5 relative overflow-hidden group">

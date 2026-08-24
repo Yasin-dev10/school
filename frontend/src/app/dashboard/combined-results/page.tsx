@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import api from "../../utils/api";
+import { DEFAULT_GRADES, gradeForPercentage, normalizeGradeConfigs, type GradeConfig } from "../../utils/grading";
 import * as XLSX from "xlsx";
 import {
   AlertCircle,
@@ -29,13 +30,6 @@ type Student = {
   rollNo?: string;
   profile?: { rollNo?: string };
 };
-type GradeConfig = {
-  grade: string;
-  minPercentage: number;
-  maxPercentage: number;
-  gpa: number;
-  remarks?: string;
-};
 type MarkRow = {
   studentId: string;
   examId: string;
@@ -44,27 +38,10 @@ type MarkRow = {
   max: number;
 };
 
-const DEFAULT_GRADES: GradeConfig[] = [
-  { grade: "A+", minPercentage: 90, maxPercentage: 100, gpa: 4.0 },
-  { grade: "A", minPercentage: 80, maxPercentage: 89, gpa: 3.7 },
-  { grade: "B+", minPercentage: 70, maxPercentage: 79, gpa: 3.3 },
-  { grade: "B", minPercentage: 60, maxPercentage: 69, gpa: 3.0 },
-  { grade: "C", minPercentage: 50, maxPercentage: 59, gpa: 2.0 },
-  { grade: "D", minPercentage: 40, maxPercentage: 49, gpa: 1.0 },
-  { grade: "F", minPercentage: 0, maxPercentage: 39, gpa: 0.0 },
-];
-
-function calcGrade(pct: number, configs: GradeConfig[]): GradeConfig | null {
-  return (
-    configs.find((g) => pct >= g.minPercentage && pct <= g.maxPercentage) ||
-    null
-  );
-}
-
 function gradeColor(grade?: string) {
   if (grade === "F") return "text-red-500";
-  if (grade === "A+" || grade === "A") return "text-emerald-600 dark:text-emerald-400";
-  if (grade === "B+" || grade === "B") return "text-blue-600 dark:text-blue-400";
+  if (grade?.startsWith("A")) return "text-emerald-600 dark:text-emerald-400";
+  if (grade?.startsWith("B")) return "text-blue-600 dark:text-blue-400";
   return "text-slate-700 dark:text-slate-300";
 }
 
@@ -89,16 +66,14 @@ export default function CombinedResultsPage() {
   useEffect(() => {
     (async () => {
       try {
-        const [eRes, cRes, gRes] = await Promise.all([
+        const [eRes, cRes, gradeRes] = await Promise.all([
           api.get("/exams"),
           api.get("/classes"),
           api.get("/grades/active").catch(() => null),
         ]);
         setExams(eRes.data.data || []);
         setClasses(cRes.data.data || []);
-        if (gRes?.data?.data?.grades?.length) {
-          setGradeConfigs(gRes.data.data.grades);
-        }
+        setGradeConfigs(normalizeGradeConfigs(gradeRes?.data?.data?.grades));
       } catch (e) {
         console.error(e);
         showToast("Failed to load data", false);
@@ -196,9 +171,10 @@ export default function CombinedResultsPage() {
       marks
         .filter((m) => m.studentId === sid)
         .forEach((m) => {
-          if (!bySubject[m.subjectId]) {
-            bySubject[m.subjectId] = { obtained: 0, max: 0, perExam: {} };
-          }
+          // Do not include old/unallocated subject marks in hidden totals. They
+          // have no visible subject column and previously caused totals/maxima
+          // such as 830 or 840 for a class with eight 100-mark subjects.
+          if (!bySubject[m.subjectId]) return;
           bySubject[m.subjectId].obtained += m.obtained;
           bySubject[m.subjectId].max += m.max;
           bySubject[m.subjectId].perExam[m.examId] = {
@@ -214,7 +190,7 @@ export default function CombinedResultsPage() {
         totalMax += s.max;
       });
       const percentage = totalMax > 0 ? (totalObtained / totalMax) * 100 : 0;
-      const gc = calcGrade(percentage, gradeConfigs);
+      const gc = gradeForPercentage(percentage, gradeConfigs);
 
       return {
         studentId: sid,

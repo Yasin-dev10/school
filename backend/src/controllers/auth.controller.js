@@ -41,10 +41,10 @@ exports.login = async (req, res) => {
         const user = await prisma.user.findFirst({
             where: {
                 OR: [
-                    { username: loginId.toUpperCase() },
+                    { username: { equals: loginId, mode: 'insensitive' } },
                     { email: loginId.toLowerCase() },
-                    { studentId: loginId.toUpperCase() },
-                    { admissionNo: loginId }
+                    { studentId: { equals: loginId, mode: 'insensitive' } },
+                    { admissionNo: { equals: loginId, mode: 'insensitive' } }
                 ]
             },
             select: {

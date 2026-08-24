@@ -47,6 +47,7 @@ import {
     CirclePlay,
     BriefcaseBusiness,
     Bot,
+    Trophy,
 } from 'lucide-react';
 
 type NavItem = {
@@ -257,6 +258,7 @@ export default function DashboardLayout({
                     { name: 'Multi-Subject Marks', href: '/dashboard/multi-marks', icon: icon(<Grid3x3 className="w-4 h-4" />) },
                     { name: 'Exam Results', href: '/dashboard/exam-results', icon: icon(<TrendingUp className="w-4 h-4" />) },
                     { name: 'Combined Results', href: '/dashboard/combined-results', icon: icon(<Layers className="w-4 h-4" />) },
+                    { name: 'Top Students', href: '/dashboard/top-students', icon: icon(<Trophy className="w-4 h-4" />) },
                     { name: 'Grades', href: '/dashboard/grades', icon: icon(<BarChart3 className="w-4 h-4" />) },
                 ],
             });
@@ -347,6 +349,7 @@ export default function DashboardLayout({
                     { name: 'Multi-Subject Marks', href: '/dashboard/multi-marks', icon: icon(<Grid3x3 className="w-4 h-4" />) },
                     { name: 'Exam Results', href: '/dashboard/exam-results', icon: icon(<TrendingUp className="w-4 h-4" />) },
                     { name: 'Combined Results', href: '/dashboard/combined-results', icon: icon(<Layers className="w-4 h-4" />) },
+                    { name: 'Top Students', href: '/dashboard/top-students', icon: icon(<Trophy className="w-4 h-4" />) },
                     { name: 'Grades', href: '/dashboard/grades', icon: icon(<BarChart3 className="w-4 h-4" />) },
                 ],
             });

@@ -1,4 +1,5 @@
 const prisma = require('../config/prismaClient');
+const { buildCombinedRankings } = require('../utils/combinedRankings');
 const { createAutomatedNotification } = require('../services/notification.service');
 const { logAction } = require('../utils/logger');
 const { emitToTenant } = require('../config/socket');
@@ -299,6 +300,391 @@ exports.getMarks = async (req, res) => {
         });
 
         res.status(200).json({ success: true, data: marks });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+const examScheduleInclude = {
+    exam: { select: { id: true, name: true, term: true, startDate: true, endDate: true } },
+    class: { select: { id: true, name: true, section: true } },
+    subject: { select: { id: true, name: true, code: true } },
+    invigilators: { include: { teacher: { select: { id: true, firstName: true, lastName: true } } } }
+};
+
+const formatExamSchedule = (slot) => ({
+    ...slot,
+    _id: slot.id,
+    exam: slot.exam && { ...slot.exam, _id: slot.exam.id },
+    class: slot.class && { ...slot.class, _id: slot.class.id },
+    subject: slot.subject && { ...slot.subject, _id: slot.subject.id },
+    invigilators: (slot.invigilators || []).map(item => ({ ...item.teacher, _id: item.teacher.id }))
+});
+
+const scheduleDate = (value) => {
+    if (value instanceof Date) {
+        // Exam dates are entered as local calendar dates; preserve that date when Prisma returns a Date object.
+        const year = value.getFullYear();
+        const month = String(value.getMonth() + 1).padStart(2, '0');
+        const day = String(value.getDate()).padStart(2, '0');
+        return new Date(`${year}-${month}-${day}T00:00:00.000Z`);
+    }
+    return new Date(`${String(value).slice(0, 10)}T00:00:00.000Z`);
+};
+
+// @desc Create an exam schedule slot
+exports.createExamSchedule = async (req, res) => {
+    try {
+        const { examId, classId, subjectId, date, startTime, endTime, room, invigilators = [] } = req.body;
+        const tenantId = req.user.tenantId;
+        if (!examId || !classId || !subjectId || !date || !startTime || !endTime || startTime >= endTime) {
+            return res.status(400).json({ success: false, message: 'Exam, class, subject, date and a valid time range are required' });
+        }
+
+        const uniqueTeachers = [...new Set(invigilators)];
+        const [exam, schoolClass, classSubject, teacherCount] = await Promise.all([
+            prisma.exam.findFirst({ where: { id: examId, tenantId }, include: { classes: true } }),
+            prisma.class.findFirst({ where: { id: classId, tenantId } }),
+            prisma.classSubject.findFirst({ where: { classId, subjectId } }),
+            uniqueTeachers.length ? prisma.user.count({ where: { id: { in: uniqueTeachers }, tenantId, role: 'teacher', status: 'active' } }) : 0
+        ]);
+        if (!exam || !schoolClass) return res.status(404).json({ success: false, message: 'Exam or class not found' });
+        if (!exam.classes.some(item => item.classId === classId)) return res.status(400).json({ success: false, message: 'This class is not assigned to the selected exam' });
+        if (!classSubject) return res.status(400).json({ success: false, message: 'This subject is not assigned to the selected class' });
+        if (teacherCount !== uniqueTeachers.length) return res.status(400).json({ success: false, message: 'One or more invigilators are invalid' });
+
+        const slotDate = scheduleDate(date);
+        const startBoundary = scheduleDate(exam.startDate);
+        const endBoundary = scheduleDate(exam.endDate);
+        if (slotDate < startBoundary || slotDate > endBoundary) {
+            return res.status(400).json({ success: false, message: 'Schedule date must fall within the exam date range' });
+        }
+
+        const overlapping = { date: slotDate, startTime: { lt: endTime }, endTime: { gt: startTime } };
+        const conflicts = await prisma.examSchedule.findMany({
+            where: {
+                tenantId,
+                ...overlapping,
+                OR: [
+                    { classId },
+                    ...(room ? [{ room: { equals: room, mode: 'insensitive' } }] : []),
+                    ...(uniqueTeachers.length ? [{ invigilators: { some: { teacherId: { in: uniqueTeachers } } } }] : [])
+                ]
+            },
+            include: examScheduleInclude
+        });
+        if (conflicts.length) return res.status(409).json({ success: false, message: 'Class, room, or invigilator has another exam at this time', conflicts: conflicts.map(formatExamSchedule) });
+
+        const slot = await prisma.examSchedule.create({
+            data: {
+                examId, classId, subjectId, date: slotDate, startTime, endTime,
+                room: room?.trim() || null, tenantId,
+                ...(uniqueTeachers.length && { invigilators: { create: uniqueTeachers.map(teacherId => ({ teacherId })) } })
+            },
+            include: examScheduleInclude
+        });
+        emitToTenant(tenantId, 'exam-schedule:created', slot);
+        res.status(201).json({ success: true, data: formatExamSchedule(slot) });
+    } catch (error) {
+        const message = error.code === 'P2002' ? 'This subject is already scheduled for this class and exam' : error.message;
+        res.status(error.code === 'P2002' ? 409 : 500).json({ success: false, message });
+    }
+};
+
+// @desc Generate two exam subjects per day for every class assigned to an exam
+exports.generateExamSchedule = async (req, res) => {
+    try {
+        const tenantId = req.user.tenantId;
+        const {
+            examId,
+            startDate,
+            firstStart = '08:00', firstEnd = '10:00',
+            secondStart = '10:30', secondEnd = '12:30',
+            replaceExisting = false
+        } = req.body;
+        if (!examId || firstStart >= firstEnd || secondStart >= secondEnd || firstEnd > secondStart) {
+            return res.status(400).json({ success: false, message: 'Exam and valid, non-overlapping session times are required' });
+        }
+
+        const exam = await prisma.exam.findFirst({
+            where: { id: examId, tenantId },
+            include: {
+                classes: {
+                    include: {
+                        class: {
+                            include: { subjects: { select: { subjectId: true } } }
+                        }
+                    }
+                }
+            }
+        });
+        if (!exam) return res.status(404).json({ success: false, message: 'Exam not found' });
+        if (!exam.classes.length) return res.status(400).json({ success: false, message: 'No classes are assigned to this exam' });
+
+        const availableDates = [];
+        const selectedStartDate = startDate ? scheduleDate(startDate) : scheduleDate(exam.startDate);
+        const cursor = new Date(selectedStartDate);
+        const lastDate = scheduleDate(exam.endDate);
+        while (cursor <= lastDate) {
+            // Friday is the weekly holiday; Saturday through Thursday are exam days.
+            if (cursor.getUTCDay() !== 5) availableDates.push(new Date(cursor));
+            cursor.setUTCDate(cursor.getUTCDate() + 1);
+        }
+        const largestSubjectCount = Math.max(...exam.classes.map(item => item.class.subjects.length));
+        const requiredDays = Math.ceil(largestSubjectCount / 2);
+        // Extend the schedule when the configured exam range is too short, rather than dropping subjects.
+        while (availableDates.length < requiredDays) {
+            if (cursor.getUTCDay() !== 5) availableDates.push(new Date(cursor));
+            cursor.setUTCDate(cursor.getUTCDate() + 1);
+        }
+        const generatedEndDate = availableDates[requiredDays - 1];
+
+        const rows = exam.classes.flatMap(item => item.class.subjects.map((classSubject, index) => ({
+            examId,
+            classId: item.classId,
+            subjectId: classSubject.subjectId,
+            date: availableDates[Math.floor(index / 2)],
+            startTime: index % 2 === 0 ? firstStart : secondStart,
+            endTime: index % 2 === 0 ? firstEnd : secondEnd,
+            room: item.class.subjects.length ? `${item.class.name}-${item.class.section}` : null,
+            tenantId
+        })));
+
+        await prisma.$transaction(async tx => {
+            if (replaceExisting) await tx.examSchedule.deleteMany({ where: { examId, tenantId } });
+            await tx.examSchedule.createMany({ data: rows, skipDuplicates: true });
+            await tx.exam.update({
+                where: { id: examId },
+                data: {
+                    ...(startDate && { startDate: selectedStartDate }),
+                    ...(generatedEndDate > scheduleDate(exam.endDate) && { endDate: generatedEndDate })
+                }
+            });
+        });
+
+        const schedules = await prisma.examSchedule.findMany({ where: { examId, tenantId }, include: examScheduleInclude, orderBy: [{ date: 'asc' }, { startTime: 'asc' }] });
+        emitToTenant(tenantId, 'exam-schedule:generated', { examId, count: schedules.length });
+        res.status(201).json({ success: true, count: schedules.length, data: schedules.map(formatExamSchedule) });
+    } catch (error) {
+        console.error('Exam schedule generation failed:', error);
+        res.status(500).json({ success: false, message: 'Jadwalka lama samayn karin. Fadlan mar kale isku day.' });
+    }
+};
+
+// @desc Get exam schedule visible to the signed-in user
+exports.getExamSchedules = async (req, res) => {
+    try {
+        const tenantId = req.user.tenantId;
+        const where = { tenantId };
+        if (req.query.examId) where.examId = req.query.examId;
+        if (req.query.classId) where.classId = req.query.classId;
+
+        if (req.user.role === 'teacher') {
+            const scope = await getTeacherScope(req.user.id, tenantId);
+            where.OR = [{ invigilators: { some: { teacherId: req.user.id } } }, { classId: { in: scope.classIds } }];
+        } else if (req.user.role === 'student') {
+            const profileClass = req.user.profile?.class || req.user.profileClass;
+            const profileSection = req.user.profile?.section || req.user.profileSection;
+            const cls = profileClass && await prisma.class.findFirst({ where: { tenantId, name: profileClass, ...(profileSection && { section: profileSection }) } });
+            where.classId = cls?.id || '__none__';
+        } else if (req.user.role === 'parent') {
+            const children = await prisma.user.findMany({ where: { tenantId, role: 'student', parentLinks: { some: { parentId: req.user.id } } }, select: { profileClass: true, profileSection: true } });
+            const classFilters = children.filter(c => c.profileClass).map(c => ({ name: c.profileClass, ...(c.profileSection && { section: c.profileSection }) }));
+            const childClasses = classFilters.length ? await prisma.class.findMany({ where: { tenantId, OR: classFilters }, select: { id: true } }) : [];
+            where.classId = { in: childClasses.map(c => c.id) };
+        }
+
+        const slots = await prisma.examSchedule.findMany({ where, include: examScheduleInclude, orderBy: [{ date: 'asc' }, { startTime: 'asc' }] });
+        res.json({ success: true, count: slots.length, data: slots.map(formatExamSchedule) });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// @desc Delete an exam schedule slot
+exports.deleteExamSchedule = async (req, res) => {
+    try {
+        const slot = await prisma.examSchedule.findFirst({ where: { id: req.params.scheduleId, tenantId: req.user.tenantId } });
+        if (!slot) return res.status(404).json({ success: false, message: 'Exam schedule not found' });
+        if (req.query.applyToAllClasses === 'true') {
+            await prisma.examSchedule.deleteMany({ where: { tenantId: req.user.tenantId, examId: slot.examId, subjectId: slot.subjectId } });
+        } else {
+            await prisma.examSchedule.delete({ where: { id: slot.id } });
+        }
+        emitToTenant(req.user.tenantId, 'exam-schedule:deleted', { scheduleId: slot.id, allClasses: req.query.applyToAllClasses === 'true' });
+        res.json({ success: true, message: 'Exam schedule deleted' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// @desc Delete every schedule slot for one exam
+exports.deleteFullExamSchedule = async (req, res) => {
+    try {
+        const tenantId = req.user.tenantId;
+        const exam = await prisma.exam.findFirst({ where: { id: req.params.examId, tenantId }, select: { id: true, name: true } });
+        if (!exam) return res.status(404).json({ success: false, message: 'Exam not found' });
+        const result = await prisma.examSchedule.deleteMany({ where: { examId: exam.id, tenantId } });
+        emitToTenant(tenantId, 'exam-schedule:deleted-all', { examId: exam.id, count: result.count });
+        res.json({ success: true, count: result.count, message: `Jadwalka ${exam.name} waa la tirtiray` });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// @desc Update an exam schedule slot
+exports.updateExamSchedule = async (req, res) => {
+    try {
+        const tenantId = req.user.tenantId;
+        const current = await prisma.examSchedule.findFirst({ where: { id: req.params.scheduleId, tenantId } });
+        if (!current) return res.status(404).json({ success: false, message: 'Exam schedule not found' });
+
+        const applyToAllClasses = req.body.applyToAllClasses === true;
+        const matchingSlots = applyToAllClasses
+            ? await prisma.examSchedule.findMany({ where: { tenantId, examId: current.examId, subjectId: current.subjectId } })
+            : [current];
+        const targetIds = matchingSlots.map(slot => slot.id);
+        const targetClassIds = matchingSlots.map(slot => slot.classId);
+        const classId = req.body.classId || current.classId;
+        const subjectId = req.body.subjectId || current.subjectId;
+        const date = req.body.date ? scheduleDate(req.body.date) : current.date;
+        const startTime = req.body.startTime || current.startTime;
+        const endTime = req.body.endTime || current.endTime;
+        const room = req.body.room !== undefined ? req.body.room.trim() || null : current.room;
+        if (startTime >= endTime) return res.status(400).json({ success: false, message: 'Waqtiga bilowga waa inuu ka horreeyaa waqtiga dhammaadka' });
+
+        const examClass = await prisma.examClass.findFirst({ where: { examId: current.examId, classId } });
+        if (!examClass) return res.status(400).json({ success: false, message: 'Fasalkan kuma jiro imtixaanka la doortay' });
+
+        // Selecting another subject that is already on this exam means "swap subjects".
+        // Keep both subject identities unique and exchange their date/time positions across every class.
+        if (applyToAllClasses && subjectId !== current.subjectId) {
+            const replacementSlots = await prisma.examSchedule.findMany({
+                where: { tenantId, examId: current.examId, subjectId }
+            });
+            if (replacementSlots.length) {
+                const swapped = await prisma.$transaction(async tx => {
+                    for (const target of matchingSlots) {
+                        const replacement = replacementSlots.find(slot => slot.classId === target.classId);
+                        if (!replacement) continue;
+                        // Vacate the source position first so the database uniqueness constraint
+                        // remains valid throughout the swap transaction.
+                        await tx.examSchedule.update({
+                            where: { id: target.id },
+                            data: { startTime: `swap-${target.id}` }
+                        });
+                        await tx.examSchedule.update({
+                            where: { id: replacement.id },
+                            data: { date: target.date, startTime: target.startTime, endTime: target.endTime }
+                        });
+                        await tx.examSchedule.update({
+                            where: { id: target.id },
+                            data: { date: replacement.date, startTime: replacement.startTime, endTime: replacement.endTime }
+                        });
+                    }
+                    return tx.examSchedule.findUnique({ where: { id: current.id }, include: examScheduleInclude });
+                });
+                emitToTenant(tenantId, 'exam-schedule:updated', swapped);
+                return res.json({ success: true, swapped: true, data: formatExamSchedule(swapped) });
+            }
+        }
+
+        const conflicts = await prisma.examSchedule.findMany({
+            where: {
+                tenantId, id: { notIn: targetIds }, date,
+                startTime: { lt: endTime }, endTime: { gt: startTime },
+                OR: [{ classId: { in: applyToAllClasses ? targetClassIds : [classId] } }, ...(!applyToAllClasses && room ? [{ room: { equals: room, mode: 'insensitive' } }] : [])]
+            }
+        });
+        const otherExamConflict = conflicts.some(slot => slot.examId !== current.examId);
+        if (conflicts.length && (!applyToAllClasses || otherExamConflict)) return res.status(409).json({ success: false, message: 'Fasalka ama qolka ayaa imtixaan kale leh waqtigan' });
+
+        const updated = await prisma.$transaction(async tx => {
+            if (applyToAllClasses) {
+                // If the destination is occupied, swap that subject into the edited subject's old slot.
+                for (const target of matchingSlots) {
+                    const occupied = conflicts.find(slot => slot.classId === target.classId);
+                    if (!occupied) continue;
+                    await tx.examSchedule.update({
+                        where: { id: target.id },
+                        data: { startTime: `swap-${target.id}` }
+                    });
+                    await tx.examSchedule.update({
+                        where: { id: occupied.id },
+                        data: { date: target.date, startTime: target.startTime, endTime: target.endTime }
+                    });
+                }
+                for (const target of matchingSlots) {
+                    await tx.examSchedule.update({ where: { id: target.id }, data: { subjectId, date, startTime, endTime } });
+                }
+            } else {
+                await tx.examSchedule.update({ where: { id: current.id }, data: { classId, subjectId, date, startTime, endTime, room } });
+            }
+            const exam = await tx.exam.findUnique({ where: { id: current.examId }, select: { endDate: true } });
+            if (exam && date > scheduleDate(exam.endDate)) await tx.exam.update({ where: { id: current.examId }, data: { endDate: date } });
+            return tx.examSchedule.findUnique({ where: { id: current.id }, include: examScheduleInclude });
+        });
+        emitToTenant(tenantId, 'exam-schedule:updated', updated);
+        res.json({ success: true, data: formatExamSchedule(updated) });
+    } catch (error) {
+        const message = error.code === 'P2002' ? 'Maaddadan hore ayaa loogu jadwaleeyey fasalkan' : error.message;
+        res.status(error.code === 'P2002' ? 409 : 500).json({ success: false, message });
+    }
+};
+
+// @desc    Combined rankings across every accessible class
+exports.getCombinedRankings = async (req, res) => {
+    try {
+        const tenantId = req.user.tenantId;
+        const examIds = String(req.query.examIds || '')
+            .split(',')
+            .map(id => id.trim())
+            .filter(Boolean);
+
+        if (!examIds.length) {
+            return res.status(400).json({ success: false, message: 'Select at least one exam' });
+        }
+
+        let classWhere = { tenantId };
+        let teacherScope = null;
+        if (req.user.role === 'teacher') {
+            teacherScope = await getTeacherScope(req.user.id, tenantId);
+            classWhere.id = { in: teacherScope.classIds };
+        }
+
+        const classes = await prisma.class.findMany({
+            where: classWhere,
+            select: {
+                id: true,
+                name: true,
+                grade: true,
+                section: true,
+                subjects: { select: { subjectId: true } }
+            },
+            orderBy: [{ name: 'asc' }, { section: 'asc' }]
+        });
+        const classIds = classes.map(c => c.id);
+        if (!classIds.length) {
+            return res.status(200).json({ success: true, data: { classLeaders: [], overall: [] } });
+        }
+
+        const marks = await prisma.mark.findMany({
+            where: {
+                tenantId,
+                examId: { in: examIds },
+                classId: { in: classIds }
+            },
+            include: {
+                student: { select: { id: true, firstName: true, lastName: true, rollNo: true, studentId: true } }
+            }
+        });
+
+        const rankings = buildCombinedRankings({
+            classes,
+            marks,
+            accessibleSubjectIds: teacherScope?.subjectIds || null
+        });
+        res.status(200).json({ success: true, data: rankings });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }

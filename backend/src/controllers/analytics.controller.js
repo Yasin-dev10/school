@@ -145,10 +145,11 @@ exports.getAdminDashboardStats = async (req, res) => {
         const sixMonthsAgo = new Date(); sixMonthsAgo.setMonth(now.getMonth() - 6);
         const fourteenDaysAgo = new Date(); fourteenDaysAgo.setDate(now.getDate() - 14);
 
-        const [studentCount, teacherCount, parentCount, invoices, todayAttendance, recentAttendance] = await Promise.all([
+        const [studentCount, teacherCount, parentCount, classCount, invoices, todayAttendance, recentAttendance] = await Promise.all([
             prisma.user.count({ where: { tenantId, role: 'student' } }),
             prisma.user.count({ where: { tenantId, role: 'teacher' } }),
             prisma.user.count({ where: { tenantId, role: 'parent' } }),
+            prisma.class.count({ where: { tenantId, status: 'active' } }),
             prisma.invoice.findMany({ where: { tenantId }, select: { totalAmount: true, paidAmount: true, createdAt: true } }),
             prisma.attendance.findMany({ where: { tenantId, date: { gte: startOfDay, lte: endOfDay } } }),
             prisma.attendance.findMany({ where: { tenantId, date: { gte: fourteenDaysAgo } } })
@@ -210,7 +211,7 @@ exports.getAdminDashboardStats = async (req, res) => {
         res.status(200).json({
             success: true,
             data: {
-                counts: { students: studentCount, teachers: teacherCount, parents: parentCount },
+                counts: { students: studentCount, teachers: teacherCount, parents: parentCount, classes: classCount },
                 finance,
                 attendance: { rate: attendanceRate, total: todayAttendance.length, present: presentToday, trends: attendanceTrend },
                 trends: { finance: financeTrends, enrollment: enrollmentGrowth },

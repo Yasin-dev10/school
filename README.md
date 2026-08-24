@@ -1,3 +1,5 @@
+d
+
 # 🎓 Multi-Tenant School Management System
 
 A comprehensive, full-stack school management system with multi-tenant architecture, featuring a Next.js web dashboard and Flutter mobile application. Built to streamline educational institution operations with real-time updates, role-based access control, and extensive administrative features.
@@ -6,7 +8,7 @@ A comprehensive, full-stack school management system with multi-tenant architect
 [![React](https://img.shields.io/badge/React-19.2.3-blue?style=flat-square&logo=react)](https://reactjs.org/)
 [![Flutter](https://img.shields.io/badge/Flutter-3.9.2-02569B?style=flat-square&logo=flutter)](https://flutter.dev/)
 [![Node.js](https://img.shields.io/badge/Node.js-Express-green?style=flat-square&logo=node.js)](https://nodejs.org/)
-[![MongoDB](https://img.shields.io/badge/MongoDB-Database-47A248?style=flat-square&logo=mongodb)](https://www.mongodb.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-4169E1?style=flat-square&logo=postgresql)](https://www.postgresql.org/)
 
 ---
 
@@ -51,6 +53,8 @@ A comprehensive, full-stack school management system with multi-tenant architect
 - **Grade System** - Customizable grading systems with GPA calculation
 - **Assignments** - Assignment creation, submission tracking, and grading
 - **Learning Materials** - Document sharing and learning resource management
+- **Student Promotion** - Admin-only promotion using completed exams, missing-mark checks, and a 50% overall pass threshold
+- **Online Learning** - Quiz creation, scheduling, submissions, and automatic marking
 
 ### 💼 Administrative Features
 
@@ -62,6 +66,18 @@ A comprehensive, full-stack school management system with multi-tenant architect
 - **Inventory Management** - Track school assets and resources
 - **Expense Tracking** - Financial expense recording and reporting
 - **HR Management** - Staff management and administrative operations
+- **Alumni Management** - Graduate directory, outcomes, events, and donation tracking
+- **School Calendar** - Academic and administrative event scheduling
+- **Help & Feedback** - In-app support requests and feedback management
+
+### 🤖 AI Assistance
+
+- **Bilingual Study Assistant** - Student support in Somali and English
+- **Admin Helper** - Admin-only drafts for announcements, parent messages, meeting agendas, summaries, and action plans
+- **Announcement Translation** - Somali ↔ English translation
+- **Report-Card Comments** - Constructive teacher comment drafting
+- **Early-Risk Signals** - Admin-only indicators based on grades, attendance, and fees
+- **Safe Fallbacks** - Limited built-in suggestions when no AI provider is configured
 
 ### 📊 Analytics & Reporting
 
@@ -85,7 +101,7 @@ A comprehensive, full-stack school management system with multi-tenant architect
 ### Backend
 
 - **Runtime:** Node.js with Express.js
-- **Database:** MongoDB with Mongoose ODM
+- **Database:** PostgreSQL with Prisma ORM
 - **Authentication:** JWT (JSON Web Tokens)
 - **Real-Time:** Socket.io
 - **Security:** Helmet, bcryptjs for password hashing
@@ -127,19 +143,20 @@ A comprehensive, full-stack school management system with multi-tenant architect
 ## 📁 Project Structure
 
 ```
-web_mobile/
+school/
 ├── backend/                    # Node.js/Express API Server
 │   ├── src/
 │   │   ├── config/            # Database and Socket.io configuration
 │   │   ├── controllers/       # Route controllers (20 modules)
 │   │   ├── middlewares/       # Auth and validation middlewares
-│   │   ├── models/            # Mongoose schemas (24 models)
-│   │   ├── routes/            # API route definitions (19 routes)
+│   │   ├── models/            # Compatibility model helpers
+│   │   ├── routes/            # API route definitions
 │   │   ├── services/          # Business logic services
 │   │   ├── utils/             # Helper functions and utilities
 │   │   ├── scripts/           # Database scripts
 │   │   ├── app.js             # Express app configuration
 │   │   └── server.js          # Server entry point
+│   ├── prisma/                # PostgreSQL schema and migrations
 │   └── package.json
 │
 ├── frontend/                   # Next.js Web Dashboard
@@ -181,13 +198,13 @@ web_mobile/
 Before you begin, ensure you have the following installed:
 
 - **Node.js** (v16 or higher) - [Download](https://nodejs.org/)
-- **MongoDB** (v5 or higher) - [Download](https://www.mongodb.com/try/download/community)
+- **PostgreSQL** (v14 or higher) - [Download](https://www.postgresql.org/download/)
 - **Flutter SDK** (v3.9.2 or higher) - [Install Guide](https://docs.flutter.dev/get-started/install)
 - **Git** - [Download](https://git-scm.com/)
 - **Code Editor** (VS Code recommended) - [Download](https://code.visualstudio.com/)
 
 ### Optional
-- **MongoDB Compass** - GUI for MongoDB
+- **pgAdmin** - GUI for PostgreSQL
 - **Postman** - API testing
 - **Android Studio** - For Android development
 - **Xcode** - For iOS development (macOS only)
@@ -200,7 +217,7 @@ Before you begin, ensure you have the following installed:
 
 ```bash
 git clone <repository-url>
-cd web_mobile
+cd school
 ```
 
 ### 2. Backend Setup
@@ -241,6 +258,10 @@ FRONTEND_URL=http://localhost:3000
 
 # Socket.io Configuration
 SOCKET_CORS_ORIGIN=http://localhost:3000
+
+# AI Assistant (Optional)
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-5.4
 ```
 
 ### 3. Frontend Setup
@@ -484,6 +505,22 @@ Authorization: Bearer <your_jwt_token>
 - `PUT /students/:id` - Update student
 - `DELETE /students/:id` - Delete student
 - `GET /students/:id/id-card` - Get student ID card data
+- `GET /students/promotion-eligibility?classId=:classId` - Calculate promotion eligibility
+- `POST /students/promote` - Promote selected students (school admin only)
+
+#### AI Assistant
+
+- `POST /ai-assistant/generate` - Generate study help, translations, report comments, or admin drafts
+- Admin mode is restricted to the `school-admin` role
+
+#### Alumni
+
+- `GET /alumni` - Get alumni, events, donations, and outcome statistics
+- `POST /alumni` - Add a graduate
+- `PUT /alumni/:id` - Update a graduate profile
+- `DELETE /alumni/:id` - Delete a graduate (school admin only)
+- `POST /alumni/events` - Create an alumni event
+- `POST /alumni/donations` - Record an alumni donation
 
 #### Teachers
 
@@ -643,6 +680,13 @@ For complete API documentation, refer to the controller files in `backend/src/co
 - Communication with teachers
 - View fee and payment information
 
+### 5. Receptionist
+
+- Create and maintain student records
+- Access permitted communication and administrative tools
+- Add and update alumni, events, and donations
+- Cannot delete alumni records, alumni events, or donations
+
 ---
 
 ## 🎯 Key Features Deep Dive
@@ -695,6 +739,34 @@ Robust attendance management:
 - Attendance percentage calculation
 - Filter by date range
 - Export capabilities
+
+### Student Promotion
+
+- Available to school administrators only
+- Loads students from the selected current class
+- Uses completed exams and recorded marks
+- Treats missing exam results as not eligible
+- Uses a 50% overall result as the promotion threshold
+- Preselects eligible students for admin review
+- Updates class and section only after confirmation
+
+### Alumni Management
+
+- Searchable graduate directory with graduation-year filtering
+- Employment, university, course, and location tracking
+- Alumni events with capacity and attendance counts
+- Donation records with currency, purpose, date, and optional graduate link
+- Employment and university outcome summaries
+- Tenant-isolated data with role-based delete permissions
+
+### AI Assistant
+
+- Somali and English study support
+- Admin-only operational writing assistant
+- Somali ↔ English announcement drafts
+- Report-card comment generation
+- Admin-only early-risk indicators
+- Full responses use `OPENAI_API_KEY`; limited built-in fallbacks work without it
 
 ### Certificate Generation
 
@@ -848,7 +920,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - **Next.js** - The React Framework for Production
 - **Flutter** - Google's UI toolkit for beautiful apps
-- **MongoDB** - The database for modern applications
+- **PostgreSQL** - The relational database used by the platform
+- **Prisma** - Database schema, migrations, and data access
 - **Socket.io** - Real-time bidirectional event-based communication
 - **Tailwind CSS** - A utility-first CSS framework
 
@@ -864,20 +937,20 @@ For support, email support@yourschool.com or join our Slack channel.
 
 ### Upcoming Features
 
-- [ ] Mobile app push notifications
+- [X] Mobile app push notifications
 - [ ] Video conferencing integration
 - [ ] Online exam system with proctoring
-- [ ] AI-powered performance predictions
+- [X] AI-assisted early-risk signals
 - [ ] Mobile app for iOS
 - [ ] Advanced analytics dashboard
-- [ ] Multi-language support
+- [X] Somali and English interface support
 - [ ] Biometric attendance
 - [ ] Parent mobile app
 - [ ] Library management system
 - [ ] Transport management
 - [ ] Hostel management
-- [ ] Alumni portal
-- [ ] Event management
+- [X] Alumni management
+- [X] Alumni and school event management
 - [ ] Document management system
 
 ---
@@ -888,8 +961,9 @@ For support, email support@yourschool.com or join our Slack channel.
 
 **Backend won't start:**
 
-- Check MongoDB is running
+- Check PostgreSQL is running
 - Verify `.env` file exists and is configured
+- Apply Prisma migrations with `npm run db:migrate`
 - Ensure port 5000 is not in use
 
 **Frontend connection errors:**
@@ -906,8 +980,8 @@ For support, email support@yourschool.com or join our Slack channel.
 
 **Database connection failed:**
 
-- Verify MongoDB is running
-- Check `MONGODB_URI` in `.env`
+- Verify PostgreSQL is running
+- Check `DATABASE_URL` and `DIRECT_URL` in `.env`
 - Ensure database user has proper permissions
 
 **Socket.io not working:**
@@ -944,4 +1018,4 @@ For support, email support@yourschool.com or join our Slack channel.
 
 **Built with ❤️ for Educational Institutions**
 
-*Last Updated: January 2026*
+*Last Updated: August 24, 2026*
