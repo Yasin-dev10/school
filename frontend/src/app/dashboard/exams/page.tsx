@@ -643,9 +643,9 @@ export default function ExamsPage() {
     const displayedExam = exams.find((exam: any) => exam._id === scheduleExamFilter) || visibleSchedules[0]?.exam;
 
     return (
-        <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-6 sm:space-y-8">
-            <div className={`flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 ${!isAdmin ? 'rounded-3xl bg-[#405bb2] p-6 text-white shadow-lg shadow-indigo-900/10 sm:p-8' : ''}`}>
-                <div>
+        <div className="mx-auto w-full max-w-7xl space-y-6 p-4 sm:space-y-8 sm:p-8">
+            <div className={`flex flex-col justify-between gap-6 xl:flex-row xl:items-center ${!isAdmin ? 'rounded-3xl bg-[#405bb2] p-6 text-white shadow-lg shadow-indigo-900/10 sm:p-8' : ''}`}>
+                <div className="min-w-0">
                     <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
                         {isAdmin ? 'Examinations & Grading' : 'My Academic Results'}
                     </h1>
@@ -665,10 +665,10 @@ export default function ExamsPage() {
                     </div>
                 )}
                 {!isAdmin && ['student', 'parent'].includes(user?.role) && (
-                    <div className="flex bg-white/15 p-1 rounded-2xl border border-white/15 shadow-inner w-full lg:w-auto">
-                        <button onClick={() => setView('my-results')} className={`flex-1 lg:flex-none px-6 py-2 rounded-xl text-xs font-bold transition-all ${view === 'my-results' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Results</button>
-                        <button onClick={() => setView('schedule')} className={`flex-1 lg:flex-none px-6 py-2 rounded-xl text-xs font-bold transition-all ${view === 'schedule' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Jadwalka</button>
-                        {user?.role === 'student' && <button onClick={() => setView('complaints')} className={`flex-1 lg:flex-none px-6 py-2 rounded-xl text-xs font-bold transition-all ${view === 'complaints' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Complaints</button>}
+                    <div className="grid w-full grid-cols-2 gap-1 rounded-2xl border border-white/15 bg-white/15 p-1 shadow-inner sm:grid-cols-3 xl:w-[460px]">
+                        <button onClick={() => setView('my-results')} className={`min-w-0 rounded-xl px-3 py-2.5 text-xs font-bold transition-all sm:px-6 ${view === 'my-results' ? 'bg-indigo-600 text-white shadow-lg' : 'text-indigo-100/60 hover:bg-white/10 hover:text-white'}`}>Results</button>
+                        <button onClick={() => setView('schedule')} className={`min-w-0 rounded-xl px-3 py-2.5 text-xs font-bold transition-all sm:px-6 ${view === 'schedule' ? 'bg-indigo-600 text-white shadow-lg' : 'text-indigo-100/60 hover:bg-white/10 hover:text-white'}`}>Jadwalka</button>
+                        {user?.role === 'student' && <button onClick={() => setView('complaints')} className={`col-span-2 min-w-0 rounded-xl px-3 py-2.5 text-xs font-bold transition-all sm:col-span-1 sm:px-6 ${view === 'complaints' ? 'bg-indigo-600 text-white shadow-lg' : 'text-indigo-100/60 hover:bg-white/10 hover:text-white'}`}>Complaints</button>}
                     </div>
                 )}
             </div>
@@ -683,12 +683,12 @@ export default function ExamsPage() {
                             @page { size: A4 landscape; margin: 0; }
                         }
                     `}</style>
-                    <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
-                        <div><h2 className="text-3xl font-black text-white">Jadwalka Imtixaannada</h2><p className="text-sm text-slate-400 mt-1">Maalmaha, saacadaha, qolalka iyo ilaaliyeyaasha imtixaanka.</p></div>
-                        <button onClick={refreshExamSchedules} className="px-5 py-3 rounded-2xl bg-white/5 text-slate-300 text-xs font-bold hover:bg-white/10">Cusboonaysii</button>
+                    <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+                        <div className="min-w-0"><h2 className="text-2xl font-black text-white sm:text-3xl">Jadwalka Imtixaannada</h2><p className="mt-1 text-sm text-slate-400">Maalmaha, saacadaha, qolalka iyo ilaaliyeyaasha imtixaanka.</p></div>
+                        <button onClick={refreshExamSchedules} className="w-full shrink-0 rounded-2xl bg-white/5 px-5 py-3 text-xs font-bold text-slate-300 hover:bg-white/10 sm:w-auto">Cusboonaysii</button>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row gap-3 print:hidden">
+                    <div className="grid grid-cols-1 gap-3 print:hidden sm:grid-cols-[minmax(0,1fr)_auto]">
                         <select value={scheduleExamFilter} onChange={e => { const examId = e.target.value; const selected = exams.find((exam:any) => exam._id === examId); setScheduleExamFilter(examId); setScheduleClassFilter(''); setGeneratorStartDate(selected?.startDate ? String(selected.startDate).slice(0, 10) : ''); }} className="flex-1 px-5 py-3 bg-slate-950 border border-white/10 rounded-2xl text-white"><option value="">Dooro imtixaanka</option>{exams.map((x:any) => <option key={x._id} value={x._id}>{x.name}</option>)}</select>
                         <button onClick={() => window.print()} className="px-8 py-3 bg-sky-600 hover:bg-sky-500 text-white rounded-2xl font-black">Daabac Jadwalka</button>
                         {isActualAdmin && scheduleExamFilter && <button onClick={handleDeleteFullSchedule} className="px-8 py-3 bg-red-600 hover:bg-red-500 text-white rounded-2xl font-black">Tirtir Jadwalka</button>}
@@ -740,8 +740,8 @@ export default function ExamsPage() {
                                 <div className="mt-12 text-center"><p className="text-xl font-black">{tenant?.schoolName || tenant?.name || 'Maamulka Dugsiga'}</p><p className="mt-1 text-sm font-bold text-white/80">Waxbarasho tayo leh iyo mustaqbal ifaya</p></div>
                             </div>
                         </section>}
-                        {!scheduleLoading && combinedScheduleRows.length === 0 && <div className="min-w-[850px] bg-sky-100 p-20 text-center font-bold text-blue-950">Dooro imtixaan, kadibna riix “Soo qaado dhammaan fasallada iyo maaddooyinka”.</div>}
-                        {scheduleLoading && <div className="min-w-[850px] bg-sky-100 p-20 text-center font-bold text-blue-950 animate-pulse">Jadwalka ayaa soo raraya...</div>}
+                        {!scheduleLoading && combinedScheduleRows.length === 0 && <div className="rounded-[2rem] bg-sky-100 px-6 py-16 text-center font-bold text-blue-950 sm:p-20">Dooro imtixaan si aad u aragto jadwalka.</div>}
+                        {scheduleLoading && <div className="rounded-[2rem] bg-sky-100 px-6 py-16 text-center font-bold text-blue-950 animate-pulse sm:p-20">Jadwalka ayaa soo raraya...</div>}
                     </div>
 
                     {isActualAdmin && (
@@ -776,8 +776,8 @@ export default function ExamsPage() {
                 </div>
             ) : view === 'my-results' ? (
                 <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div className="glass-dark p-8 rounded-[2.5rem] border border-white/5 relative overflow-hidden group">
+                    <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+                        <div className="glass-dark relative min-h-52 overflow-hidden rounded-[2.5rem] border border-white/5 p-6 group sm:p-8">
                             <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
                                 <span className="text-6xl">📈</span>
                             </div>
@@ -789,19 +789,19 @@ export default function ExamsPage() {
                                 <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" /> Based on {studentMarks.length} subjects
                             </p>
                         </div>
-                        <div className="glass-dark p-8 rounded-[2.5rem] border border-white/5 md:col-span-2 flex items-center justify-between">
-                            <div className="space-y-1">
+                        <div className="glass-dark min-w-0 rounded-[2.5rem] border border-white/5 p-6 lg:col-span-2 sm:p-8">
+                            <div className="mb-6 space-y-1">
                                 <h3 className="text-xl font-bold text-white">Full Report Card</h3>
                                 <p className="text-slate-500 text-sm">Download your official academic transcript.</p>
                             </div>
-                            <div className="flex gap-3">
+                            <div className="grid max-h-72 grid-cols-1 gap-3 overflow-y-auto pr-1 custom-scrollbar sm:grid-cols-2">
                                 {exams.filter(e => e.isApproved).map(exam => (
-                                    <div key={exam._id} className="flex gap-2">
-                                        <button onClick={() => fetchReport(exam._id, user._id)} className="px-6 py-3 bg-indigo-600/10 text-indigo-400 border border-indigo-400/20 rounded-2xl text-xs font-bold hover:bg-indigo-600 hover:text-white transition-all">View {exam.name}</button>
-                                        <button onClick={() => downloadPDFReport(exam._id, user._id)} className="px-4 py-3 bg-red-500/10 text-red-500 border border-red-500/20 rounded-2xl text-xs font-bold hover:bg-red-500 hover:text-white transition-all">PDF</button>
+                                    <div key={exam._id} className="flex min-w-0 items-stretch gap-2 rounded-2xl border border-white/5 bg-slate-950/25 p-2">
+                                        <button onClick={() => fetchReport(exam._id, user._id)} className="min-w-0 flex-1 break-words rounded-xl border border-indigo-400/20 bg-indigo-600/10 px-4 py-3 text-left text-xs font-bold leading-5 text-indigo-400 transition-all hover:bg-indigo-600 hover:text-white">View {exam.name}</button>
+                                        <button onClick={() => downloadPDFReport(exam._id, user._id)} className="shrink-0 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-xs font-bold text-red-500 transition-all hover:bg-red-500 hover:text-white">PDF</button>
                                     </div>
                                 ))}
-                                {exams.filter(e => e.isApproved).length === 0 && <span className="text-slate-500 text-xs italic">No finalized reports available yet.</span>}
+                                {exams.filter(e => e.isApproved).length === 0 && <span className="text-slate-500 text-xs italic sm:col-span-2">No finalized reports available yet.</span>}
                             </div>
                         </div>
                     </div>
@@ -1009,9 +1009,12 @@ export default function ExamsPage() {
                 </div>
             ) : view === 'complaints' ? (
                 <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
-                    <div className="flex justify-between items-center">
-                        <h2 className="text-3xl font-black text-white">Academic Complaints</h2>
-                        {user?.role === 'student' && <button onClick={() => setIsComplaintModalOpen(true)} className="px-8 py-4 bg-indigo-600 text-white rounded-2xl font-black shadow-lg shadow-indigo-500/20">+ Report Discrepancy</button>}
+                    <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+                        <div>
+                            <h2 className="text-2xl font-black text-white sm:text-3xl">Academic Complaints</h2>
+                            <p className="mt-1 text-sm text-slate-500">Report and track issues related to published exam results.</p>
+                        </div>
+                        {user?.role === 'student' && <button onClick={() => setIsComplaintModalOpen(true)} className="w-full shrink-0 rounded-2xl bg-indigo-600 px-6 py-3.5 font-black text-white shadow-lg shadow-indigo-500/20 sm:w-auto">+ Report Discrepancy</button>}
                     </div>
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         {complaints.length > 0 ? complaints.map(c => (
@@ -1035,7 +1038,7 @@ export default function ExamsPage() {
                                     <div className="text-right"><p className="text-[9px] text-slate-500 font-blackUppercase">Grade</p><p className="text-lg font-black text-white">{c.currentMark}</p></div>
                                 </div>
                             </div>
-                        )) : <div className="col-span-full py-24 text-center opacity-40">No complaints reported.</div>}
+                        )) : <div className="col-span-full rounded-[2rem] border border-dashed border-white/10 bg-white/[0.02] px-6 py-20 text-center text-sm text-slate-500">No complaints reported.</div>}
                     </div>
                 </div>
             ) : view === 'entry-status' ? (

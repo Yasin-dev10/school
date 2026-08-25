@@ -381,6 +381,7 @@ model Tenant {
 
   // Relations
   users               User[]
+  academicYears       AcademicYear[]
   classes             Class[]
   subjects            Subject[]
   exams               Exam[]
@@ -413,6 +414,25 @@ model Tenant {
   alumniDonations     AlumniDonation[]
 
   @@map("tenants")
+}
+
+model AcademicYear {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  startDate DateTime
+  endDate   DateTime
+  isCurrent Boolean  @default(false)
+  closedAt  DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+
+  @@unique([tenantId, name])
+  @@index([tenantId, isCurrent])
+  @@index([tenantId, startDate, endDate])
+  @@map("academic_years")
 }
 
 model Alumni {

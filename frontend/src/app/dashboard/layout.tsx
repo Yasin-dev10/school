@@ -46,7 +46,7 @@ import {
     Wallet,
     CirclePlay,
     BriefcaseBusiness,
-    Bot,
+    // Bot,
     Trophy,
 } from 'lucide-react';
 
@@ -121,7 +121,6 @@ export default function DashboardLayout({
     const [tenant, setTenant] = useState<any>(null);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
-    const [navQuery, setNavQuery] = useState('');
     const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
     const menuButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -178,8 +177,9 @@ export default function DashboardLayout({
         const handleTenantUpdate = (e: CustomEvent) => {
             setTenant((prev: any) => ({
                 ...prev,
-                name: e.detail.name,
-                logoUrl: e.detail.logoUrl,
+                ...(e.detail.name !== undefined && { name: e.detail.name }),
+                ...(e.detail.logoUrl !== undefined && { logoUrl: e.detail.logoUrl }),
+                ...(e.detail.academicYear !== undefined && { academicYear: e.detail.academicYear }),
             }));
         };
         window.addEventListener('tenant-updated', handleTenantUpdate as EventListener);
@@ -266,12 +266,12 @@ export default function DashboardLayout({
                 groupIcon: <LayoutDashboard className="w-3.5 h-3.5" />,
                 items: [
                     { name: 'Dashboard', href: '/dashboard', icon: icon(<LayoutDashboard className="w-4 h-4" />) },
-                    { name: 'AI Assistant', href: '/dashboard/ai-assistant', icon: icon(<Bot className="w-4 h-4" />) },
+                    // { name: 'AI Assistant', href: '/dashboard/ai-assistant', icon: icon(<Bot className="w-4 h-4" />) },
                 ],
             });
             push({
                 id: 'people',
-                label: 'People & Structure',
+                label: 'Academic Management',
                 groupIcon: <Users className="w-3.5 h-3.5" />,
                 items: [
                     { name: 'Students', href: '/dashboard/students', icon: icon(<GraduationCap className="w-4 h-4" />) },
@@ -370,7 +370,7 @@ export default function DashboardLayout({
                 groupIcon: <LayoutDashboard className="w-3.5 h-3.5" />,
                 items: [
                     { name: 'Dashboard', href: '/dashboard', icon: icon(<LayoutDashboard className="w-4 h-4" />) },
-                    { name: 'AI Assistant', href: '/dashboard/ai-assistant', icon: icon(<Bot className="w-4 h-4" />) },
+                    // { name: 'AI Assistant', href: '/dashboard/ai-assistant', icon: icon(<Bot className="w-4 h-4" />) },
                 ],
             });
             push({
@@ -438,7 +438,7 @@ export default function DashboardLayout({
                 items: [
                     { name: 'Dashboard', href: user.role === 'student' ? '/dashboard/student' : '/dashboard', icon: icon(<LayoutDashboard className="w-4 h-4" />) },
                     { name: 'My Profile', href: '/dashboard/profile', icon: icon(<Users className="w-4 h-4" />) },
-                    { name: 'AI Study Assistant', href: '/dashboard/ai-assistant', icon: icon(<Bot className="w-4 h-4" />) },
+                    // { name: 'AI Study Assistant', href: '/dashboard/ai-assistant', icon: icon(<Bot className="w-4 h-4" />) },
                 ],
             });
             push({
@@ -480,12 +480,22 @@ export default function DashboardLayout({
             });
         }
 
-        return groups.map((group) => ({
-            ...group,
-            label: t(group.label),
-            items: group.items.map((item) => ({ ...item, name: t(item.name) })),
-        }));
+        return groups
+            .map((group) => ({
+                ...group,
+                label: t(group.label),
+                items: group.items
+                    .filter((item) => item.name !== 'Dashboard')
+                    .map((item) => ({ ...item, name: t(item.name) })),
+            }))
+            .filter((group) => group.items.length > 0);
     }, [user, t]);
+
+    const dashboardItem: NavItem = {
+        name: t('Dashboard'),
+        href: user?.role === 'student' ? '/dashboard/student' : '/dashboard',
+        icon: icon(<LayoutDashboard className="w-4 h-4" />),
+    };
 
     // Accordion group menu: keep active group open; others closed by default
     useEffect(() => {
@@ -500,21 +510,6 @@ export default function DashboardLayout({
         });
     }, [pathname, navGroups]);
 
-    const filteredGroups = useMemo(() => {
-        const q = navQuery.trim().toLowerCase();
-        if (!q) return navGroups;
-        return navGroups
-            .map((group) => ({
-                ...group,
-                items: group.items.filter(
-                    (item) =>
-                        item.name.toLowerCase().includes(q) ||
-                        group.label.toLowerCase().includes(q)
-                ),
-            }))
-            .filter((group) => group.items.length > 0);
-    }, [navGroups, navQuery]);
-
     const toggleGroup = (id: string) => {
         setOpenGroups((prev) => {
             const currentlyOpen = !!prev[id];
@@ -527,22 +522,6 @@ export default function DashboardLayout({
             next[id] = currentlyOpen && !activeInClicked ? false : true;
             return next;
         });
-    };
-
-    const expandAllMenus = () => {
-        const next: Record<string, boolean> = {};
-        navGroups.forEach((g) => {
-            next[g.id] = true;
-        });
-        setOpenGroups(next);
-    };
-
-    const collapseAllMenus = () => {
-        const next: Record<string, boolean> = {};
-        navGroups.forEach((g) => {
-            next[g.id] = groupContainsActive(pathname, g);
-        });
-        setOpenGroups(next);
     };
 
     if (!mounted || !isAuthorized || !user) {
@@ -571,21 +550,21 @@ export default function DashboardLayout({
                 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
             `}
             >
-                <div className="px-3.5 py-3 border-b border-white/10">
-                    <div className="flex items-center gap-3">
-                        <Link href="/dashboard" className="flex min-w-0 flex-1 items-center gap-3 rounded-xl p-1 hover:bg-white/5 transition-colors">
-                            <div className="h-11 w-11 shrink-0 overflow-hidden rounded-xl border border-white/15 bg-white shadow-sm">
+                <div className="relative px-3.5 py-4 border-b border-white/10">
+                    <div className="flex items-start">
+                        <Link href="/dashboard" className="flex min-w-0 flex-1 flex-col items-center gap-2 rounded-xl p-2 text-center hover:bg-white/5 transition-colors">
+                            <div className="h-20 w-full max-w-[13rem] shrink-0 overflow-hidden rounded-xl border border-white/15 bg-white shadow-md">
                                 {tenant?.logoUrl ? (
-                                    <img src={tenant.logoUrl} alt="School Logo" className="h-full w-full object-contain" />
+                                    <img src={tenant.logoUrl} alt="School Logo" className="h-full w-full object-contain p-1" />
                                 ) : (
                                     <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-indigo-500 to-violet-600 text-lg font-bold text-white">
                                         {tenant?.name?.charAt(0) || 'S'}
                                     </div>
                                 )}
                             </div>
-                            <div className="min-w-0">
-                                <p className="truncate text-sm font-bold text-white">{tenant?.name || 'School Registry'}</p>
-                                <p className="mt-0.5 truncate text-[10px] font-medium uppercase tracking-wider text-white/40">
+                            <div className="min-w-0 max-w-full">
+                                <p className="text-base font-bold leading-snug text-white break-words">{tenant?.name || 'School Registry'}</p>
+                                <p className="mt-1 text-[11px] font-medium uppercase tracking-wider text-white/50">
                                     {tenant?.academicYear || t('School Management')}
                                 </p>
                             </div>
@@ -593,7 +572,7 @@ export default function DashboardLayout({
                         <button
                             type="button"
                             aria-label={t('Close navigation menu')}
-                            className="lg:hidden rounded-lg p-2 text-white/50 hover:bg-white/10 hover:text-white transition-colors"
+                            className="absolute right-2 top-2 lg:hidden rounded-lg p-2 text-white/50 hover:bg-white/10 hover:text-white transition-colors"
                             onClick={() => setIsSidebarOpen(false)}
                         >
                             <X className="w-4 h-4" />
@@ -601,55 +580,22 @@ export default function DashboardLayout({
                     </div>
                 </div>
 
-                {/* Group Menu header */}
-                <div className="px-3 pt-3 pb-2.5 space-y-2 border-b border-white/5">
-                    <div className="flex items-center justify-between px-0.5">
-                        <p className="text-[11px] font-black uppercase tracking-[0.14em] text-white/50 flex items-center gap-1.5">
-                            <Menu className="w-3.5 h-3.5" />
-                            {t('Group Menu')}
-                        </p>
-                        <div className="flex items-center gap-2">
-                            <button
-                                type="button"
-                                onClick={expandAllMenus}
-                                className="text-[10px] font-semibold text-indigo-300/80 hover:text-indigo-200"
-                            >
-                                {t('Expand')}
-                            </button>
-                            <span className="text-white/20">·</span>
-                            <button
-                                type="button"
-                                onClick={collapseAllMenus}
-                                className="text-[10px] font-semibold text-white/40 hover:text-white/70"
-                            >
-                                {t('Collapse')}
-                            </button>
-                        </div>
-                    </div>
-                    <label className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white/[0.07] border border-white/10 focus-within:border-indigo-400/60 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all">
-                        <Search className="w-3.5 h-3.5 text-white/40 shrink-0" />
-                        <input
-                            type="text"
-                            value={navQuery}
-                            onChange={(e) => setNavQuery(e.target.value)}
-                            placeholder={t('Search group menu...')}
-                            className="bg-transparent text-xs text-white/80 placeholder-white/35 outline-none flex-1 min-w-0"
-                        />
-                        {navQuery && (
-                            <button
-                                type="button"
-                                onClick={() => setNavQuery('')}
-                                className="text-white/40 hover:text-white/70"
-                            >
-                                <X className="w-3.5 h-3.5" />
-                            </button>
-                        )}
-                    </label>
-                </div>
-
                 <nav id="dashboard-navigation" tabIndex={-1} className="flex-1 px-3 py-3 space-y-1.5 overflow-y-auto custom-scrollbar scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-                    {filteredGroups.map((group) => {
-                        const isOpen = navQuery ? true : !!openGroups[group.id];
+                    <Link
+                            href={dashboardItem.href}
+                            className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2.5 text-[13px] transition-all duration-150 ${
+                                isItemActive(pathname, dashboardItem.href)
+                                    ? 'bg-indigo-500/90 text-white font-semibold shadow-sm shadow-indigo-950/30'
+                                    : 'text-white/70 hover:bg-white/[0.07] hover:text-white'
+                            }`}
+                        >
+                            <span className={isItemActive(pathname, dashboardItem.href) ? 'text-white' : 'text-white/45'}>
+                                {dashboardItem.icon}
+                            </span>
+                            <span className="truncate">{dashboardItem.name}</span>
+                        </Link>
+                    {navGroups.map((group) => {
+                        const isOpen = !!openGroups[group.id];
                         const activeInGroup = groupContainsActive(pathname, group);
 
                         return (
@@ -724,7 +670,7 @@ export default function DashboardLayout({
                             </div>
                         );
                     })}
-                    {filteredGroups.length === 0 && (
+                    {navGroups.length === 0 && (
                         <p className="px-3 py-8 text-center text-xs text-white/35">{t('No menu items found')}</p>
                     )}
                 </nav>

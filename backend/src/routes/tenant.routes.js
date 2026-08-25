@@ -8,7 +8,10 @@ const {
     deleteTenant,
     getMyTenant,
     updateMyTenant,
-    recordTenantPayment
+    recordTenantPayment,
+    getMyAcademicYears,
+    startMyAcademicYear,
+    getMyAcademicYearRecords
 } = require('../controllers/tenant.controller');
 const { protect, authorize } = require('../middlewares/auth.middleware');
 
@@ -18,6 +21,16 @@ router.use(protect);
 router.route('/me')
     .get(authorize('school-admin', 'super-admin', 'teacher', 'student', 'parent', 'receptionist'), getMyTenant)
     .put(authorize('school-admin'), updateMyTenant);
+
+router.route('/me/academic-years')
+    .get(authorize('school-admin'), getMyAcademicYears)
+    .post(authorize('school-admin'), startMyAcademicYear);
+
+router.get(
+    '/me/academic-years/:yearId',
+    authorize('school-admin'),
+    getMyAcademicYearRecords
+);
 
 // Platforms management (Super Admin only)
 router.use(authorize('super-admin'));

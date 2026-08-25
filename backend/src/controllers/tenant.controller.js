@@ -8,6 +8,11 @@ const { logAction } = require('../utils/logger');
 exports.createTenant = async (req, res) => {
     try {
         const { name, tenantId, domain, adminEmail, adminDetails, config, subscription } = req.body;
+        const currentYear = new Date().getUTCFullYear();
+        const initialAcademicYear = /^\d{4}-\d{4}$/.test(config?.academicYear || '')
+            ? config.academicYear
+            : `${currentYear}-${currentYear + 1}`;
+        const [initialStartYear, initialEndYear] = initialAcademicYear.split('-').map(Number);
 
         const existing = await prisma.tenant.findFirst({
             where: { OR: [{ tenantId }, { domain: domain || undefined }] }
@@ -40,7 +45,16 @@ exports.createTenant = async (req, res) => {
                     subscriptionPlan: subscription.plan || 'basic',
                     subscriptionValid: subscription.validUntil,
                     subscriptionActive: subscription.isActive !== undefined ? subscription.isActive : true
-                })
+                }),
+                academicYear: initialAcademicYear,
+                academicYears: {
+                    create: {
+                        name: initialAcademicYear,
+                        startDate: new Date(`${initialStartYear}-09-01T00:00:00.000Z`),
+                        endDate: new Date(`${initialEndYear}-08-31T23:59:59.999Z`),
+                        isCurrent: true
+                    }
+                }
             }
         });
 
@@ -283,6 +297,177 @@ exports.updateMyTenant = async (req, res) => {
         });
 
         res.status(200).json({ success: true, data: tenant });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+const academicYearPattern = /^(\d{4})-(\d{4})$/;
+
+const parseAcademicYearInput = (body) => {
+    const name = String(body.name || '').trim();
+    const match = name.match(academicYearPattern);
+    if (!match || Number(match[2]) !== Number(match[1]) + 1) {
+        return { error: 'Academic year must use YYYY-YYYY and span exactly one year (for example 2026-2027)' };
+    }
+
+    const startDate = body.startDate
+        ? new Date(body.startDate)
+        : new Date(`${match[1]}-09-01T00:00:00.000Z`);
+    const endDate = body.endDate
+        ? new Date(body.endDate)
+        : new Date(`${match[2]}-08-31T23:59:59.999Z`);
+
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || endDate <= startDate) {
+        return { error: 'A valid start date and an end date after it are required' };
+    }
+
+    return { name, startDate, endDate };
+};
+
+// @desc    List current and archived academic years, including preserved data counts
+// @route   GET /api/tenants/me/academic-years
+exports.getMyAcademicYears = async (req, res) => {
+    try {
+        const tenantId = req.user.tenantId;
+        const years = await prisma.academicYear.findMany({
+            where: { tenantId },
+            orderBy: [{ isCurrent: 'desc' }, { startDate: 'desc' }]
+        });
+
+        const data = await Promise.all(years.map(async (year) => {
+            const range = { gte: year.startDate, lte: year.endDate };
+            const [exams, attendanceRecords, invoices, payments] = await Promise.all([
+                prisma.exam.count({ where: { tenantId, startDate: range } }),
+                prisma.attendance.count({ where: { tenantId, date: range } }),
+                prisma.invoice.count({ where: { tenantId, createdAt: range } }),
+                prisma.payment.aggregate({
+                    where: { tenantId, paymentDate: range },
+                    _count: { _all: true },
+                    _sum: { amount: true }
+                })
+            ]);
+
+            return {
+                ...year,
+                stats: {
+                    exams,
+                    attendanceRecords,
+                    invoices,
+                    payments: payments._count._all,
+                    amountPaid: payments._sum.amount || 0
+                }
+            };
+        }));
+
+        res.status(200).json({ success: true, data });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// @desc    View preserved records belonging to one academic year
+// @route   GET /api/tenants/me/academic-years/:yearId
+exports.getMyAcademicYearRecords = async (req, res) => {
+    try {
+        const tenantId = req.user.tenantId;
+        const year = await prisma.academicYear.findFirst({
+            where: { id: req.params.yearId, tenantId }
+        });
+        if (!year) return res.status(404).json({ success: false, message: 'Academic year not found' });
+
+        const range = { gte: year.startDate, lte: year.endDate };
+        const [exams, attendance, invoices, payments] = await Promise.all([
+            prisma.exam.findMany({
+                where: { tenantId, startDate: range },
+                select: { id: true, name: true, term: true, startDate: true, endDate: true, status: true },
+                orderBy: { startDate: 'desc' }, take: 100
+            }),
+            prisma.attendance.findMany({
+                where: { tenantId, date: range },
+                select: {
+                    id: true, date: true, status: true, remarks: true,
+                    student: { select: { id: true, firstName: true, lastName: true } },
+                    class: { select: { id: true, name: true, section: true } }
+                },
+                orderBy: { date: 'desc' }, take: 100
+            }),
+            prisma.invoice.findMany({
+                where: { tenantId, createdAt: range },
+                select: {
+                    id: true, invoiceNumber: true, totalAmount: true, paidAmount: true,
+                    dueDate: true, status: true, createdAt: true,
+                    student: { select: { id: true, firstName: true, lastName: true } },
+                    class: { select: { id: true, name: true, section: true } }
+                },
+                orderBy: { createdAt: 'desc' }, take: 100
+            }),
+            prisma.payment.findMany({
+                where: { tenantId, paymentDate: range },
+                select: {
+                    id: true, amount: true, paymentDate: true, paymentMethod: true,
+                    transactionId: true, invoice: { select: { invoiceNumber: true } }
+                },
+                orderBy: { paymentDate: 'desc' }, take: 100
+            })
+        ]);
+
+        res.status(200).json({ success: true, data: { year, exams, attendance, invoices, payments } });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// @desc    Close the current year and begin a new academic year without deleting old data
+// @route   POST /api/tenants/me/academic-years
+exports.startMyAcademicYear = async (req, res) => {
+    try {
+        const parsed = parseAcademicYearInput(req.body);
+        if (parsed.error) {
+            return res.status(400).json({ success: false, message: parsed.error });
+        }
+
+        const tenantId = req.user.tenantId;
+        const existing = await prisma.academicYear.findUnique({
+            where: { tenantId_name: { tenantId, name: parsed.name } }
+        });
+        if (existing) {
+            return res.status(409).json({ success: false, message: `${parsed.name} already exists in academic-year history` });
+        }
+
+        const now = new Date();
+        const year = await prisma.$transaction(async (tx) => {
+            await tx.academicYear.updateMany({
+                where: { tenantId, isCurrent: true },
+                data: { isCurrent: false, closedAt: now }
+            });
+            const created = await tx.academicYear.create({
+                data: {
+                    tenantId,
+                    name: parsed.name,
+                    startDate: parsed.startDate,
+                    endDate: parsed.endDate,
+                    isCurrent: true
+                }
+            });
+            await tx.tenant.update({
+                where: { tenantId },
+                data: { academicYear: parsed.name }
+            });
+            return created;
+        });
+
+        await logAction({
+            action: 'CREATE', module: 'TENANT',
+            details: `Closed the previous academic year and started ${parsed.name}`,
+            userId: req.user._id, tenantId
+        });
+
+        res.status(201).json({
+            success: true,
+            message: `${parsed.name} is now the current academic year. Previous records remain archived.`,
+            data: year
+        });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
