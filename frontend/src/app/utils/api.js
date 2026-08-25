@@ -1,7 +1,10 @@
 import axios from 'axios';
 
-const defaultUrl = process.env.NODE_ENV === 'development' ? 'http://localhost:5000' : '';
-const configuredUrl = process.env.NEXT_PUBLIC_API_URL || defaultUrl;
+// Production browser traffic stays on the frontend origin. Next.js proxies
+// /api to the backend, avoiding CORS and cross-site cookie failures on Vercel.
+const configuredUrl = process.env.NODE_ENV === 'development'
+    ? (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000')
+    : '';
 const normalizedUrl = configuredUrl.replace(/\/+$/, '');
 const baseURL = normalizedUrl.endsWith('/api') ? normalizedUrl : `${normalizedUrl}/api`;
 
