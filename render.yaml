@@ -35,9 +35,13 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: FRONTEND_URL
-        value: https://school-ta8j.onrender.com
+        value: https://www.dugsi.online
+      - key: CORS_ORIGINS
+        value: https://www.dugsi.online,https://dugsi.online,https://school-ta8j.onrender.com
       - key: SOCKET_CORS_ORIGIN
-        value: https://school-ta8j.onrender.com
+        value: https://www.dugsi.online,https://dugsi.online,https://school-ta8j.onrender.com
+      - key: COOKIE_SAME_SITE
+        value: none
       - key: STRIPE_SECRET_KEY
         value: ""
       - key: STRIPE_WEBHOOK_SECRET

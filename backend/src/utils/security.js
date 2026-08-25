@@ -53,8 +53,10 @@ const redactSensitive = (body) => {
 };
 
 const parseAllowedOrigins = () => {
-    const raw = process.env.FRONTEND_URL || process.env.CORS_ORIGINS || '';
-    const list = raw.split(',').map((s) => s.trim()).filter(Boolean);
+    const raw = [process.env.FRONTEND_URL, process.env.CORS_ORIGINS]
+        .filter(Boolean)
+        .join(',');
+    const list = [...new Set(raw.split(',').map((s) => s.trim()).filter(Boolean))];
     if (list.length === 0) {
         if (process.env.NODE_ENV !== 'production') {
             return ['http://localhost:3000', 'http://127.0.0.1:3000'];
