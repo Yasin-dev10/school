@@ -926,6 +926,25 @@ model Mark {
   @@map("marks")
 }
 
+model CombinedResult {
+  id          String   @id @default(cuid())
+  tenantId    String
+  classId     String
+  fingerprint String
+  title       String
+  examIds     String[]
+  exams       Json
+  subjects    Json
+  rows        Json
+  publishedBy String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([tenantId, classId, fingerprint])
+  @@index([tenantId, classId])
+  @@map("combined_results")
+}
+
 model FeeType {
   id          String  @id @default(cuid())
   name        String

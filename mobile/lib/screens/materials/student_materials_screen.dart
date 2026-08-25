@@ -44,7 +44,14 @@ class _StudentMaterialsScreenState extends State<StudentMaterialsScreen> {
         leading: Builder(
           builder: (context) => IconButton(
             icon: const Icon(Icons.menu),
-            onPressed: () => ZoomDrawer.of(context)?.toggle(),
+            onPressed: () {
+              final drawer = ZoomDrawer.of(context);
+              if (drawer != null) {
+                drawer.toggle();
+              } else {
+                Navigator.of(context).maybePop();
+              }
+            },
           ),
         ),
         title: const Text('Learning Materials'),

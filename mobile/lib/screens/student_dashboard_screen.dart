@@ -79,7 +79,14 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
         leading: Builder(
           builder: (context) => IconButton(
             icon: const Icon(Icons.menu_rounded),
-            onPressed: () => ZoomDrawer.of(context)?.toggle(),
+            onPressed: () {
+              final drawer = ZoomDrawer.of(context);
+              if (drawer != null) {
+                drawer.toggle();
+              } else {
+                Navigator.of(context).maybePop();
+              }
+            },
           ),
         ),
         title: const Text('Student Portal'),

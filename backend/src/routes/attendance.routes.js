@@ -7,13 +7,15 @@ const {
     getClassAttendanceHistory,
     getMyAttendance,
     getStudentAttendance,
-    getAttendanceReport
+    getAttendanceReport,
+    getAttendanceOptions
 } = require('../controllers/attendance.controller');
 const { protect, authorize } = require('../middlewares/auth.middleware');
 
 router.use(protect);
 
 router.post('/mark', authorize('school-admin', 'teacher'), markAttendance);
+router.get('/options', authorize('school-admin', 'teacher'), getAttendanceOptions);
 router.put('/:id', authorize('school-admin', 'teacher'), updateAttendance);
 router.get('/my', authorize('student'), getMyAttendance);
 router.get('/student/:studentId', authorize('school-admin', 'teacher', 'receptionist'), getStudentAttendance);

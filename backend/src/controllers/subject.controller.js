@@ -208,6 +208,88 @@ exports.getSubjectDeletionImpact = async (req, res) => {
     }
 };
 
+// @desc    Get a subject with its enrolled students and recorded marks
+exports.getSubjectDetails = async (req, res) => {
+    try {
+        const tenantId = req.user.tenantId;
+        const subjectId = req.params.id;
+
+        if (req.user.role === 'teacher') {
+            const allowed = await canTeacherAccessSubject(req.user.id, subjectId, tenantId);
+            if (!allowed) return res.status(403).json({ success: false, message: 'You are not assigned to this subject' });
+        }
+
+        const subject = await prisma.subject.findFirst({
+            where: { id: subjectId, tenantId },
+            include: {
+                teachers: { include: { teacher: { select: { id: true, firstName: true, lastName: true } } } },
+                classSubjects: { include: { class: { select: { id: true, name: true, section: true, grade: true } } } }
+            }
+        });
+        if (!subject) return res.status(404).json({ success: false, message: 'Subject not found' });
+
+        const classes = subject.classSubjects.map(item => item.class);
+        const studentFilters = classes.flatMap(schoolClass => [
+            { profileClass: schoolClass.id },
+            { profileClass: schoolClass.name, profileSection: schoolClass.section },
+            { profileClass: schoolClass.name, profileSection: null }
+        ]);
+
+        const [students, marks] = await Promise.all([
+            studentFilters.length ? prisma.user.findMany({
+                where: { tenantId, role: 'student', status: 'active', OR: studentFilters },
+                select: { id: true, firstName: true, lastName: true, admissionNo: true, rollNo: true, profileClass: true, profileSection: true },
+                orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }]
+            }) : [],
+            prisma.mark.findMany({
+                where: { tenantId, subjectId },
+                select: {
+                    id: true, studentId: true, marksObtained: true, maxMarks: true, grade: true, remarks: true,
+                    exam: { select: { id: true, name: true, term: true, startDate: true } },
+                    class: { select: { id: true, name: true, section: true } }
+                },
+                orderBy: { createdAt: 'desc' }
+            })
+        ]);
+
+        const studentMap = new Map(students.map(student => [student.id, { ...student, marks: [] }]));
+        for (const mark of marks) {
+            // A historical mark remains useful even if the student later moved classes.
+            if (!studentMap.has(mark.studentId)) {
+                const historicalStudent = await prisma.user.findFirst({
+                    where: { id: mark.studentId, tenantId, role: 'student' },
+                    select: { id: true, firstName: true, lastName: true, admissionNo: true, rollNo: true, profileClass: true, profileSection: true }
+                });
+                if (historicalStudent) studentMap.set(mark.studentId, { ...historicalStudent, marks: [] });
+            }
+            studentMap.get(mark.studentId)?.marks.push(mark);
+        }
+
+        const detailedStudents = [...studentMap.values()].map(student => {
+            const obtained = student.marks.reduce((sum, mark) => sum + mark.marksObtained, 0);
+            const possible = student.marks.reduce((sum, mark) => sum + mark.maxMarks, 0);
+            return { ...student, average: possible > 0 ? Number(((obtained / possible) * 100).toFixed(1)) : null };
+        });
+
+        res.status(200).json({
+            success: true,
+            data: {
+                subject: { ...formatSubject(subject), classSubjects: undefined },
+                classes,
+                students: detailedStudents,
+                summary: {
+                    studentCount: detailedStudents.length,
+                    markCount: marks.length,
+                    classCount: classes.length,
+                    average: marks.length ? Number((marks.reduce((sum, mark) => sum + (mark.maxMarks > 0 ? (mark.marksObtained / mark.maxMarks) * 100 : 0), 0) / marks.length).toFixed(1)) : null
+                }
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 // @desc    Delete subject
 exports.deleteSubject = async (req, res) => {
     try {

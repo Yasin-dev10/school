@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   ChevronDown,
   Download,
+  Save,
   Loader2,
   Layers,
 } from "lucide-react";
@@ -55,6 +56,7 @@ export default function CombinedResultsPage() {
   const [gradeConfigs, setGradeConfigs] = useState<GradeConfig[]>(DEFAULT_GRADES);
   const [showBreakdown, setShowBreakdown] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
 
@@ -290,6 +292,19 @@ export default function CombinedResultsPage() {
     showToast("Excel downloaded");
   };
 
+  const saveCombinedResult = async () => {
+    if (!selClass || !selectedExamIds.length || !rankedRows.length) return;
+    setSaving(true);
+    try {
+      await api.post('/exams/combined-results', { classId: selClass, examIds: selectedExamIds });
+      showToast('Combined result saved and published to students');
+    } catch (error: any) {
+      showToast(error.response?.data?.message || 'Failed to save combined result', false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const ready = selClass && selectedExamIds.length > 0;
 
   return (
@@ -316,12 +331,22 @@ export default function CombinedResultsPage() {
           </p>
         </div>
         {ready && filteredRows.length > 0 && (
-          <button
-            onClick={exportExcel}
-            className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-semibold transition"
-          >
-            <Download className="w-4 h-4" /> Export Excel
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={saveCombinedResult}
+              disabled={saving}
+              className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 text-white rounded-lg text-sm font-semibold transition"
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Save &amp; publish
+            </button>
+            <button
+              onClick={exportExcel}
+              className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-semibold transition"
+            >
+              <Download className="w-4 h-4" /> Export Excel
+            </button>
+          </div>
         )}
       </div>
 

@@ -10,6 +10,8 @@ const {
     bulkDeleteMarks,
     getMarks,
     getCombinedRankings,
+    saveCombinedResult,
+    getStudentCombinedResults,
     getStudentReport,
     approveResults,
     unapproveResults,
@@ -89,6 +91,8 @@ router.get(
     getMarks
 );
 router.get('/combined-rankings', authorize('school-admin', 'teacher'), getCombinedRankings);
+router.post('/combined-results', authorize('school-admin', 'teacher'), saveCombinedResult);
+router.get('/combined-results/student/:studentId?', authorize('student', 'parent'), getStudentCombinedResults);
 router.get('/report/:examId/:studentId', authorize('school-admin', 'teacher', 'student', 'parent'), validateObjectId('examId'), validateObjectId('studentId'), getStudentReport);
 router.get('/student-grades/:studentId?', authorize('school-admin', 'teacher', 'student', 'parent'), getStudentGrades);
 router.get('/export-matrix', authorize('school-admin', 'teacher'), exportExcelMatrix);

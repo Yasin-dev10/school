@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_zoom_drawer/flutter_zoom_drawer.dart';
 import 'package:provider/provider.dart';
 import '../../providers/teacher_provider.dart';
 import 'class_detail_screen.dart';
@@ -25,6 +26,19 @@ class _ClassListScreenState extends State<ClassListScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu_rounded),
+            onPressed: () {
+              final drawer = ZoomDrawer.of(context);
+              if (drawer != null) {
+                drawer.toggle();
+              } else {
+                Navigator.of(context).maybePop();
+              }
+            },
+          ),
+        ),
         title: const Text(
           'My Classes',
           style: TextStyle(fontWeight: FontWeight.bold),

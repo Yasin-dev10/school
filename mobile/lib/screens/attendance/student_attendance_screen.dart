@@ -64,7 +64,14 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
         leading: Builder(
           builder: (context) => IconButton(
             icon: Icon(Icons.menu, color: Colors.white),
-            onPressed: () => ZoomDrawer.of(context)?.toggle(),
+            onPressed: () {
+              final drawer = ZoomDrawer.of(context);
+              if (drawer != null) {
+                drawer.toggle();
+              } else {
+                Navigator.of(context).maybePop();
+              }
+            },
           ),
         ),
         title: Text(

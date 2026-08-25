@@ -127,7 +127,14 @@ class _StaffCertificatesScreenState extends State<StaffCertificatesScreen> {
         leading: Builder(
           builder: (context) => IconButton(
             icon: const Icon(Icons.menu, color: Colors.white),
-            onPressed: () => ZoomDrawer.of(context)?.toggle(),
+            onPressed: () {
+              final drawer = ZoomDrawer.of(context);
+              if (drawer != null) {
+                drawer.toggle();
+              } else {
+                Navigator.of(context).maybePop();
+              }
+            },
           ),
         ),
         title: const Text(

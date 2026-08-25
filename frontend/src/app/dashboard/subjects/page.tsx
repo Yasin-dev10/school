@@ -2,7 +2,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import api from '../../utils/api';
 import { GRADE_LEVELS } from '../../utils/gradeLevels';
-import { Plus, Pencil, Trash2, X, Search, Filter, GraduationCap, ChevronLeft } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, Search, Filter, GraduationCap, ChevronLeft, Eye } from 'lucide-react';
+import Link from 'next/link';
 
 const PAGE_SIZE = 8;
 
@@ -118,6 +119,7 @@ export default function SubjectsPage() {
 
     const isAdmin = user && ['school-admin', 'super-admin'].includes(user.role ?? '');
     const canManageResources = user && ['school-admin', 'super-admin', 'teacher'].includes(user.role ?? '');
+    const canViewDetails = user && ['school-admin', 'super-admin', 'teacher', 'receptionist'].includes(user.role ?? '');
 
     // Derived teachers string for a subject
     const getTeacherNames = (s: Subject) =>
@@ -309,6 +311,13 @@ export default function SubjectsPage() {
                                     <td className="px-5 py-4 text-right">
                                         {isAdmin ? (
                                             <div className="flex items-center justify-end gap-1">
+                                                {canViewDetails && (
+                                                    <Link href={`/dashboard/subjects/${s._id}`}
+                                                        aria-label={`View ${s.name} students and marks`}
+                                                        className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-600 hover:border-emerald-400 hover:text-emerald-500 text-slate-400 transition">
+                                                        <Eye className="w-3.5 h-3.5" />
+                                                    </Link>
+                                                )}
                                                 <button onClick={() => handleEdit(s)}
                                                     className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-600 hover:border-blue-400 hover:text-blue-500 text-slate-400 transition">
                                                     <Pencil className="w-3.5 h-3.5" />
@@ -318,6 +327,10 @@ export default function SubjectsPage() {
                                                     <Trash2 className="w-3.5 h-3.5" />
                                                 </button>
                                             </div>
+                                        ) : canViewDetails ? (
+                                            <Link href={`/dashboard/subjects/${s._id}`} className="inline-flex items-center gap-1.5 text-blue-600 dark:text-blue-400 font-semibold hover:underline">
+                                                <Eye className="w-3.5 h-3.5" /> View
+                                            </Link>
                                         ) : <span className="text-slate-300 text-xs">—</span>}
                                     </td>
                                 </tr>

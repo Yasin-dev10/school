@@ -48,6 +48,61 @@ const includeAttendanceRelations = {
     markedBy: { select: { id: true, firstName: true, lastName: true } }
 };
 
+// @desc Classes and subjects the current user may use when taking attendance
+exports.getAttendanceOptions = async (req, res) => {
+    try {
+        const tenantId = req.user.tenantId;
+        let assignments;
+
+        if (req.user.role === 'teacher') {
+            const [classSubjectLinks, timetableLinks] = await Promise.all([
+                prisma.classSubject.findMany({
+                    where: {
+                        class: { tenantId },
+                        teachers: { some: { teacherId: req.user.id } }
+                    },
+                    include: {
+                        class: { select: { id: true, name: true, section: true } },
+                        subject: { select: { id: true, name: true, code: true } }
+                    }
+                }),
+                prisma.timetable.findMany({
+                    where: { tenantId, teachers: { some: { teacherId: req.user.id } } },
+                    include: {
+                        class: { select: { id: true, name: true, section: true } },
+                        subject: { select: { id: true, name: true, code: true } }
+                    }
+                })
+            ]);
+            assignments = [...classSubjectLinks, ...timetableLinks];
+        } else {
+            assignments = await prisma.classSubject.findMany({
+                where: { class: { tenantId } },
+                include: {
+                    class: { select: { id: true, name: true, section: true } },
+                    subject: { select: { id: true, name: true, code: true } }
+                }
+            });
+        }
+
+        const uniquePairs = new Map();
+        for (const assignment of assignments) {
+            const key = `${assignment.class.id}:${assignment.subject.id}`;
+            uniquePairs.set(key, {
+                class: { ...assignment.class, _id: assignment.class.id },
+                subject: { ...assignment.subject, _id: assignment.subject.id }
+            });
+        }
+
+        const pairs = [...uniquePairs.values()].sort((a, b) =>
+            `${a.class.name} ${a.class.section} ${a.subject.name}`.localeCompare(`${b.class.name} ${b.class.section} ${b.subject.name}`)
+        );
+        res.status(200).json({ success: true, data: pairs });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 // @desc    Mark attendance
 exports.markAttendance = async (req, res) => {
     try {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_zoom_drawer/flutter_zoom_drawer.dart';
 import 'package:provider/provider.dart';
 import '../../providers/teacher_provider.dart';
 import 'student_profile_screen.dart';
@@ -30,6 +31,19 @@ class _AllStudentsScreenState extends State<AllStudentsScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu_rounded),
+            onPressed: () {
+              final drawer = ZoomDrawer.of(context);
+              if (drawer != null) {
+                drawer.toggle();
+              } else {
+                Navigator.of(context).maybePop();
+              }
+            },
+          ),
+        ),
         title: const Text(
           'All Students',
           style: TextStyle(fontWeight: FontWeight.bold),

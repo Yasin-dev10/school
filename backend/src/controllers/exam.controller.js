@@ -690,6 +690,113 @@ exports.getCombinedRankings = async (req, res) => {
     }
 };
 
+// @desc    Save and publish a combined result snapshot for a class
+exports.saveCombinedResult = async (req, res) => {
+    try {
+        const tenantId = req.user.tenantId;
+        const classId = String(req.body.classId || '').trim();
+        const examIds = [...new Set((req.body.examIds || []).map(String))].sort();
+        if (!classId || !examIds.length) {
+            return res.status(400).json({ success: false, message: 'Class and at least one exam are required' });
+        }
+        if (req.user.role === 'teacher') {
+            const scope = await getTeacherScope(req.user.id, tenantId);
+            if (!scope.classIds.includes(classId)) {
+                return res.status(403).json({ success: false, message: 'You are not assigned to this class' });
+            }
+        }
+
+        const [academicClass, exams, marks, gradeSystem] = await Promise.all([
+            prisma.class.findFirst({
+                where: { id: classId, tenantId },
+                select: { id: true, name: true, grade: true, section: true, subjects: { select: { subjectId: true, subject: { select: { name: true, code: true } } } } }
+            }),
+            prisma.exam.findMany({ where: { id: { in: examIds }, tenantId }, select: { id: true, name: true, term: true } }),
+            prisma.mark.findMany({
+                where: { tenantId, classId, examId: { in: examIds } },
+                include: { student: { select: { id: true, firstName: true, lastName: true, rollNo: true, studentId: true } } }
+            }),
+            prisma.gradeSystem.findFirst({ where: { tenantId, isActive: true }, include: { grades: true } })
+        ]);
+        if (!academicClass) return res.status(404).json({ success: false, message: 'Class not found' });
+        if (exams.length !== examIds.length) return res.status(400).json({ success: false, message: 'One or more exams were not found' });
+
+        const { overall } = buildCombinedRankings({ classes: [academicClass], marks });
+        if (!overall.length) return res.status(400).json({ success: false, message: 'No marks are available to combine' });
+        const subjectMap = new Map(academicClass.subjects.map(item => [item.subjectId, item.subject]));
+        const subjectTotals = new Map();
+        marks.forEach(mark => {
+            if (!subjectMap.has(mark.subjectId)) return;
+            const key = `${mark.studentId}:${mark.subjectId}`;
+            const current = subjectTotals.get(key) || { obtained: 0, max: 0 };
+            current.obtained += Number(mark.marksObtained) || 0;
+            current.max += Number(mark.maxMarks) || 0;
+            subjectTotals.set(key, current);
+        });
+        const rows = overall.map(row => {
+            const grade = calculateGrade(row.percentage, gradeSystem?.grades || []);
+            return {
+                ...row,
+                grade: grade.grade,
+                gpa: grade.gpa,
+                subjectTotals: Object.fromEntries([...subjectMap.keys()].map(subjectId => [subjectId, subjectTotals.get(`${row.studentId}:${subjectId}`) || { obtained: 0, max: 0 }]))
+            };
+        });
+        const examSnapshot = exams.sort((a, b) => examIds.indexOf(a.id) - examIds.indexOf(b.id));
+        const data = {
+            tenantId,
+            classId,
+            fingerprint: examIds.join(':'),
+            title: 'Natiijada Guud',
+            examIds,
+            exams: examSnapshot,
+            subjects: academicClass.subjects.map(item => ({ id: item.subjectId, ...item.subject })),
+            rows,
+            publishedBy: req.user.id
+        };
+        const saved = await prisma.combinedResult.upsert({
+            where: { tenantId_classId_fingerprint: { tenantId, classId, fingerprint: data.fingerprint } },
+            create: data,
+            update: { title: data.title, exams: data.exams, subjects: data.subjects, rows: data.rows, publishedBy: data.publishedBy }
+        });
+        res.status(200).json({ success: true, data: saved, message: 'Combined result saved and published' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// @desc    Get published combined results visible to a student (or linked child)
+exports.getStudentCombinedResults = async (req, res) => {
+    try {
+        const tenantId = req.user.tenantId;
+        const studentId = req.params.studentId || req.user.id;
+        if (req.user.role === 'student' && studentId !== req.user.id) return res.status(403).json({ success: false, message: 'Access denied' });
+        if (req.user.role === 'parent') {
+            const link = await prisma.studentParent.findFirst({ where: { parentId: req.user.id, studentId } });
+            if (!link) return res.status(403).json({ success: false, message: 'Access denied' });
+        }
+        const student = await prisma.user.findFirst({ where: { id: studentId, tenantId }, select: { profileClass: true, profileSection: true } });
+        if (!student?.profileClass) return res.status(200).json({ success: true, data: [] });
+        const academicClass = await prisma.class.findFirst({
+            where: {
+                tenantId,
+                OR: [{ name: student.profileClass }, { grade: student.profileClass }],
+                ...(student.profileSection ? { section: student.profileSection } : {})
+            },
+            select: { id: true }
+        });
+        if (!academicClass) return res.status(200).json({ success: true, data: [] });
+        const snapshots = await prisma.combinedResult.findMany({ where: { tenantId, classId: academicClass.id }, orderBy: { updatedAt: 'desc' } });
+        const results = snapshots.flatMap(snapshot => {
+            const row = Array.isArray(snapshot.rows) ? snapshot.rows.find(item => item.studentId === studentId) : null;
+            return row ? [{ id: snapshot.id, title: snapshot.title, exams: snapshot.exams, subjects: snapshot.subjects, publishedAt: snapshot.updatedAt, result: row }] : [];
+        });
+        res.status(200).json({ success: true, data: results });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 // @desc    Approve results
 exports.approveResults = async (req, res) => {
     try {

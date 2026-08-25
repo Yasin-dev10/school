@@ -135,6 +135,7 @@ export default function AttendancePage() {
     const [user, setUser]                       = useState<any>(null);
     const [classes, setClasses]                 = useState<any[]>([]);
     const [subjects, setSubjects]               = useState<any[]>([]);
+    const [attendanceOptions, setAttendanceOptions] = useState<any[]>([]);
     const [selectedClass, setSelectedClass]     = useState<any>(null);
     const [selectedSubject, setSelectedSubject] = useState<any>(null);
     const [date, setDate]                       = useState(new Date().toISOString().split('T')[0]);
@@ -162,6 +163,8 @@ export default function AttendancePage() {
 
     const { hasPermission } = usePermission();
     const canMark = hasPermission(RESOURCES.ATTENDANCE, ACTIONS.CREATE) || hasPermission(RESOURCES.ATTENDANCE, ACTIONS.UPDATE);
+    const isStudent = user?.role === 'student';
+    const isTeacher = user?.role === 'teacher';
 
     /* ── init ──────────────────────────────────────────────────────────── */
     useEffect(() => {
@@ -171,10 +174,11 @@ export default function AttendancePage() {
 
         if (parsed.role === 'student') return; // student gets own data below
 
-        Promise.all([api.get('/classes'), api.get('/subjects')])
-            .then(([cr, sr]) => {
+        Promise.all([api.get('/classes'), api.get('/subjects'), api.get('/attendance/options')])
+            .then(([cr, sr, ar]) => {
                 setClasses(cr.data.data ?? []);
                 setSubjects(sr.data.data ?? []);
+                setAttendanceOptions(ar.data.data ?? []);
             }).catch(() => {});
     }, []);
 
@@ -193,11 +197,21 @@ export default function AttendancePage() {
     useEffect(() => { fetchMyAtt(); }, [fetchMyAtt]);
 
     /* subjects available for the selected class */
-    const subjectOptions = selectedClass?.subjects?.length
+    const assignedSubjectOptions = attendanceOptions
+        .filter((option: any) => option.class?._id === selectedClass?._id)
+        .map((option: any) => option.subject);
+    const subjectOptions = isTeacher
+        ? assignedSubjectOptions
+        : selectedClass?.subjects?.length
         ? selectedClass.subjects
             .map((e: any) => ({ ...e.subject, _id: e.subject?._id || e.subject?.id }))
             .filter((s: any) => s?._id)
         : subjects;
+    const classOptions = isTeacher
+        ? attendanceOptions.reduce((unique: any[], option: any) => (
+            unique.some(item => item._id === option.class?._id) ? unique : [...unique, option.class]
+        ), [])
+        : classes;
 
     /* ── fetch today's mark data ───────────────────────────────────────── */
     const fetchMarkData = useCallback(async () => {
@@ -306,9 +320,6 @@ export default function AttendancePage() {
         excused: Object.values(records).filter(r => r.status === 'excused').length,
     };
 
-    const isStudent = user?.role === 'student';
-    const isTeacher = user?.role === 'teacher';
-
     /* ══════════════════════════════════════════════════════════════════
        STUDENT VIEW — own attendance history + stats
     ══════════════════════════════════════════════════════════════════ */
@@ -404,7 +415,7 @@ export default function AttendancePage() {
                     {/* export buttons (history only) */}
                     {view === 'history' && (
                         <>
-                            <a href={`${api.defaults.baseURL}/attendance/report?classId=${selectedClass?._id}&month=${new Date().getMonth() + 1}`}
+                            <a href={`${api.defaults.baseURL}/attendance/report?classId=${selectedClass?._id}&month=${new Date().getMonth() + 1}${selectedSubject?._id ? `&subjectId=${selectedSubject._id}` : ''}`}
                                 target="_blank" rel="noreferrer"
                                 className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded-xl hover:bg-emerald-500/20 transition text-sm font-semibold">
                                 <BarChart3 className="w-4 h-4" /> CSV
@@ -427,12 +438,12 @@ export default function AttendancePage() {
                         <select
                             value={selectedClass?._id ?? ''}
                             onChange={e => {
-                                setSelectedClass(classes.find(c => c._id === e.target.value) || null);
+                                setSelectedClass(classOptions.find((c: any) => c._id === e.target.value) || null);
                                 setSelectedSubject(null);
                             }}
                             className="w-full px-3 py-2.5 pr-8 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-sm text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 appearance-none">
                             <option value="">— Select class —</option>
-                            {classes.map(c => <option key={c._id} value={c._id}>{c.name} — {c.section}</option>)}
+                            {classOptions.map((c: any) => <option key={c._id} value={c._id}>{c.name} — {c.section}</option>)}
                         </select>
                         <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
                     </div>
@@ -448,7 +459,7 @@ export default function AttendancePage() {
                             value={selectedSubject?._id ?? ''}
                             onChange={e => setSelectedSubject(subjectOptions.find((s: any) => s._id === e.target.value) || null)}
                             className="w-full px-3 py-2.5 pr-8 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-sm text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 appearance-none">
-                            <option value="">All Subjects</option>
+                            <option value="">{isTeacher ? '— Select assigned subject —' : 'All Subjects'}</option>
                             {subjectOptions.map((s: any) => <option key={s._id} value={s._id}>{s.name}</option>)}
                         </select>
                         <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />

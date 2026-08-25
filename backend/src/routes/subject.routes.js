@@ -3,6 +3,7 @@ const router = express.Router();
 const {
     createSubject,
     getSubjects,
+    getSubjectDetails,
     updateSubject,
     deleteSubject,
     getSubjectDeletionImpact,
@@ -16,6 +17,8 @@ router.use(protect);
 router.route('/')
     .get(authorize('school-admin', 'teacher', 'receptionist', 'student', 'parent'), getSubjects)
     .post(authorize('school-admin'), createSubject);
+
+router.get('/:id/details', authorize('school-admin', 'teacher', 'receptionist'), getSubjectDetails);
 
 router.route('/:id')
     .put(authorize('school-admin'), updateSubject)

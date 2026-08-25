@@ -5,6 +5,7 @@ import { BookOpen, Download, GraduationCap, IdCard, TrendingUp } from 'lucide-re
 
 type Props = {
     grades: any;
+    combinedResults?: any[];
     student: any;
     loading: boolean;
     onDownload: () => void;
@@ -13,7 +14,7 @@ type Props = {
     onChildChange?: (id: string) => void;
 };
 
-export function StudentResultsView({ grades, student, loading, onDownload, students = [], selectedChild, onChildChange }: Props) {
+export function StudentResultsView({ grades, combinedResults = [], student, loading, onDownload, students = [], selectedChild, onChildChange }: Props) {
     const terms = grades?.terms || [];
     const [selectedTerm, setSelectedTerm] = useState(0);
     const term = terms[Math.min(selectedTerm, Math.max(terms.length - 1, 0))];
@@ -52,6 +53,18 @@ export function StudentResultsView({ grades, student, loading, onDownload, stude
                 </aside>
 
                 <main className="space-y-5" id="transcript-area">
+                    {combinedResults.length > 0 && <section className="space-y-4">
+                        <h2 className="flex items-center gap-2 text-lg font-bold text-[#405bb2]"><GraduationCap className="h-5 w-5" /> Combined Results</h2>
+                        {combinedResults.map((combined: any) => <article key={combined.id} className="overflow-hidden rounded-3xl border border-indigo-200 bg-white dark:border-indigo-800 dark:bg-slate-900">
+                            <div className="bg-indigo-50 px-5 py-4 dark:bg-indigo-950/30"><h3 className="font-bold text-slate-900 dark:text-white">{combined.title}</h3><p className="mt-1 text-xs text-slate-500">Published {new Date(combined.publishedAt).toLocaleDateString()}</p></div>
+                            <div className="grid grid-cols-4 gap-2 p-5 text-center">
+                                {[['Rank', combined.result.rank], ['Total', `${combined.result.totalObtained}/${combined.result.totalMax}`], ['Percentage', `${Number(combined.result.percentage).toFixed(1)}%`], ['Grade', combined.result.grade || '—']].map(([label, value]) => <div key={String(label)} className="rounded-2xl bg-slate-50 p-3 dark:bg-slate-800"><p className="text-[11px] text-slate-500">{label}</p><p className="mt-1 font-bold text-[#405bb2]">{value}</p></div>)}
+                            </div>
+                            <div className="grid gap-2 px-5 pb-5 sm:grid-cols-2">
+                                {(combined.subjects || []).map((subject: any) => { const score = combined.result.subjectTotals?.[subject.id]; return <div key={subject.id} className="flex items-center justify-between rounded-xl border border-slate-100 px-4 py-3 text-sm dark:border-slate-800"><span className="font-medium">{subject.name}</span><span className="font-bold text-[#405bb2]">{score?.obtained || 0}/{score?.max || 0}</span></div>; })}
+                            </div>
+                        </article>)}
+                    </section>}
                     <div className="rounded-3xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
                         <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-slate-500">Select semester / exam</label>
                         <select value={selectedTerm} onChange={e => setSelectedTerm(Number(e.target.value))} className="w-full rounded-xl border border-slate-200 bg-transparent px-4 py-3 font-semibold dark:border-slate-700">{terms.map((item: any, index: number) => <option key={item.id || index} value={index}>{item.name}{item.term ? ` · ${item.term}` : ''}</option>)}</select>

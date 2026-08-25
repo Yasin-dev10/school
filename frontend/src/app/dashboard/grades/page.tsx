@@ -99,6 +99,7 @@ export default function GradesPage() {
 
     const [user, setUser] = useState<any>(null);
     const [studentGrades, setStudentGrades] = useState<any>(null);
+    const [combinedResults, setCombinedResults] = useState<any[]>([]);
     const [children, setChildren] = useState<any[]>([]);
     const [selectedChild, setSelectedChild] = useState<string>('');
 
@@ -164,8 +165,10 @@ export default function GradesPage() {
         setLoading(true);
         try {
             const url = studentId ? `/exams/student-grades/${studentId}` : '/exams/student-grades';
-            const { data } = await api.get(url);
+            const combinedUrl = studentId ? `/exams/combined-results/student/${studentId}` : '/exams/combined-results/student';
+            const [{ data }, combined] = await Promise.all([api.get(url), api.get(combinedUrl)]);
             setStudentGrades(data.data);
+            setCombinedResults(combined.data.data || []);
         } catch (error) {
             console.error(error);
             toast.error('Failed to load grades');
@@ -315,7 +318,7 @@ export default function GradesPage() {
 
     if (user?.role === 'student' || (user?.role === 'parent' && selectedChild)) {
         const activeChild = user?.role === 'parent' ? children.find(c => c._id === selectedChild) : null;
-        return <StudentResultsView grades={studentGrades} student={activeChild || user} loading={loading} onDownload={handleDownloadTranscript} students={children} selectedChild={selectedChild} onChildChange={setSelectedChild} />;
+        return <StudentResultsView grades={studentGrades} combinedResults={combinedResults} student={activeChild || user} loading={loading} onDownload={handleDownloadTranscript} students={children} selectedChild={selectedChild} onChildChange={setSelectedChild} />;
         /* Legacy transcript layout retained below temporarily for reference. */
         return (
             <div className="p-8 max-w-7xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom-4">
