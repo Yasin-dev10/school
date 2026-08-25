@@ -12,10 +12,12 @@ import '../screens/assignments/assignment_list_screen.dart';
 import '../screens/assignments/student_assignment_list_screen.dart';
 import '../screens/exams/student_grades_screen.dart';
 import '../screens/student/student_fees_screen.dart';
+import '../config/app_config.dart';
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp();
+  final options = AppConfig.firebaseOptions;
+  if (options != null) await Firebase.initializeApp(options: options);
 }
 
 class PushNotificationService {
@@ -30,24 +32,45 @@ class PushNotificationService {
 
   Future<void> initialize() async {
     if (_initialized) return;
+    final options = AppConfig.firebaseOptions;
+    if (options == null) {
+      debugPrint(
+        'Push notifications disabled: Firebase dart-defines are not configured.',
+      );
+      return;
+    }
     try {
-      await Firebase.initializeApp();
+      await Firebase.initializeApp(options: options);
       _messaging = FirebaseMessaging.instance;
       FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-      await _messaging!.requestPermission(alert: true, badge: true, sound: true, provisional: false);
+      await _messaging!.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+        provisional: false,
+      );
       FirebaseMessaging.onMessageOpenedApp.listen(_openMessage);
       FirebaseMessaging.onMessage.listen((message) {
         final context = navigatorKey.currentContext;
         if (context != null) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(message.notification?.title ?? 'New notification'),
-            action: SnackBarAction(label: 'Open', onPressed: () => _openMessage(message)),
-          ));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                message.notification?.title ?? 'New notification',
+              ),
+              action: SnackBarAction(
+                label: 'Open',
+                onPressed: () => _openMessage(message),
+              ),
+            ),
+          );
         }
       });
       _messaging!.onTokenRefresh.listen((token) => _registerToken(token));
       final initial = await _messaging!.getInitialMessage();
-      if (initial != null) WidgetsBinding.instance.addPostFrameCallback((_) => _openMessage(initial));
+      if (initial != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _openMessage(initial));
+      }
       _initialized = true;
     } catch (error) {
       debugPrint('Push notifications are not configured: $error');
@@ -57,7 +80,11 @@ class PushNotificationService {
   Future<void> syncDeviceToken({required String role}) async {
     _role = role;
     await initialize();
-    final token = await _messaging?.getToken();
+    final token = await _messaging?.getToken(
+      vapidKey: kIsWeb && AppConfig.firebaseVapidKey.isNotEmpty
+          ? AppConfig.firebaseVapidKey
+          : null,
+    );
     if (token != null) await _registerToken(token);
   }
 
@@ -75,9 +102,15 @@ class PushNotificationService {
   }
 
   Future<void> unregister() async {
-    final token = await _messaging?.getToken();
+    final token = await _messaging?.getToken(
+      vapidKey: kIsWeb && AppConfig.firebaseVapidKey.isNotEmpty
+          ? AppConfig.firebaseVapidKey
+          : null,
+    );
     if (token != null) {
-      try { await _api.post('/notifications/devices/unregister', {'token': token}); } catch (_) {}
+      try {
+        await _api.post('/notifications/devices/unregister', {'token': token});
+      } catch (_) {}
     }
     _role = null;
   }

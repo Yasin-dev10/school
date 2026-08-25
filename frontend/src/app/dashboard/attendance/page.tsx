@@ -315,10 +315,7 @@ export default function AttendancePage() {
     if (isStudent) {
         return (
             <div className="max-w-5xl mx-auto space-y-6">
-                <div>
-                    <h1 className="text-2xl font-black text-slate-800 dark:text-white">My Attendance</h1>
-                    <p className="text-sm text-slate-500 mt-1">Your full attendance history</p>
-                </div>
+                <section className="rounded-3xl bg-[#405bb2] p-6 text-white shadow-lg shadow-indigo-900/10 sm:p-8"><div className="flex items-center gap-4"><div className="grid h-14 w-14 place-items-center rounded-2xl bg-white/15"><Calendar className="h-7 w-7" /></div><div><h1 className="text-2xl font-bold">Attendance Summary</h1><p className="text-sm text-indigo-100">Review your attendance records</p></div></div></section>
 
                 {/* stat cards */}
                 {myLoading ? (
@@ -332,7 +329,7 @@ export default function AttendancePage() {
                                 { label: 'Absent',      value: myStats?.absent     ?? 0,       icon: <XCircle className="w-5 h-5" />,     color: 'text-red-500',     bg: 'bg-red-500/10' },
                                 { label: 'Attendance',  value: `${myStats?.percentage ?? 0}%`, icon: <TrendingUp className="w-5 h-5" />,  color: 'text-purple-500',  bg: 'bg-purple-500/10' },
                             ].map((c, i) => (
-                                <div key={i} className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-5">
+                                <div key={i} className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm">
                                     <div className={`${c.bg} ${c.color} w-10 h-10 rounded-xl flex items-center justify-center mb-3`}>{c.icon}</div>
                                     <p className="text-xs text-slate-400 font-medium uppercase tracking-wide">{c.label}</p>
                                     <p className={`text-2xl font-black mt-1 ${c.color}`}>{c.value}</p>
@@ -340,8 +337,10 @@ export default function AttendancePage() {
                             ))}
                         </div>
 
+                        <div className="rounded-3xl bg-[#405bb2] p-7 text-center text-white"><BarChart3 className="mx-auto h-6 w-6" /><p className="mt-2 text-3xl font-bold">{myStats?.percentage ?? 0}%</p><p className="text-sm text-indigo-100">Attendance Rate</p></div>
+
                         {/* history table */}
-                        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+                        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
                             <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-700">
                                 <h2 className="font-bold text-slate-800 dark:text-white text-sm">Attendance Records</h2>
                             </div>

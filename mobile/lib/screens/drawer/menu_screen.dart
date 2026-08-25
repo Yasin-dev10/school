@@ -49,39 +49,101 @@ class MenuScreen extends StatelessWidget {
       return [
         const MenuItem('Dashboard', Icons.dashboard_rounded, DashboardScreen()),
         const MenuItem('Students', Icons.school_rounded, AllStudentsScreen()),
-        const MenuItem('Classes', Icons.meeting_room_rounded, ClassListScreen()),
-        const MenuItem('Attendance', Icons.calendar_today_rounded, AttendanceScreen()),
-        const MenuItem('Assignments', Icons.assignment_rounded, AssignmentListScreen()),
+        const MenuItem(
+          'Classes',
+          Icons.meeting_room_rounded,
+          ClassListScreen(),
+        ),
+        const MenuItem(
+          'Attendance',
+          Icons.calendar_today_rounded,
+          AttendanceScreen(),
+        ),
+        const MenuItem(
+          'Assignments',
+          Icons.assignment_rounded,
+          AssignmentListScreen(),
+        ),
         const MenuItem('Exams', Icons.grade_rounded, TeacherExamsScreen()),
-        const MenuItem('Timetable', Icons.calendar_month_rounded, TeacherTimetableScreen()),
-        const MenuItem('LMS Materials', Icons.menu_book_rounded, MaterialListScreen()),
-        const MenuItem('Certificates', Icons.workspace_premium_rounded, StaffCertificatesScreen()),
-        const MenuItem('Payslips', Icons.receipt_long_rounded, PayslipsScreen()),
+        const MenuItem(
+          'Timetable',
+          Icons.calendar_month_rounded,
+          TeacherTimetableScreen(),
+        ),
+        const MenuItem(
+          'LMS Materials',
+          Icons.menu_book_rounded,
+          MaterialListScreen(),
+        ),
+        const MenuItem(
+          'Certificates',
+          Icons.workspace_premium_rounded,
+          StaffCertificatesScreen(),
+        ),
+        const MenuItem(
+          'Payslips',
+          Icons.receipt_long_rounded,
+          PayslipsScreen(),
+        ),
         const MenuItem('Profile', Icons.person_rounded, ProfileScreen()),
-        const MenuItem('Notifications', Icons.notifications_rounded, NotificationsScreen()),
+        const MenuItem(
+          'Notifications',
+          Icons.notifications_rounded,
+          NotificationsScreen(),
+        ),
       ];
     } else if (role == 'receptionist') {
       return [
         const MenuItem('Students', Icons.school_rounded, AllStudentsScreen()),
-        const MenuItem('Classes', Icons.meeting_room_rounded, ClassListScreen()),
+        const MenuItem(
+          'Classes',
+          Icons.meeting_room_rounded,
+          ClassListScreen(),
+        ),
         const MenuItem('Profile', Icons.person_rounded, ProfileScreen()),
-        const MenuItem('Notifications', Icons.notifications_rounded, NotificationsScreen()),
+        const MenuItem(
+          'Notifications',
+          Icons.notifications_rounded,
+          NotificationsScreen(),
+        ),
       ];
     } else if (role == 'accountant') {
       return [
         const MenuItem('Payroll', Icons.receipt_long_rounded, PayslipsScreen()),
         const MenuItem('Profile', Icons.person_rounded, ProfileScreen()),
-        const MenuItem('Notifications', Icons.notifications_rounded, NotificationsScreen()),
+        const MenuItem(
+          'Notifications',
+          Icons.notifications_rounded,
+          NotificationsScreen(),
+        ),
       ];
     } else if (role == 'librarian') {
       return [
-        const MenuItem('LMS Materials', Icons.menu_book_rounded, MaterialListScreen()),
+        const MenuItem(
+          'LMS Materials',
+          Icons.menu_book_rounded,
+          MaterialListScreen(),
+        ),
         const MenuItem('Profile', Icons.person_rounded, ProfileScreen()),
-        const MenuItem('Notifications', Icons.notifications_rounded, NotificationsScreen()),
+        const MenuItem(
+          'Notifications',
+          Icons.notifications_rounded,
+          NotificationsScreen(),
+        ),
       ];
     } else if (role == 'teacher') {
       return [
         const MenuItem('Dashboard', Icons.dashboard_rounded, DashboardScreen()),
+        const MenuItem(
+          'My Classes',
+          Icons.meeting_room_rounded,
+          ClassListScreen(),
+        ),
+        const MenuItem(
+          'My Students',
+          Icons.school_rounded,
+          AllStudentsScreen(),
+        ),
         const MenuItem(
           'Attendance',
           Icons.calendar_today_rounded,
@@ -408,7 +470,9 @@ class MenuScreen extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFF43F5E).withValues(alpha: 0.3)),
+          border: Border.all(
+            color: const Color(0xFFF43F5E).withValues(alpha: 0.3),
+          ),
           color: const Color(0xFFF43F5E).withValues(alpha: 0.1),
           boxShadow: [
             BoxShadow(

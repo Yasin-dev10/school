@@ -57,6 +57,7 @@ class ApiService {
 
   bool _canQueueWrite(String endpoint) {
     const sensitivePrefixes = [
+      '/auth',
       '/fees/pay',
       '/stripe',
       '/salaries',
@@ -118,7 +119,7 @@ class ApiService {
         final headers = await _getHeaders();
         final url = '$baseUrl$endpoint';
         debugPrint('POST Request: $url');
-        debugPrint('POST Body: ${jsonEncode(body)}');
+        debugPrint('POST Body: ${_safeBodyForLog(endpoint, body)}');
 
         var response = await http
             .post(Uri.parse(url), headers: headers, body: jsonEncode(body))
@@ -181,6 +182,15 @@ class ApiService {
       }
       rethrow;
     }
+  }
+
+  String _safeBodyForLog(String endpoint, Map<String, dynamic> body) {
+    if (endpoint.startsWith('/auth')) return '[redacted]';
+    final safeBody = Map<String, dynamic>.from(body);
+    for (final key in ['password', 'token', 'refreshToken']) {
+      if (safeBody.containsKey(key)) safeBody[key] = '[redacted]';
+    }
+    return jsonEncode(safeBody);
   }
 
   Future<http.Response> postMultipart(

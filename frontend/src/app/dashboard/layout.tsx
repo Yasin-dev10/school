@@ -74,6 +74,38 @@ function groupContainsActive(pathname: string, group: NavGroup) {
     return group.items.some((item) => isItemActive(pathname, item.href));
 }
 
+const ROLE_ROUTES: Record<string, string[]> = {
+    student: [
+        '/dashboard/student', '/dashboard/profile', '/dashboard/ai-assistant',
+        '/dashboard/timetable', '/dashboard/calendar', '/dashboard/attendance',
+        '/dashboard/assignments', '/dashboard/online-learning', '/dashboard/exams',
+        '/dashboard/grades', '/dashboard/materials', '/dashboard/communication',
+        '/dashboard/student-finance', '/dashboard/certificates',
+        '/dashboard/notifications', '/dashboard/about', '/dashboard/help',
+    ],
+    teacher: [
+        '/dashboard', '/dashboard/ai-assistant', '/dashboard/students',
+        '/dashboard/classes', '/dashboard/subjects', '/dashboard/timetable',
+        '/dashboard/calendar', '/dashboard/attendance', '/dashboard/assignments',
+        '/dashboard/online-learning', '/dashboard/materials', '/dashboard/exams',
+        '/dashboard/grade-entry', '/dashboard/multi-marks', '/dashboard/exam-results',
+        '/dashboard/combined-results', '/dashboard/top-students', '/dashboard/grades',
+        '/dashboard/communication', '/dashboard/payslips', '/dashboard/certificates',
+        '/dashboard/reports', '/dashboard/notifications', '/dashboard/about',
+        '/dashboard/help', '/dashboard/profile',
+    ],
+};
+
+function roleHome(role: string) {
+    return role === 'student' ? '/dashboard/student' : '/dashboard';
+}
+
+function canOpenDashboardRoute(role: string, pathname: string) {
+    const allowed = ROLE_ROUTES[role];
+    if (!allowed) return true;
+    return allowed.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+}
+
 export default function DashboardLayout({
     children,
 }: {
@@ -131,6 +163,10 @@ export default function DashboardLayout({
             const userData = { ...current, _id: current.id, role: normalizeRole(current.role) };
             localStorage.setItem('user', JSON.stringify(userData));
             setUser(userData);
+            if (!canOpenDashboardRoute(userData.role, window.location.pathname)) {
+                router.replace(roleHome(userData.role));
+                return;
+            }
             setIsAuthorized(true);
         }).catch(() => {
             localStorage.removeItem('user');
@@ -167,6 +203,16 @@ export default function DashboardLayout({
             disconnectSocket();
         };
     }, [router]);
+
+    useEffect(() => {
+        if (!user) return;
+        if (!canOpenDashboardRoute(user.role, pathname)) {
+            setIsAuthorized(false);
+            router.replace(roleHome(user.role));
+        } else {
+            setIsAuthorized(true);
+        }
+    }, [pathname, router, user]);
 
     useEffect(() => {
         setIsSidebarOpen(false);
@@ -390,7 +436,7 @@ export default function DashboardLayout({
                 label: 'Overview',
                 groupIcon: <LayoutDashboard className="w-3.5 h-3.5" />,
                 items: [
-                    { name: 'Dashboard', href: '/dashboard', icon: icon(<LayoutDashboard className="w-4 h-4" />) },
+                    { name: 'Dashboard', href: user.role === 'student' ? '/dashboard/student' : '/dashboard', icon: icon(<LayoutDashboard className="w-4 h-4" />) },
                     { name: 'My Profile', href: '/dashboard/profile', icon: icon(<Users className="w-4 h-4" />) },
                     { name: 'AI Study Assistant', href: '/dashboard/ai-assistant', icon: icon(<Bot className="w-4 h-4" />) },
                 ],

@@ -138,7 +138,7 @@ export default function OnlineLearningPage() {
   if (loading) return <div className="p-8 text-slate-400">Loading online learning…</div>;
 
   return <div className="space-y-6 p-4 md:p-8">
-    <div><h1 className="text-2xl font-bold text-white">Class Quizzes</h1><p className="text-slate-400">Choose a class, upload a PDF, and automatically create a graded quiz.</p></div>
+    <div className={`${user.role === 'student' ? 'rounded-3xl bg-[#405bb2] p-6 text-white shadow-lg shadow-indigo-900/10 sm:p-8' : ''}`}><h1 className={`text-2xl font-bold ${user.role === 'student' ? 'text-white' : 'text-white'}`}>{user.role === 'student' ? 'Online Learning' : 'Class Quizzes'}</h1><p className={user.role === 'student' ? 'text-indigo-100' : 'text-slate-400'}>{user.role === 'student' ? 'Recorded lessons, quizzes and your learning progress.' : 'Choose a class, upload a PDF, and automatically create a graded quiz.'}</p></div>
 
     {canManage && <div className="max-w-2xl">
       <form onSubmit={createQuizFromPdf} className="rounded-2xl border border-slate-700 bg-slate-900 p-5 space-y-3">
@@ -154,7 +154,7 @@ export default function OnlineLearningPage() {
       <ManualQuizBuilder classes={classes} subjects={subjects} onCreated={load} />
     </div>}
 
-    {!courses.length ? <div className="rounded-2xl border border-dashed border-slate-700 p-12 text-center text-slate-400">No class quizzes yet.</div> : <div className="grid gap-5 lg:grid-cols-2">{courses.map(course => <section key={course.id} className="rounded-2xl border border-slate-700 bg-slate-900 overflow-hidden">
+    {!courses.length ? <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-16 text-center text-slate-500 dark:border-slate-700 dark:bg-slate-900">No online lessons or quizzes available yet.</div> : <div className="grid gap-5 lg:grid-cols-2">{courses.map(course => <section key={course.id} className="rounded-3xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900 overflow-hidden shadow-sm">
       <div className="p-5 border-b border-slate-700"><div className="flex justify-between gap-3"><div><h2 className="text-lg font-semibold text-white">{course.title}</h2><p className="text-sm text-slate-400">{course.class.name} {course.class.section} {course.subject ? `• ${course.subject.name}` : ''}</p></div><BookOpen className="text-indigo-400"/></div><p className="mt-2 text-sm text-slate-300">{course.description}</p>
       <div className="mt-4 h-2 rounded-full bg-slate-700"><div className="h-full rounded-full bg-emerald-500" style={{width:`${course.progressPercent}%`}}/></div><p className="mt-1 text-xs text-slate-400">Course progress: {course.progressPercent}%</p></div>
       <div className="p-5 space-y-3"><h3 className="text-sm font-semibold text-slate-300">Recorded lessons</h3>{course.lessons.map(lesson => <div key={lesson.id} className="flex items-center justify-between gap-3 rounded-xl bg-slate-800 p-3"><a href={lesson.videoUrl} target="_blank" rel="noreferrer" className="flex items-center gap-3 min-w-0"><CirclePlay className="text-indigo-400 shrink-0"/><span className="truncate text-white">{lesson.title}</span></a>{user.role==='student' && <button onClick={() => completeLesson(lesson.id)} className="text-xs text-emerald-400">{lesson.progress[0]?.completed ? 'Completed ✓' : 'Mark complete'}</button>}</div>)}

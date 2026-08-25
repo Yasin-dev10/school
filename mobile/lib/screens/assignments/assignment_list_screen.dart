@@ -37,7 +37,12 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> {
             onPressed: () => ZoomDrawer.of(context)?.toggle(),
           ),
         ),
-        title: const Text('Assignments'),
+        title: const Text(
+          'Assignments',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        ),
+        backgroundColor: const Color(0xFF405BB2),
+        foregroundColor: Colors.white,
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
@@ -70,9 +75,10 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> {
             )
           : RefreshIndicator(
               color: AppColors.primary,
-              onRefresh: () =>
-                  Provider.of<TeacherProvider>(context, listen: false)
-                      .fetchAssignments(),
+              onRefresh: () => Provider.of<TeacherProvider>(
+                context,
+                listen: false,
+              ).fetchAssignments(),
               child: ListView.builder(
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 88),
                 itemCount: teacher.assignments.length,
@@ -116,16 +122,16 @@ class _AssignmentListScreenState extends State<AssignmentListScreen> {
                                   context,
                                   AppColors.primary,
                                 ),
-                                borderRadius:
-                                    BorderRadius.circular(AppRadii.full),
+                                borderRadius: BorderRadius.circular(
+                                  AppRadii.full,
+                                ),
                               ),
                               child: Text(
                                 assignment['class']?['name'] ??
                                     assignment['className'] ??
                                     'Class',
                                 style: TextStyle(
-                                  color:
-                                      Theme.of(context).colorScheme.primary,
+                                  color: Theme.of(context).colorScheme.primary,
                                   fontWeight: FontWeight.w600,
                                   fontSize: 12,
                                 ),

@@ -39,7 +39,7 @@ const aiAssistantRoutes = require('./routes/aiAssistant.routes');
 const alumniRoutes = require('./routes/alumni.routes');
 const path = require('path');
 const { handleValidationError } = require('./middlewares/validation.middleware');
-const { parseAllowedOrigins, redactSensitive } = require('./utils/security');
+const { parseAllowedOrigins, isAllowedLocalhostOrigin, redactSensitive } = require('./utils/security');
 const { getJwtSecret } = require('./utils/security');
 
 // Fail closed on missing JWT secret at boot
@@ -67,6 +67,7 @@ const corsOptions = {
         if (!origin) return callback(null, true);
         // Quick override to allow all origins (use with caution)
         if (process.env.CORS_ALLOW_ALL === 'true') return callback(null, true);
+        if (isAllowedLocalhostOrigin(origin)) return callback(null, true);
         if (allowedOrigins.includes(origin)) return callback(null, true);
         return callback(new Error('CORS policy: origin not allowed'));
     },

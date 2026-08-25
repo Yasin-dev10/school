@@ -34,7 +34,7 @@ router.post('/:id/reset-password', authorize('school-admin', 'receptionist'), va
 router.post('/:id/restore', authorize('school-admin'), validateObjectId('id'), restoreStudent);
 
 router.route('/:id')
-    .get(authorize('school-admin', 'teacher', 'parent', 'receptionist'), validateObjectId('id'), getStudentById)
+    .get(authorize('school-admin', 'teacher', 'student', 'parent', 'receptionist'), validateObjectId('id'), getStudentById)
     .put(authorize('school-admin'), validateObjectId('id'), updateStudent)
     .delete(authorize('school-admin'), validateObjectId('id'), deleteStudent);
 

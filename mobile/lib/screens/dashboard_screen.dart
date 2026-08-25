@@ -48,6 +48,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final user = auth.user;
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
         leading: Builder(
           builder: (context) => IconButton(
@@ -55,7 +56,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onPressed: () => ZoomDrawer.of(context)?.toggle(),
           ),
         ),
-        title: const Text('Faculty Portal'),
+        title: const Text(
+          'Faculty Portal',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        ),
+        backgroundColor: const Color(0xFF405BB2),
+        foregroundColor: Colors.white,
         actions: [
           const ThemeToggleButton(),
           IconButton(
@@ -81,6 +87,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               AppCard(
                 padding: const EdgeInsets.all(AppSpacing.lg),
+                color: const Color(0xFF405BB2),
                 child: Row(
                   children: [
                     AppAvatar(
@@ -96,13 +103,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           Text(
                             'Hello, ${user?['firstName'] ?? 'Teacher'}',
                             style: Theme.of(context).textTheme.titleLarge
-                                ?.copyWith(fontWeight: FontWeight.w800),
+                                ?.copyWith(
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white,
+                                ),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             'Faculty Member',
                             style: TextStyle(
-                              color: AppColors.mutedText(context),
+                              color: Colors.white70,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -200,9 +210,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     color: AppColors.accentPurple,
                     onTap: () => Navigator.push(
                       context,
-                      MaterialPageRoute(
-                        builder: (_) => const PayslipsScreen(),
-                      ),
+                      MaterialPageRoute(builder: (_) => const PayslipsScreen()),
                     ),
                   ),
                 ],
@@ -229,9 +237,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 onAction: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(
-                      builder: (_) => const AttendanceScreen(),
-                    ),
+                    MaterialPageRoute(builder: (_) => const AttendanceScreen()),
                   );
                 },
               ),
@@ -277,7 +283,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   iconSize: 36,
                 )
               else
-                ...teacher.notifications.take(3).map(
+                ...teacher.notifications
+                    .take(3)
+                    .map(
                       (notif) => _NotificationTile(
                         title: notif['title'] ?? 'No Title',
                         message: notif['message'] ?? '',

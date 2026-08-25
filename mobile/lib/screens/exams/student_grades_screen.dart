@@ -55,7 +55,7 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
       appBar: AppBar(
         leading: Builder(
           builder: (context) => IconButton(
-            icon: const Icon(Icons.menu, color: Colors.black),
+            icon: const Icon(Icons.menu, color: Colors.white),
             onPressed: () => ZoomDrawer.of(context)?.toggle(),
           ),
         ),
@@ -64,7 +64,7 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
             const Text(
               'Grades',
               style: TextStyle(
-                color: Colors.black,
+                color: Colors.white,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -74,7 +74,7 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
                 '${context.watch<AuthProvider>().user!['firstName']} ${context.watch<AuthProvider>().user!['lastName']} '
                 '(${context.watch<AuthProvider>().user!['profile']?['admissionNo'] ?? context.watch<AuthProvider>().user!['profile']?['rollNo'] ?? ''})',
                 style: const TextStyle(
-                  color: Colors.black54,
+                  color: Colors.white70,
                   fontSize: 12,
                   fontWeight: FontWeight.normal,
                 ),
@@ -84,11 +84,11 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.more_vert, color: Colors.black),
+            icon: const Icon(Icons.more_vert, color: Colors.white),
             onPressed: () {},
           ),
         ],
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFF405BB2),
         elevation: 0,
         centerTitle: true,
       ),
@@ -111,8 +111,13 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
                     const SizedBox(height: 20),
                     _buildTermFilters(terms),
                     const SizedBox(height: 24),
+                    _buildStudentProfile(
+                      context.watch<AuthProvider>().user,
+                      currentTerm,
+                    ),
+                    const SizedBox(height: 24),
                     _buildGpaCard(
-                      currentTerm?['gpa'] ?? '0.0',
+                      (currentTerm?['termGpa'] ?? '0.00').toString(),
                       cumulativeGpa.toString(),
                     ),
                     const SizedBox(height: 32),
@@ -130,6 +135,121 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
       ),
     );
   }
+
+  Widget _buildStudentProfile(dynamic user, dynamic term) {
+    final profile = user?['profile'] ?? const {};
+    final fullName = '${user?['firstName'] ?? ''} ${user?['lastName'] ?? ''}'
+        .trim();
+    final studentId =
+        profile['studentId'] ??
+        user?['studentId'] ??
+        profile['admissionNo'] ??
+        user?['admissionNo'] ??
+        '—';
+    final className = profile['class'] ?? user?['profileClass'] ?? '—';
+    final section = profile['section'] ?? user?['profileSection'];
+    final courses = term?['courses'] as List<dynamic>? ?? [];
+    final average = courses.isEmpty
+        ? 0.0
+        : courses.fold<double>(
+                0,
+                (sum, course) =>
+                    sum +
+                    (double.tryParse('${course['percentage'] ?? 0}') ?? 0),
+              ) /
+              courses.length;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: const BoxDecoration(
+              color: Color(0xFFEEF2FF),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.person, color: Color(0xFF405BB2)),
+                SizedBox(width: 12),
+                Text(
+                  'Student Profile',
+                  style: TextStyle(
+                    color: Color(0xFF405BB2),
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          _profileRow('Student ID', studentId.toString()),
+          _profileRow('Name', fullName.isEmpty ? '—' : fullName),
+          _profileRow(
+            'Class',
+            '$className${section != null && '$section'.isNotEmpty ? ' · $section' : ''}',
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 18),
+            decoration: const BoxDecoration(
+              color: Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.vertical(bottom: Radius.circular(22)),
+            ),
+            child: Row(
+              children: [
+                _summaryValue('Courses', '${courses.length}'),
+                _summaryValue('Average', '${average.toStringAsFixed(1)}%'),
+                _summaryValue('Term GPA', '${term?['termGpa'] ?? '0.00'}'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _profileRow(String label, String value) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(label, style: const TextStyle(color: Colors.black54)),
+        ),
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _summaryValue(String label, String value) => Expanded(
+    child: Column(
+      children: [
+        Text(
+          label,
+          style: const TextStyle(fontSize: 11, color: Colors.black54),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 18,
+            color: Color(0xFF405BB2),
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    ),
+  );
 
   Widget _buildTermFilters(List<dynamic> terms) {
     return SizedBox(
@@ -155,7 +275,9 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
                   boxShadow: isSelected
                       ? [
                           BoxShadow(
-                            color: const Color(0xFF2563EB).withValues(alpha: 0.3),
+                            color: const Color(
+                              0xFF2563EB,
+                            ).withValues(alpha: 0.3),
                             blurRadius: 8,
                             offset: const Offset(0, 4),
                           ),

@@ -32,7 +32,12 @@ class _MaterialListScreenState extends State<MaterialListScreen> {
             onPressed: () => ZoomDrawer.of(context)?.toggle(),
           ),
         ),
-        title: const Text('Learning Materials'),
+        title: const Text(
+          'Learning Materials',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        ),
+        backgroundColor: const Color(0xFF405BB2),
+        foregroundColor: Colors.white,
         actions: [
           IconButton(
             icon: const Icon(Icons.add),

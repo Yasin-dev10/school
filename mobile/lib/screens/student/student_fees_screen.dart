@@ -46,16 +46,16 @@ class _StudentFeesScreenState extends State<StudentFeesScreen> {
       appBar: AppBar(
         leading: Builder(
           builder: (context) => IconButton(
-            icon: const Icon(Icons.menu, color: Colors.black),
+            icon: const Icon(Icons.menu, color: Colors.white),
             onPressed: () => ZoomDrawer.of(context)?.toggle(),
           ),
         ),
         title: const Text(
-          'My Fees',
-          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black),
+          'Finance',
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
         ),
         elevation: 0,
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFF405BB2),
         centerTitle: true,
       ),
       body: RefreshIndicator(
@@ -71,6 +71,55 @@ class _StudentFeesScreenState extends State<StudentFeesScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF405BB2),
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: const Row(
+                        children: [
+                          DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: Color(0xFF6078C7),
+                              borderRadius: BorderRadius.all(
+                                Radius.circular(16),
+                              ),
+                            ),
+                            child: Padding(
+                              padding: EdgeInsets.all(14),
+                              child: Icon(
+                                Icons.account_balance_wallet,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                          SizedBox(width: 16),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Finance Information',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 19,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Text(
+                                'Manage your financial records',
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 28),
                     _buildSummaryCard(totalPending),
                     const SizedBox(height: 32),
                     const Text(
@@ -105,15 +154,12 @@ class _StudentFeesScreenState extends State<StudentFeesScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFF43F5E), Color(0xFFFB7185)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: Colors.white,
+        border: Border.all(color: const Color(0xFFE2E8F0)),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFF43F5E).withValues(alpha: 0.3),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -125,7 +171,7 @@ class _StudentFeesScreenState extends State<StudentFeesScreen> {
           const Text(
             'TOTAL PENDING',
             style: TextStyle(
-              color: Colors.white70,
+              color: Colors.black54,
               fontSize: 12,
               fontWeight: FontWeight.bold,
               letterSpacing: 1.2,
@@ -135,7 +181,7 @@ class _StudentFeesScreenState extends State<StudentFeesScreen> {
           Text(
             '\$${pending.toStringAsFixed(2)}',
             style: const TextStyle(
-              color: Colors.white,
+              color: Color(0xFF405BB2),
               fontSize: 36,
               fontWeight: FontWeight.w900,
             ),
@@ -144,13 +190,13 @@ class _StudentFeesScreenState extends State<StudentFeesScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.2),
+              color: const Color(0xFFF0F7EB),
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Text(
               'Academic Year 2025-26',
               style: TextStyle(
-                color: Colors.white,
+                color: Color(0xFF4C9A24),
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
               ),
@@ -189,7 +235,9 @@ class _StudentFeesScreenState extends State<StudentFeesScreen> {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: (isPaid ? Colors.green : Colors.orange).withValues(alpha: 0.1),
+              color: (isPaid ? Colors.green : Colors.orange).withValues(
+                alpha: 0.1,
+              ),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(

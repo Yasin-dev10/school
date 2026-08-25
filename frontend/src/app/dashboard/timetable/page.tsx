@@ -75,6 +75,15 @@ export default function TimetablePage() {
                     setCurrentUser(userObj);
                 }
 
+                if (userObj?.role === ROLES.STUDENT) {
+                    setLoading(true);
+                    const { data } = await api.get('/timetable/student/me');
+                    setPersonalSlots(data.data || []);
+                    setViewMode('personal');
+                    setLoading(false);
+                    return;
+                }
+
                 const [clsRes, subRes, tchRes] = await Promise.all([
                     api.get('/classes?limit=100'),
                     api.get('/subjects?limit=100'),
@@ -87,11 +96,6 @@ export default function TimetablePage() {
 
                 if (userObj?.role === ROLES.TEACHER) {
                     setViewMode('personal');
-                } else if (userObj?.role === ROLES.STUDENT && userObj.profile?.class) {
-                    const studentClass = clsRes.data.data.find((c: any) =>
-                        c.name === userObj.profile.class && c.section === userObj.profile.section
-                    );
-                    if (studentClass) setSelectedClassId(studentClass._id);
                 }
             } catch (err) {
                 console.error("Data fetch failed", err);
@@ -340,6 +344,22 @@ export default function TimetablePage() {
             Object.values(day).some((slot: any) => slot.subject !== '')
         );
     }, [schedule]);
+
+    if (currentUser?.role === ROLES.STUDENT) {
+        const today = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date());
+        const todaysSlots = personalSlots.filter((slot: any) => slot.day === today);
+        return (
+            <div className="mx-auto max-w-5xl space-y-6 pb-10">
+                <section className="rounded-3xl bg-[#405bb2] p-6 text-white shadow-lg shadow-indigo-900/10 sm:p-8">
+                    <div className="flex items-center gap-4"><div className="grid h-14 w-14 place-items-center rounded-2xl bg-white/15"><Calendar className="h-7 w-7" /></div><div><p className="text-sm text-indigo-100">Today</p><h1 className="text-2xl font-bold">My Schedule</h1><p className="text-sm text-indigo-100">{today} · {new Date().toLocaleDateString()}</p></div></div>
+                </section>
+                {loading ? <div className="grid min-h-64 place-items-center"><div className="h-9 w-9 animate-spin rounded-full border-4 border-indigo-100 border-t-[#405bb2]" /></div> : personalSlots.length === 0 ? <div className="rounded-3xl border border-slate-200 bg-white px-6 py-20 text-center shadow-sm dark:border-slate-700 dark:bg-slate-900"><div className="mx-auto grid h-20 w-20 place-items-center rounded-full bg-lime-50 text-lime-600 dark:bg-lime-950/30"><Calendar className="h-10 w-10" /></div><h2 className="mt-6 text-xl font-bold">No Schedule Available</h2><p className="mx-auto mt-2 max-w-md text-sm text-slate-500">Your class schedule is not available at the moment. Please try again later.</p></div> : <>
+                    <div><h2 className="mb-4 text-lg font-bold">Today&apos;s Classes ({todaysSlots.length})</h2><div className="grid gap-4 md:grid-cols-2">{todaysSlots.map((slot: any, index: number) => <div key={slot._id || index} className="rounded-3xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900"><div className="flex items-start gap-4"><div className="rounded-2xl bg-indigo-50 px-3 py-2 text-center text-sm font-bold text-[#405bb2] dark:bg-indigo-950/30">{slot.startTime}<br/><span className="text-xs font-medium text-slate-400">{slot.endTime}</span></div><div><h3 className="font-bold">{slot.subject?.name || 'Subject'}</h3><p className="mt-1 text-sm text-slate-500">Room {slot.room || 'TBA'}</p><p className="text-sm text-slate-500">{slot.teacher ? `${slot.teacher.firstName || ''} ${slot.teacher.lastName || ''}` : slot.teachers?.map((t: any) => `${t.firstName} ${t.lastName}`).join(', ') || 'Teacher TBA'}</p></div></div></div>)}</div></div>
+                    <div><h2 className="mb-4 text-lg font-bold">Weekly Schedule</h2><div className="space-y-4">{DAYS.map(day => { const slots = personalSlots.filter((slot: any) => slot.day === day); if (!slots.length) return null; return <section key={day} className="overflow-hidden rounded-3xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900"><h3 className="bg-indigo-50 px-5 py-4 font-bold text-[#405bb2] dark:bg-indigo-950/30">{day}</h3><div className="divide-y divide-slate-100 dark:divide-slate-800">{slots.map((slot: any, index: number) => <div key={slot._id || index} className="flex items-center justify-between gap-4 px-5 py-4"><div><p className="font-semibold">{slot.subject?.name || 'Subject'}</p><p className="text-xs text-slate-500">Room {slot.room || 'TBA'}</p></div><p className="text-sm font-bold text-[#405bb2]">{slot.startTime} – {slot.endTime}</p></div>)}</div></section>; })}</div></div>
+                </>}
+            </div>
+        );
+    }
 
     return (
         <div className="p-4 sm:p-8 max-w-[1600px] mx-auto space-y-8 min-h-screen">

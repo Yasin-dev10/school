@@ -1,5 +1,5 @@
 const { Server } = require("socket.io");
-const { verifyAccessToken, parseAllowedOrigins, normalizeRole } = require('../utils/security');
+const { verifyAccessToken, parseAllowedOrigins, isAllowedLocalhostOrigin, normalizeRole } = require('../utils/security');
 const { isRevoked } = require('../utils/tokenStore');
 const prisma = require('./prismaClient');
 const parseCookies = (header = '') => Object.fromEntries(header.split(';').map(v => v.trim()).filter(Boolean).map(v => {
@@ -15,9 +15,15 @@ const initSocket = (server) => {
         ? process.env.SOCKET_CORS_ORIGIN.split(',').map((s) => s.trim()).filter(Boolean)
         : allowedOrigins;
 
+    const isAllowedSocketOrigin = (origin, callback) => {
+        if (!origin || process.env.CORS_ALLOW_ALL === 'true') return callback(null, true);
+        if (isAllowedLocalhostOrigin(origin) || socketOrigin.includes(origin)) return callback(null, true);
+        return callback(new Error('CORS policy: socket origin not allowed'));
+    };
+
     io = new Server(server, {
         cors: {
-            origin: socketOrigin.length ? socketOrigin : false,
+            origin: isAllowedSocketOrigin,
             methods: ["GET", "POST"],
             credentials: true
         }

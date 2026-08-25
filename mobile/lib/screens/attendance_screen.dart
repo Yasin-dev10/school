@@ -40,6 +40,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
         leading: Builder(
           builder: (context) => IconButton(
@@ -47,7 +48,12 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             onPressed: () => ZoomDrawer.of(context)?.toggle(),
           ),
         ),
-        title: const Text('Mark Attendance'),
+        title: const Text(
+          'Mark Attendance',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        ),
+        backgroundColor: const Color(0xFF405BB2),
+        foregroundColor: Colors.white,
       ),
       body: Column(
         children: [
@@ -63,7 +69,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                     style: TextStyle(color: AppColors.mutedText(context)),
                   ),
                   isExpanded: true,
-                  dropdownColor: isDark ? AppColors.darkSurface : AppColors.white,
+                  dropdownColor: isDark
+                      ? AppColors.darkSurface
+                      : AppColors.white,
                   items: teacher.classes.map((c) {
                     return DropdownMenuItem<String>(
                       value: c['_id'].toString(),
@@ -164,14 +172,16 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             label: 'P',
             selected: status == 'present',
             color: AppColors.success,
-            onTap: () => setState(() => _attendanceStatus[studentId] = 'present'),
+            onTap: () =>
+                setState(() => _attendanceStatus[studentId] = 'present'),
           ),
           const SizedBox(width: 6),
           _StatusChip(
             label: 'A',
             selected: status == 'absent',
             color: AppColors.error,
-            onTap: () => setState(() => _attendanceStatus[studentId] = 'absent'),
+            onTap: () =>
+                setState(() => _attendanceStatus[studentId] = 'absent'),
           ),
           const SizedBox(width: 6),
           _StatusChip(
@@ -205,10 +215,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     final teacher = Provider.of<TeacherProvider>(context, listen: false);
     final records = teacher.students.map((s) {
       final id = s['_id'].toString();
-      return {
-        'studentId': id,
-        'status': _attendanceStatus[id] ?? 'present',
-      };
+      return {'studentId': id, 'status': _attendanceStatus[id] ?? 'present'};
     }).toList();
 
     final success = await teacher.markAttendanceBatch(

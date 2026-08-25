@@ -105,11 +105,11 @@ export default function NotificationsPage() {
 
     return (
         <div className="p-8 max-w-5xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4">
-            <div className="flex justify-between items-center">
+            <div className={`flex justify-between items-center ${!isAdmin ? 'rounded-3xl bg-[#405bb2] p-6 text-white shadow-lg shadow-indigo-900/10 sm:p-8' : ''}`}>
                 <div>
-                    <h1 className="text-3xl font-black text-white tracking-tight">Notification Center</h1>
-                    <p className="text-slate-500 mt-1">
-                        Manage announcements and multi-channel broadcasts.
+                    <h1 className={`font-black tracking-tight ${!isAdmin ? 'text-2xl text-white' : 'text-3xl text-white'}`}>Notification Center</h1>
+                    <p className={`mt-1 ${!isAdmin ? 'text-indigo-100' : 'text-slate-500'}`}>
+                        {!isAdmin ? 'School announcements and important updates.' : 'Manage announcements and multi-channel broadcasts.'}
                         {unreadCount > 0 && (
                             <span className="ml-2 px-2 py-1 bg-indigo-500 text-white text-xs font-bold rounded-full">
                                 {unreadCount} unread
@@ -134,8 +134,8 @@ export default function NotificationsPage() {
                     <div
                         key={n._id || n.id}
                         onClick={() => !n.isRead && markAsRead(n._id || n.id)}
-                        className={`glass-dark p-6 rounded-[2rem] border transition-all group ${n.isRead
-                                ? 'border-white/5 hover:border-white/10'
+                        className={`bg-white dark:bg-slate-900 p-6 rounded-3xl border shadow-sm transition-all group ${n.isRead
+                                ? 'border-slate-200 dark:border-slate-700 hover:border-indigo-300'
                                 : 'border-indigo-500/30 bg-indigo-500/5 hover:border-indigo-500/50 cursor-pointer'
                             }`}
                     >

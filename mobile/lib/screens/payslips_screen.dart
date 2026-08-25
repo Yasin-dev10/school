@@ -36,7 +36,12 @@ class _PayslipsScreenState extends State<PayslipsScreen> {
             onPressed: () => ZoomDrawer.of(context)?.toggle(),
           ),
         ),
-        title: const Text('My Payslips'),
+        title: const Text(
+          'My Payslips',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        ),
+        backgroundColor: const Color(0xFF405BB2),
+        foregroundColor: Colors.white,
       ),
       body: teacher.isLoading && teacher.payslips.isEmpty
           ? const AppLoader(message: 'Loading payslips…')
@@ -93,10 +98,7 @@ class _PayslipsScreenState extends State<PayslipsScreen> {
           ),
           subtitle: Text(
             'Processed on ${DateFormat('MMM dd, yyyy').format(dateRow)}',
-            style: TextStyle(
-              color: AppColors.mutedText(context),
-              fontSize: 12,
-            ),
+            style: TextStyle(color: AppColors.mutedText(context), fontSize: 12),
           ),
           trailing: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -146,12 +148,7 @@ class _PayslipsScreenState extends State<PayslipsScreen> {
               currency.format(slip['deductions'] ?? 0),
             ),
             const Divider(height: 20),
-            _row(
-              context,
-              'Net salary',
-              currency.format(netSalary),
-              bold: true,
-            ),
+            _row(context, 'Net salary', currency.format(netSalary), bold: true),
           ],
         ),
       ),

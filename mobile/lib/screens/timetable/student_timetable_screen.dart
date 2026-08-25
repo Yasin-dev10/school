@@ -54,6 +54,7 @@ class _StudentTimetableScreenState extends State<StudentTimetableScreen>
     }
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
         leading: Builder(
           builder: (context) => IconButton(
@@ -61,7 +62,12 @@ class _StudentTimetableScreenState extends State<StudentTimetableScreen>
             onPressed: () => ZoomDrawer.of(context)?.toggle(),
           ),
         ),
-        title: const Text('My Timetable'),
+        title: const Text(
+          'My Schedule',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        ),
+        backgroundColor: const Color(0xFF405BB2),
+        foregroundColor: Colors.white,
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
@@ -95,18 +101,99 @@ class _StudentTimetableScreenState extends State<StudentTimetableScreen>
 
   Widget _buildDayView(List<dynamic> schedule, {bool isToday = false}) {
     if (schedule.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.event_available, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            Text(
-              isToday ? 'No classes today' : 'No classes',
-              style: TextStyle(color: Colors.grey[600], fontSize: 16),
+      final now = DateTime.now();
+      return ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(22),
+            decoration: BoxDecoration(
+              color: const Color(0xFF405BB2),
+              borderRadius: BorderRadius.circular(24),
             ),
-          ],
-        ),
+            child: Row(
+              children: [
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Color(0xFF6078C7),
+                    borderRadius: BorderRadius.all(Radius.circular(15)),
+                  ),
+                  child: Padding(
+                    padding: EdgeInsets.all(13),
+                    child: Icon(Icons.calendar_month, color: Colors.white),
+                  ),
+                ),
+                const SizedBox(width: 15),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Today',
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
+                    ),
+                    Text(
+                      _getDayName(now.weekday),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      '${now.day}/${now.month}/${now.year}',
+                      style: const TextStyle(color: Colors.white70),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 100),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 42),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(26),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: .06),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFF0F7EB),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.calendar_month,
+                    size: 42,
+                    color: Color(0xFF4C9A24),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  isToday ? 'No Schedule Available' : 'No Classes Available',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Your schedule is not available at the moment.\nPlease try again later.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.black54, height: 1.5),
+                ),
+              ],
+            ),
+          ),
+        ],
       );
     }
     return ListView.builder(

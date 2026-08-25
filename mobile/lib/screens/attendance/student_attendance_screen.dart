@@ -59,31 +59,25 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
           ? const Color(0xFF121212)
           : const Color(0xFFFAFBFF),
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: const Color(0xFF405BB2),
         elevation: 0,
         leading: Builder(
           builder: (context) => IconButton(
-            icon: Icon(
-              Icons.menu,
-              color: isDark ? Colors.white : Colors.black87,
-            ),
+            icon: Icon(Icons.menu, color: Colors.white),
             onPressed: () => ZoomDrawer.of(context)?.toggle(),
           ),
         ),
         title: Text(
           'Attendance',
           style: GoogleFonts.outfit(
-            color: isDark ? Colors.white : Colors.black87,
+            color: Colors.white,
             fontWeight: FontWeight.bold,
           ),
         ),
         centerTitle: true,
         actions: [
           IconButton(
-            icon: Icon(
-              Icons.tune,
-              color: isDark ? Colors.white : Colors.black87,
-            ),
+            icon: Icon(Icons.tune, color: Colors.white),
             onPressed: () {},
           ),
         ],
@@ -96,6 +90,53 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF405BB2),
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: const Row(
+                      children: [
+                        DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: Color(0xFF6078C7),
+                            borderRadius: BorderRadius.all(Radius.circular(16)),
+                          ),
+                          child: Padding(
+                            padding: EdgeInsets.all(14),
+                            child: Icon(
+                              Icons.calendar_month,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        SizedBox(width: 16),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Attendance Summary',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 19,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              'Review your attendance records',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
                   Text(
                     '${attendanceRate.toInt()}%',
                     style: GoogleFonts.outfit(
@@ -136,6 +177,33 @@ class _StudentAttendanceScreenState extends State<StudentAttendanceScreen> {
                         const Color(0xFFEF6C00),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 22),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF405BB2),
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: Column(
+                      children: [
+                        const Icon(Icons.bar_chart, color: Colors.white),
+                        const SizedBox(height: 5),
+                        Text(
+                          '${attendanceRate.toStringAsFixed(0)}%',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const Text(
+                          'Attendance Rate',
+                          style: TextStyle(color: Colors.white70),
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 24),
                   SingleChildScrollView(

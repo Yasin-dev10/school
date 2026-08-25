@@ -134,10 +134,10 @@ export default function AssignmentsPage() {
 
     return (
         <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-8">
-            <div className="flex justify-between items-center">
+            <div className={`flex justify-between items-center ${isStudent ? 'rounded-3xl bg-[#405bb2] p-6 text-white shadow-lg shadow-indigo-900/10 sm:p-8' : ''}`}>
                 <div>
-                    <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Assignments</h1>
-                    <p className="text-slate-500 mt-1">Manage homework and projects.</p>
+                    <h1 className={`font-black tracking-tight ${isStudent ? 'text-2xl text-white' : 'text-3xl text-slate-900 dark:text-white'}`}>Assignments</h1>
+                    <p className={`mt-1 ${isStudent ? 'text-indigo-100' : 'text-slate-500'}`}>{isStudent ? 'View due work and submit your assignments.' : 'Manage homework and projects.'}</p>
                 </div>
                 {view === 'list' && (
                     <PermissionGuard resource={RESOURCES.ASSIGNMENTS} action={ACTIONS.CREATE}>

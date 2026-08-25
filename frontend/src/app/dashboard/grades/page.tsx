@@ -5,6 +5,7 @@ import { toast } from 'react-hot-toast';
 import { Save, Search, AlertCircle, FileText, CheckCircle2, TrendingUp, Download, FileBadge } from 'lucide-react';
 import html2canvas from 'html2canvas-pro';
 import jsPDF from 'jspdf';
+import { StudentResultsView } from '@/components/StudentResultsView';
 
 // Fallback only; live grading is read from the active backend grade system.
 const DEFAULT_GRADE_SYSTEM = [
@@ -314,6 +315,8 @@ export default function GradesPage() {
 
     if (user?.role === 'student' || (user?.role === 'parent' && selectedChild)) {
         const activeChild = user?.role === 'parent' ? children.find(c => c._id === selectedChild) : null;
+        return <StudentResultsView grades={studentGrades} student={activeChild || user} loading={loading} onDownload={handleDownloadTranscript} students={children} selectedChild={selectedChild} onChildChange={setSelectedChild} />;
+        /* Legacy transcript layout retained below temporarily for reference. */
         return (
             <div className="p-8 max-w-7xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom-4">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">

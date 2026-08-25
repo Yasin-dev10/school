@@ -147,25 +147,7 @@ export default function StudentFinancePage() {
     return (
         <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-700">
             {/* Header */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                    <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-3">
-                        <div className="p-3 bg-indigo-600 rounded-2xl shadow-lg shadow-indigo-500/20 text-white">
-                            <DollarSign className="w-6 h-6" />
-                        </div>
-                        {user?.role === 'parent' ? 'Family Billing' : 'My Financials'}
-                    </h1>
-                    <p className="text-slate-500 dark:text-slate-400 mt-1 font-medium">
-                        {user?.role === 'parent' ? 'Manage your children\'s tuition fees and history.' : 'Manage your tuition fees and payment history.'}
-                    </p>
-                </div>
-                <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
-                    <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                    <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">
-                        Status: Clear
-                    </span>
-                </div>
-            </div>
+            <section className="rounded-3xl bg-[#405bb2] p-6 text-white shadow-lg shadow-indigo-900/10 sm:p-8"><div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center"><div className="flex items-center gap-4"><div className="grid h-14 w-14 place-items-center rounded-2xl bg-white/15"><DollarSign className="h-7 w-7" /></div><div><h1 className="text-2xl font-bold">{user?.role === 'parent' ? 'Family Finance' : 'Finance Information'}</h1><p className="text-sm text-indigo-100">Manage tuition, balances and payment records</p></div></div><div className="inline-flex items-center gap-2 self-start rounded-full bg-white/15 px-4 py-2 text-xs font-bold"><span className="h-2 w-2 rounded-full bg-emerald-300" /> Account active</div></div></section>
 
             {user?.role === 'parent' && !selectedChild && (
                 <div className="py-12 space-y-8 animate-in fade-in slide-in-from-bottom-8">
@@ -223,7 +205,7 @@ export default function StudentFinancePage() {
 
                     {/* Summary Cards */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                        <div className="glass p-8 rounded-[2.5rem] border border-slate-200 dark:border-white/5 relative overflow-hidden group">
+                        <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl border border-slate-200 dark:border-slate-700 relative overflow-hidden group shadow-sm">
                             <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
                                 <DollarSign className="w-24 h-24" />
                             </div>
@@ -237,7 +219,7 @@ export default function StudentFinancePage() {
                             </div>
                         </div>
 
-                        <div className="glass p-8 rounded-[2.5rem] border border-slate-200 dark:border-white/5 relative overflow-hidden group">
+                        <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl border border-slate-200 dark:border-slate-700 relative overflow-hidden group shadow-sm">
                             <div className="absolute top-0 right-0 p-8 opacity-5 group-hover:opacity-10 transition-opacity">
                                 <CheckCircle2 className="w-24 h-24 text-emerald-500" />
                             </div>
@@ -254,7 +236,7 @@ export default function StudentFinancePage() {
                             </div>
                         </div>
 
-                        <div className="glass-dark bg-indigo-600 p-8 rounded-[2.5rem] border border-white/5 relative overflow-hidden group shadow-2xl shadow-indigo-600/20">
+                        <div className="bg-[#405bb2] p-8 rounded-3xl border border-white/5 relative overflow-hidden group shadow-lg shadow-indigo-900/10">
                             <div className="absolute top-0 right-0 p-4 opacity-20">
                                 <Clock className="w-20 h-20 text-white" />
                             </div>

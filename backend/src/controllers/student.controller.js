@@ -287,6 +287,11 @@ exports.getStudentById = async (req, res) => {
         if (!id || id === 'undefined' || id === 'null')
             return res.status(400).json({ success: false, message: 'Invalid Student ID' });
 
+        // Students may open their own portal profile, never another student's.
+        if (req.user.role === 'student' && req.user.id !== id) {
+            return res.status(403).json({ success: false, message: 'You can only view your own student profile' });
+        }
+
         if (req.user.role === 'teacher') {
             const allowed = await canTeacherAccessStudent(req.user.id, id, req.user.tenantId);
             if (!allowed) return res.status(403).json({ success: false, message: 'You are not assigned to this student' });

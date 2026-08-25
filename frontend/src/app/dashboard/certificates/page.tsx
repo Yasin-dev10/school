@@ -314,6 +314,10 @@ export default function CertificatesPage() {
 
     const isStaff = user && ['school-admin', 'teacher'].includes(user.role);
 
+    if (user?.role === 'student') {
+        return <div className="mx-auto max-w-5xl space-y-6 pb-10"><section className="rounded-3xl bg-[#405bb2] p-6 text-white shadow-lg shadow-indigo-900/10 sm:p-8"><h1 className="text-2xl font-bold">My Certificates</h1><p className="mt-1 text-sm text-indigo-100">View and download certificates issued by your school.</p></section>{loading ? <div className="grid min-h-64 place-items-center"><div className="h-9 w-9 animate-spin rounded-full border-4 border-indigo-100 border-t-[#405bb2]" /></div> : certificates.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-300 bg-white py-20 text-center dark:border-slate-700 dark:bg-slate-900"><div className="text-5xl">🏅</div><h2 className="mt-5 text-xl font-bold">No Certificates Yet</h2><p className="mt-2 text-sm text-slate-500">Certificates issued to you will appear here.</p></div> : <div className="grid gap-5 sm:grid-cols-2">{certificates.map(cert => <article key={cert._id || cert.id} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900"><div className="flex items-start gap-4"><div className="grid h-14 w-14 place-items-center rounded-2xl bg-amber-50 text-2xl dark:bg-amber-950/30">🏆</div><div className="min-w-0 flex-1"><h2 className="font-bold">{cert.title || cert.certificateType}</h2><p className="mt-1 text-sm text-slate-500">{cert.description || 'Official school certificate'}</p><p className="mt-3 text-xs text-slate-400">Issued {new Date(cert.issueDate || cert.createdAt).toLocaleDateString()}</p></div></div><button disabled={downloading !== null} onClick={() => downloadPDF(cert)} className="mt-5 w-full rounded-xl bg-[#405bb2] px-4 py-3 text-sm font-bold text-white disabled:opacity-50">{downloading ? 'Preparing PDF…' : 'Download Certificate'}</button></article>)}</div>}</div>;
+    }
+
     const selectedStudent = students.find(s => s._id === form.studentId);
 
     const filteredTemplates = TEMPLATES.filter(t =>

@@ -25,10 +25,12 @@ export default function MaterialsPage() {
 
     const fetchData = async () => {
         try {
+            const role = JSON.parse(localStorage.getItem('user') || '{}').role;
+            const canUpload = ['teacher', 'school-admin', 'super-admin'].includes(role);
             const [matRes, classRes, subRes] = await Promise.all([
                 api.get('/materials'),
-                api.get('/classes'),
-                api.get('/subjects')
+                canUpload ? api.get('/classes') : Promise.resolve({ data: { data: [] } }),
+                canUpload ? api.get('/subjects') : Promise.resolve({ data: { data: [] } })
             ]);
             setMaterials(matRes.data.data);
             setClasses(classRes.data.data);
@@ -54,10 +56,10 @@ export default function MaterialsPage() {
 
     return (
         <div className="p-8 max-w-7xl mx-auto space-y-8">
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center rounded-3xl bg-[#405bb2] p-6 text-white shadow-lg shadow-indigo-900/10 sm:p-8">
                 <div>
-                    <h1 className="text-3xl font-black text-white tracking-tight">Learning Materials</h1>
-                    <p className="text-slate-500 mt-1">Manage and share resources with your students.</p>
+                    <h1 className="text-2xl font-bold tracking-tight">Learning Materials</h1>
+                    <p className="text-indigo-100 mt-1">Notes, videos and resources for your classes.</p>
                 </div>
                 <PermissionGuard resource={RESOURCES.MATERIALS} action={ACTIONS.CREATE}>
                     <button
@@ -142,7 +144,7 @@ export default function MaterialsPage() {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {materials.map((m: any) => (
-                        <div key={m._id} className="glass-dark border border-white/5 p-6 rounded-[2rem] hover:border-indigo-500/30 transition-all group">
+                        <div key={m._id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-6 rounded-3xl hover:border-indigo-500/40 transition-all group shadow-sm">
                             <div className="flex items-start justify-between mb-4">
                                 <div className="p-3 rounded-2xl bg-indigo-500/10 text-indigo-400">
                                     {m.type === 'video' ? '🎬' : m.type === 'file' ? '📁' : m.type === 'link' ? '🔗' : '📝'}
@@ -151,7 +153,7 @@ export default function MaterialsPage() {
                                     {m.type}
                                 </span>
                             </div>
-                            <h3 className="text-lg font-bold text-white group-hover:text-indigo-400 transition mb-2">{m.title}</h3>
+                            <h3 className="text-lg font-bold text-slate-900 dark:text-white group-hover:text-indigo-500 transition mb-2">{m.title}</h3>
                             <p className="text-sm text-slate-500 line-clamp-2 mb-4">{m.description}</p>
                             <div className="flex items-center gap-3 mt-auto">
                                 <div className="text-[10px] font-bold text-slate-400 bg-white/5 px-2 py-1 rounded">

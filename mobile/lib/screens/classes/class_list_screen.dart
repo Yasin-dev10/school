@@ -29,9 +29,9 @@ class _ClassListScreenState extends State<ClassListScreen> {
           'My Classes',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: Colors.transparent,
+        backgroundColor: const Color(0xFF405BB2),
         elevation: 0,
-        foregroundColor: Colors.black, // Adjust for theme if needed
+        foregroundColor: Colors.white,
       ),
       body: teacherProvider.isLoading
           ? const Center(child: CircularProgressIndicator())

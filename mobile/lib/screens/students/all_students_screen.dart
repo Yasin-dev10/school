@@ -34,7 +34,8 @@ class _AllStudentsScreenState extends State<AllStudentsScreen> {
           'All Students',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: Colors.transparent,
+        backgroundColor: const Color(0xFF405BB2),
+        foregroundColor: Colors.white,
         elevation: 0,
         actions: [
           PopupMenuButton<String>(

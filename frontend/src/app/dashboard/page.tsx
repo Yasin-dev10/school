@@ -136,17 +136,19 @@ export default function DashboardPage() {
 
     if (isTeacher) {
         return (
-            <div className="max-w-5xl mx-auto space-y-5">
-                <div>
-                    <h1 className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">{t('Faculty dashboard')}</h1>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                        {t('Welcome back')}, <span className="font-semibold text-indigo-500">{user?.firstName}</span>
+            <div className="max-w-6xl mx-auto space-y-6">
+                <div className="rounded-3xl bg-[#405bb2] p-6 text-white shadow-lg shadow-indigo-900/10 sm:p-8">
+                    <p className="text-sm text-indigo-100">{t('Faculty Portal')}</p>
+                    <h1 className="mt-1 text-3xl font-bold tracking-tight">{t('Welcome back')}, {user?.firstName}</h1>
+                    <p className="text-sm text-indigo-100 mt-2">
+                        Manage your classes, lessons, attendance and assessments.
                     </p>
                 </div>
+                <div><h2 className="text-lg font-bold text-slate-900 dark:text-white">Teaching Services</h2><p className="text-sm text-slate-500">Quick access to your daily work.</p></div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                     {teacherLinks.map((s) => (
                         <Link key={s.href} href={s.href}
-                            className="surface-card p-4 flex flex-col items-center gap-2 hover:border-indigo-300 dark:hover:border-indigo-500/40 transition group">
+                            className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900 flex flex-col items-center gap-3 hover:border-indigo-300 dark:hover:border-indigo-500/40 transition group">
                             <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${s.color} group-hover:scale-105 transition-transform`}>
                                 {s.icon}
                             </div>

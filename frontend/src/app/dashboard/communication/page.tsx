@@ -138,8 +138,8 @@ export default function CommunicationPage() {
 
   return (
     <div className="max-w-7xl mx-auto h-[calc(100vh-7.5rem)] flex flex-col gap-4">
-      <header className="flex items-center justify-between gap-3">
-        <div><h1 className="text-2xl font-bold text-slate-900 dark:text-white">Messages</h1><p className="text-sm text-slate-500">Private and group conversations for your school community.</p></div>
+      <header className={`flex items-center justify-between gap-3 ${me?.role === 'student' ? 'rounded-3xl bg-[#405bb2] p-6 text-white shadow-lg shadow-indigo-900/10' : ''}`}>
+        <div><h1 className={`text-2xl font-bold ${me?.role === 'student' ? 'text-white' : 'text-slate-900 dark:text-white'}`}>Messages</h1><p className={`text-sm ${me?.role === 'student' ? 'text-indigo-100' : 'text-slate-500'}`}>Private and group conversations for your school community.</p></div>
         <div className="flex gap-2">
           {isAdmin && <button onClick={tab === 'reports' ? () => setTab('chat') : loadReports} className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center gap-2 text-sm"><ShieldAlert className="w-4 h-4" />{tab === 'reports' ? 'Chats' : 'Moderation'}</button>}
           {canStartChat && <button onClick={() => setShowNew(true)} className="px-4 py-2 rounded-xl bg-indigo-600 text-white flex items-center gap-2 text-sm font-semibold"><Plus className="w-4 h-4" /> New chat</button>}

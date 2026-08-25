@@ -38,6 +38,9 @@ services:
         value: https://www.dugsi.online
       - key: CORS_ORIGINS
         value: https://www.dugsi.online,https://dugsi.online,https://school-ta8j.onrender.com
+      # Flutter web uses a random localhost port during `flutter run`.
+      - key: CORS_ALLOW_LOCALHOST
+        value: true
       - key: SOCKET_CORS_ORIGIN
         value: https://www.dugsi.online,https://dugsi.online,https://school-ta8j.onrender.com
       - key: COOKIE_SAME_SITE

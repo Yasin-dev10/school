@@ -44,6 +44,7 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen>
     }
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
         leading: Builder(
           builder: (context) => IconButton(
@@ -51,7 +52,12 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen>
             onPressed: () => ZoomDrawer.of(context)?.toggle(),
           ),
         ),
-        title: const Text('Faculty Timetable'),
+        title: const Text(
+          'Faculty Timetable',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        ),
+        backgroundColor: const Color(0xFF405BB2),
+        foregroundColor: Colors.white,
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
@@ -122,16 +128,50 @@ class _TeacherTimetableScreenState extends State<TeacherTimetableScreen>
   Widget _buildDayView(List<dynamic> schedule, {bool isToday = false}) {
     if (schedule.isEmpty) {
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.event_available, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            Text(
-              isToday ? 'No classes today' : 'No classes',
-              style: TextStyle(color: Colors.grey[600], fontSize: 16),
-            ),
-          ],
+        child: Container(
+          margin: const EdgeInsets.all(24),
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 44),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(26),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: .06),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF0F7EB),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.event_available,
+                  size: 42,
+                  color: Color(0xFF4C9A24),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                isToday ? 'No Classes Today' : 'No Classes Available',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Your teaching schedule is clear.',
+                style: TextStyle(color: Colors.black54),
+              ),
+            ],
+          ),
         ),
       );
     }

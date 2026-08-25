@@ -142,31 +142,31 @@ export default function ProfilePage() {
     return (
         <div className="p-8 max-w-6xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom-4">
             {/* Profile Header */}
-            <div className="flex flex-col md:flex-row items-center md:items-start gap-8">
+            <div className="flex flex-col md:flex-row items-center gap-8 rounded-3xl bg-[#405bb2] p-7 text-white shadow-lg shadow-indigo-900/10 sm:p-9">
                 <div className="relative group">
-                    <div className="w-32 h-32 rounded-full bg-indigo-600 flex items-center justify-center text-5xl font-black text-white shadow-2xl shadow-indigo-500/40 border-4 border-white dark:border-slate-800">
+                    <div className="w-32 h-32 rounded-full bg-white/15 flex items-center justify-center text-5xl font-black text-white shadow-xl border-4 border-white">
                         {user?.firstName?.charAt(0)}{user?.lastName?.charAt(0)}
                     </div>
-                    <button className="absolute bottom-1 right-1 w-10 h-10 bg-indigo-500 text-white rounded-full flex items-center justify-center border-4 border-white dark:border-slate-800 hover:scale-110 transition-transform shadow-lg">
+                    <button className="absolute bottom-1 right-1 w-10 h-10 bg-white text-[#405bb2] rounded-full flex items-center justify-center border-4 border-[#405bb2] hover:scale-110 transition-transform shadow-lg">
                         📷
                     </button>
                 </div>
                 <div className="text-center md:text-left space-y-2">
                     <div className="flex flex-col md:flex-row items-center gap-4">
-                        <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight">
+                        <h1 className="text-4xl font-black text-white tracking-tight">
                             {user?.firstName} {user?.lastName}
                         </h1>
-                        <span className="px-4 py-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-bold rounded-full border border-emerald-500/20 uppercase tracking-wider">
+                        <span className="px-4 py-1.5 bg-white/15 text-white text-xs font-bold rounded-full border border-white/20 uppercase tracking-wider">
                             Active Student
                         </span>
                     </div>
-                    <p className="text-slate-500 dark:text-slate-400 font-medium">
+                    <p className="text-indigo-100 font-medium">
                         ID: {user?.profile?.admissionNo || user?.profile?.rollNo || '20210045'}
                     </p>
                     {isStudent && (
                         <button
                             onClick={() => setViewingID(!viewingID)}
-                            className="mt-2 px-4 py-2 bg-indigo-500/10 text-indigo-500 rounded-lg text-xs font-black uppercase tracking-widest border border-indigo-500/20 hover:bg-indigo-500 hover:text-white transition-all flex items-center gap-2"
+                            className="mt-2 px-4 py-2 bg-white text-[#405bb2] rounded-xl text-xs font-black uppercase tracking-widest hover:bg-indigo-50 transition-all flex items-center gap-2"
                         >
                             🪪 {viewingID ? 'Hide ID Card' : 'View ID Card'}
                         </button>

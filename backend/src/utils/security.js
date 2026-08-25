@@ -69,6 +69,19 @@ const parseAllowedOrigins = () => {
     return list;
 };
 
+const isAllowedLocalhostOrigin = (origin) => {
+    // Flutter Web uses a random localhost port during development. Keep local
+    // development enabled by default; production can explicitly disable it.
+    if (process.env.CORS_ALLOW_LOCALHOST === 'false') return false;
+    try {
+        const url = new URL(origin);
+        return ['http:', 'https:'].includes(url.protocol)
+            && ['localhost', '127.0.0.1', '::1'].includes(url.hostname);
+    } catch (_) {
+        return false;
+    }
+};
+
 module.exports = {
     getJwtSecret,
     normalizeRole,
@@ -81,5 +94,6 @@ module.exports = {
     csrfCookieOptions,
     redactSensitive,
     parseAllowedOrigins,
+    isAllowedLocalhostOrigin,
     cryptoRandomToken: (bytes = 32) => crypto.randomBytes(bytes).toString('hex'),
 };

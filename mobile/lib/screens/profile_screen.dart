@@ -49,17 +49,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
         title: Text(
-          isStudent ? 'Student Profile' : 'Profile & Settings',
-          style: const TextStyle(fontWeight: FontWeight.bold),
+          isStudent ? 'Profile' : 'Profile & Settings',
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
         ),
         elevation: 0,
-        backgroundColor: Colors.transparent,
+        backgroundColor: const Color(0xFF405BB2),
+        foregroundColor: Colors.white,
         actions: [
           IconButton(
-            icon: Icon(
-              Icons.settings,
-              color: Theme.of(context).colorScheme.primary,
-            ),
+            icon: Icon(Icons.settings, color: Colors.white),
             onPressed: () {
               Navigator.push(
                 context,
@@ -111,74 +112,78 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildProfileHeader(BuildContext context, dynamic user) {
-    final primary = Theme.of(context).colorScheme.primary;
-    return Column(
-      children: [
-        Center(
-          child: Container(
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30),
+      decoration: BoxDecoration(
+        color: const Color(0xFF405BB2),
+        borderRadius: BorderRadius.circular(26),
+      ),
+      child: Column(
+        children: [
+          Center(
+            child: Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 4),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.12),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: CircleAvatar(
+                radius: 60,
+                backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                child: Text(
+                  '${user?['firstName']?[0] ?? ''}${user?['lastName']?[0] ?? ''}',
+                  style: TextStyle(
+                    fontSize: 40,
+                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            '${user?['firstName'] ?? 'User'} ${user?['lastName'] ?? ''}',
+            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'ID: ${user?['profile']?['admissionNo'] ?? user?['profile']?['rollNo'] ?? user?['email'] ?? 'N/A'}',
+            style: TextStyle(
+              color: Colors.white70,
+              fontWeight: FontWeight.w600,
+              fontSize: 15,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: primary.withValues(alpha: 0.2),
-                width: 4,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: primary.withValues(alpha: 0.15),
-                  blurRadius: 24,
-                  offset: const Offset(0, 8),
-                ),
-              ],
+              color: Colors.white.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.white24),
             ),
-            child: CircleAvatar(
-              radius: 60,
-              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-              child: Text(
-                '${user?['firstName']?[0] ?? ''}${user?['lastName']?[0] ?? ''}',
-                style: TextStyle(
-                  fontSize: 40,
-                  color: Theme.of(context).colorScheme.onPrimaryContainer,
-                  fontWeight: FontWeight.w800,
-                ),
+            child: Text(
+              _roleBadge(user),
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
               ),
             ),
           ),
-        ),
-        const SizedBox(height: 16),
-        Text(
-          '${user?['firstName'] ?? 'User'} ${user?['lastName'] ?? ''}',
-          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-            fontWeight: FontWeight.w800,
-            color: Theme.of(context).colorScheme.onSurface,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'ID: ${user?['profile']?['admissionNo'] ?? user?['profile']?['rollNo'] ?? user?['email'] ?? 'N/A'}',
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
-            fontWeight: FontWeight.w600,
-            fontSize: 15,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          decoration: BoxDecoration(
-            color: Colors.green.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.green.withValues(alpha: 0.2)),
-          ),
-          child: Text(
-            _roleBadge(user),
-            style: const TextStyle(
-              color: Colors.green,
-              fontWeight: FontWeight.bold,
-              fontSize: 13,
-            ),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 

@@ -644,12 +644,12 @@ export default function ExamsPage() {
 
     return (
         <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-6 sm:space-y-8">
-            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
+            <div className={`flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 ${!isAdmin ? 'rounded-3xl bg-[#405bb2] p-6 text-white shadow-lg shadow-indigo-900/10 sm:p-8' : ''}`}>
                 <div>
                     <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
                         {isAdmin ? 'Examinations & Grading' : 'My Academic Results'}
                     </h1>
-                    <p className="text-sm text-slate-500 mt-1">
+                    <p className={`text-sm mt-1 ${!isAdmin ? 'text-indigo-100' : 'text-slate-500'}`}>
                         {isAdmin ? 'Manage terms, board schedules, and academic performance.' : 'View your performance history and exam schedules.'}
                     </p>
                 </div>
@@ -665,7 +665,7 @@ export default function ExamsPage() {
                     </div>
                 )}
                 {!isAdmin && ['student', 'parent'].includes(user?.role) && (
-                    <div className="flex bg-slate-900/50 p-1 rounded-2xl border border-white/5 shadow-inner w-full lg:w-auto">
+                    <div className="flex bg-white/15 p-1 rounded-2xl border border-white/15 shadow-inner w-full lg:w-auto">
                         <button onClick={() => setView('my-results')} className={`flex-1 lg:flex-none px-6 py-2 rounded-xl text-xs font-bold transition-all ${view === 'my-results' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Results</button>
                         <button onClick={() => setView('schedule')} className={`flex-1 lg:flex-none px-6 py-2 rounded-xl text-xs font-bold transition-all ${view === 'schedule' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Jadwalka</button>
                         {user?.role === 'student' && <button onClick={() => setView('complaints')} className={`flex-1 lg:flex-none px-6 py-2 rounded-xl text-xs font-bold transition-all ${view === 'complaints' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Complaints</button>}
