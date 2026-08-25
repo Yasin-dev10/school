@@ -73,17 +73,20 @@ class AuthProvider with ChangeNotifier {
       final response = await _apiService.post('/auth/login', {
         'identifier': identifier.trim(),
         'password': password,
+        'clientType': 'mobile',
       });
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body);
 
         // Handle different response structures
-        final token = data['token'] ?? data['data']?['token'];
+        final token = data['accessToken'] ?? data['data']?['accessToken'];
+        final refreshToken = data['refreshToken'] ?? data['data']?['refreshToken'];
         final userData = data['user'] ?? data['data']?['user'] ?? data['data'];
 
         if (token != null) {
           await _apiService.saveToken(token);
+          if (refreshToken != null) await _apiService.saveRefreshToken(refreshToken);
           _user = userData;
 
           // Initialize Socket
@@ -199,7 +202,10 @@ class AuthProvider with ChangeNotifier {
 
     try {
       // Call logout endpoint
-      await _apiService.post('/auth/logout', {});
+      final refreshToken = await _apiService.getRefreshToken();
+      await _apiService.post('/auth/logout', {
+        if (refreshToken != null) 'refreshToken': refreshToken,
+      });
     } catch (e) {
       debugPrint('Logout API error: $e');
       // Continue even if API call fails

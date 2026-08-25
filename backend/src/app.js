@@ -4,6 +4,7 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const cookieParser = require('./middlewares/cookieParser');
 const rateLimit = require('./middlewares/rateLimit');
+const csrfProtection = require('./middlewares/csrf.middleware');
 
 // Route Imports
 const tenantRoutes = require('./routes/tenant.routes');
@@ -71,7 +72,7 @@ const corsOptions = {
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token'],
     optionsSuccessStatus: 200,
 };
 
@@ -83,8 +84,8 @@ app.options('*', cors(corsOptions));
 app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
 
 app.use(express.json({ limit: '1mb' }));
-app.use('/uploads', express.static(path.join(process.cwd(), 'uploads'), { index: false, dotfiles: 'deny', maxAge: '1h' }));
 app.use(cookieParser());
+app.use(csrfProtection);
 app.use(morgan('dev'));
 
 const loginLimiter = rateLimit({
@@ -93,7 +94,11 @@ const loginLimiter = rateLimit({
     message: { message: 'Too many login attempts, please try again later' },
 });
 
-app.use(['/api/auth/login', '/api/auth/forgot-password', '/api/auth/reset-password'], loginLimiter);
+app.use(['/api/auth/login', '/api/auth/refresh', '/api/auth/forgot-password', '/api/auth/reset-password'], loginLimiter);
+app.use('/uploads', require('./middlewares/auth.middleware').protect, express.static(path.join(process.cwd(), 'uploads'), {
+    index: false, dotfiles: 'deny', maxAge: '1h', fallthrough: false,
+    setHeaders: (res) => res.setHeader('X-Content-Type-Options', 'nosniff')
+}));
 
 // Routes
 app.use('/api/tenants', tenantRoutes);

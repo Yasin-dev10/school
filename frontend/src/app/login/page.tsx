@@ -29,7 +29,6 @@ export default function LoginPage() {
                 password,
             });
 
-            localStorage.setItem('token', data.token);
             localStorage.setItem('user', JSON.stringify(data.user));
 
             if (data.user.role === 'super-admin') {

@@ -42,7 +42,7 @@ async function main() {
             create: {
                 tenantId, firstName: firstNames[i], lastName: lastNames[i],
                 email: `demo.teacher${i + 1}@school.test`, username: `demo.teacher${i + 1}`,
-                password, passwordPlain: '12345678', role: 'teacher', status: 'active',
+                password, role: 'teacher', status: 'active',
                 phone: `+25261000${String(i + 1).padStart(3, '0')}`, designation: 'Subject Teacher',
                 qualification: i % 2 ? 'Bachelor of Education' : 'Master of Education', salary: String(650 + i * 50)
             }
@@ -97,7 +97,7 @@ async function main() {
             create: {
                 tenantId, firstName: firstNames[i % firstNames.length], lastName: lastNames[(i * 3) % lastNames.length],
                 email: `demo.student${n}@school.test`, username: `demo.student${n}`,
-                password, passwordPlain: '12345678', role: 'student', status: 'active',
+                password, role: 'student', status: 'active',
                 admissionNo: `DEM-${String(n).padStart(4, '0')}`, studentId: `STD-DEM-${String(n).padStart(4, '0')}`,
                 rollNo: String(Math.floor(i / classes.length) + 1).padStart(2, '0'),
                 profileClass: classroom.name, profileSection: classroom.section,

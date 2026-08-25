@@ -3,6 +3,11 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { getApiUrl } from '@/app/utils/api';
+
+const secureFetch = (input: RequestInfo | URL, init: RequestInit = {}) => {
+    const csrf = document.cookie.split('; ').find(v => v.startsWith('csrfToken='))?.split('=').slice(1).join('=');
+    return fetch(input, { ...init, credentials: 'include', headers: { ...(init.headers || {}), ...(csrf ? { 'X-CSRF-Token': decodeURIComponent(csrf) } : {}) } });
+};
 import {
     Search, MessageSquare, Loader2, X,
     CheckCircle2, Trash2, Reply, Filter
@@ -43,11 +48,11 @@ export default function ContactMessagesPage() {
 
     useEffect(() => { fetchStats(); fetchMessages(); }, [filterStatus]);
 
-    const authHeaders = () => ({ 'Authorization': `Bearer ${localStorage.getItem('token')}` });
+    const authHeaders = () => ({});
 
     const fetchStats = async () => {
         try {
-            const res = await fetch(getApiUrl('/contact-messages/stats'), { headers: authHeaders() });
+            const res = await secureFetch(getApiUrl('/contact-messages/stats'), { headers: authHeaders() });
             if (res.ok) setStats(await res.json());
         } catch {}
     };
@@ -58,7 +63,7 @@ export default function ContactMessagesPage() {
             const url = filterStatus === 'all'
                 ? getApiUrl('/contact-messages')
                 : getApiUrl(`/contact-messages?status=${filterStatus}`);
-            const res = await fetch(url, { headers: authHeaders() });
+            const res = await secureFetch(url, { headers: authHeaders() });
             if (res.ok) {
                 const data = await res.json();
                 setMessages(data.messages || []);
@@ -75,7 +80,7 @@ export default function ContactMessagesPage() {
 
     const handleUpdateStatus = async (id: string, newStatus: string) => {
         try {
-            const res = await fetch(getApiUrl(`/contact-messages/${id}`), {
+            const res = await secureFetch(getApiUrl(`/contact-messages/${id}`), {
                 method: 'PATCH',
                 headers: { ...authHeaders(), 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status: newStatus }),
@@ -88,7 +93,7 @@ export default function ContactMessagesPage() {
         if (!selectedMessage || !replyText.trim()) return;
         try {
             setIsSubmitting(true);
-            const res = await fetch(getApiUrl(`/contact-messages/${selectedMessage.id}`), {
+            const res = await secureFetch(getApiUrl(`/contact-messages/${selectedMessage.id}`), {
                 method: 'PATCH',
                 headers: { ...authHeaders(), 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status: 'replied', reply: replyText }),
@@ -100,7 +105,7 @@ export default function ContactMessagesPage() {
     const handleDelete = async (id: string) => {
         if (!confirm('Delete this message?')) return;
         try {
-            const res = await fetch(getApiUrl(`/contact-messages/${id}`), { method: 'DELETE', headers: authHeaders() });
+            const res = await secureFetch(getApiUrl(`/contact-messages/${id}`), { method: 'DELETE', headers: authHeaders() });
             if (res.ok) { fetchMessages(); fetchStats(); if (selectedMessage?.id === id) setSelectedMessage(null); }
         } catch {}
     };

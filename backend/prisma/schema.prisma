@@ -380,59 +380,59 @@ model Tenant {
   updatedAt DateTime @updatedAt
 
   // Relations
-  users           User[]
-  classes         Class[]
-  subjects        Subject[]
-  exams           Exam[]
-  examSchedules   ExamSchedule[]
-  attendances     Attendance[]
-  timetables      Timetable[]
-  assignments     Assignment[]
-  materials       Material[]
-  notifications   Notification[]
-  salaries        Salary[]
-  tasks           Task[]
-  invoices        Invoice[]
-  payments        Payment[]
-  feeTypes        FeeType[]
-  expenses        Expense[]
-  gradeSystems    GradeSystem[]
-  certificates    Certificate[]
-  examComplaints  ExamComplaint[]
-  auditLogs       AuditLog[]
-  books           Book[]
-  inventoryItems  InventoryItem[]
-  marks           Mark[]
-  submissions     Submission[]
-  assignmentPerms AssignmentPermission[]
-  courses         Course[]
-  supportTickets SupportTicket[]
+  users               User[]
+  classes             Class[]
+  subjects            Subject[]
+  exams               Exam[]
+  examSchedules       ExamSchedule[]
+  attendances         Attendance[]
+  timetables          Timetable[]
+  assignments         Assignment[]
+  materials           Material[]
+  notifications       Notification[]
+  salaries            Salary[]
+  tasks               Task[]
+  invoices            Invoice[]
+  payments            Payment[]
+  feeTypes            FeeType[]
+  expenses            Expense[]
+  gradeSystems        GradeSystem[]
+  certificates        Certificate[]
+  examComplaints      ExamComplaint[]
+  auditLogs           AuditLog[]
+  books               Book[]
+  inventoryItems      InventoryItem[]
+  marks               Mark[]
+  submissions         Submission[]
+  assignmentPerms     AssignmentPermission[]
+  courses             Course[]
+  supportTickets      SupportTicket[]
   satisfactionSurveys SatisfactionSurvey[]
-  alumni          Alumni[]
-  alumniEvents    AlumniEvent[]
-  alumniDonations AlumniDonation[]
+  alumni              Alumni[]
+  alumniEvents        AlumniEvent[]
+  alumniDonations     AlumniDonation[]
 
   @@map("tenants")
 }
 
 model Alumni {
-  id             String   @id @default(cuid())
-  tenantId       String
-  firstName      String
-  lastName       String
-  email          String?
-  phone          String?
-  graduationYear Int
-  program        String?
-  currentCity    String?
-  employmentStatus String @default("unknown")
-  employer       String?
-  jobTitle       String?
-  university     String?
-  degree         String?
-  notes          String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id               String   @id @default(cuid())
+  tenantId         String
+  firstName        String
+  lastName         String
+  email            String?
+  phone            String?
+  graduationYear   Int
+  program          String?
+  currentCity      String?
+  employmentStatus String   @default("unknown")
+  employer         String?
+  jobTitle         String?
+  university       String?
+  degree           String?
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   tenant    Tenant           @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
   donations AlumniDonation[]
@@ -443,17 +443,17 @@ model Alumni {
 }
 
 model AlumniEvent {
-  id          String   @id @default(cuid())
-  tenantId    String
-  title       String
-  description String?
-  location    String?
-  startsAt    DateTime
-  capacity    Int?
-  attendeeCount Int    @default(0)
-  status      String   @default("upcoming")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String   @id @default(cuid())
+  tenantId      String
+  title         String
+  description   String?
+  location      String?
+  startsAt      DateTime
+  capacity      Int?
+  attendeeCount Int      @default(0)
+  status        String   @default("upcoming")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
 
@@ -483,21 +483,20 @@ model AlumniDonation {
 }
 
 model User {
-  id                     String     @id @default(cuid())
+  id                     String        @id @default(cuid())
   tenantId               String?
   firstName              String
   lastName               String
   email                  String?
-  username               String?    @unique
+  username               String?       @unique
   password               String
-  /// Admin-recoverable login password (shown on student/teacher profile). Hashed `password` remains authoritative for auth.
-  passwordPlain          String?
   role                   UserRole
-  status                 UserStatus @default(active)
-  tokenVersion           Int        @default(0)
+  status                 UserStatus    @default(active)
+  tokenVersion           Int           @default(0)
   lastLogin              DateTime?
   resetPasswordTokenHash String?
   resetPasswordExpires   DateTime?
+  sessions               AuthSession[]
 
   // Profile (flattened)
   phone              String?
@@ -544,7 +543,7 @@ model User {
   childLinks  StudentParent[] @relation("ParentChildren")
 
   // Role-specific relations
-  classTeaching         Class[]               @relation("ClassTeacher")
+  classTeaching         Class[]                   @relation("ClassTeacher")
   subjectTeachings      SubjectTeacher[]
   classSubjectTeachings ClassSubjectTeacher[]
   timetableTeachings    TimetableTeacher[]
@@ -598,8 +597,8 @@ model User {
   coursesCreated          Course[]             @relation("CourseCreator")
   lessonProgress          LessonProgress[]
   quizAttempts            QuizAttempt[]
-  supportTickets          SupportTicket[]       @relation("SupportRequester")
-  supportTicketsAssigned  SupportTicket[]       @relation("SupportAssignee")
+  supportTickets          SupportTicket[]      @relation("SupportRequester")
+  supportTicketsAssigned  SupportTicket[]      @relation("SupportAssignee")
   satisfactionSurveys     SatisfactionSurvey[]
 
   @@index([tenantId])
@@ -607,6 +606,22 @@ model User {
   @@index([username])
   @@index([resetPasswordTokenHash])
   @@map("users")
+}
+
+model AuthSession {
+  id         String   @id @default(cuid())
+  userId     String
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  lastUsedAt DateTime @default(now())
+  userAgent  String?
+  ipAddress  String?
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("auth_sessions")
 }
 
 // Student ↔ Parent many-to-many
@@ -640,16 +655,16 @@ model Class {
   tenant       Tenant @relation(fields: [tenantId], references: [tenantId])
   classTeacher User?  @relation("ClassTeacher", fields: [classTeacherId], references: [id])
 
-  subjects    ClassSubject[]
-  timetables  Timetable[]
-  attendances Attendance[]
-  marks       Mark[]
-  assignments Assignment[]
-  materials   Material[]
-  invoices    Invoice[]
-  examClasses ExamClass[]
+  subjects      ClassSubject[]
+  timetables    Timetable[]
+  attendances   Attendance[]
+  marks         Mark[]
+  assignments   Assignment[]
+  materials     Material[]
+  invoices      Invoice[]
+  examClasses   ExamClass[]
   examSchedules ExamSchedule[]
-  courses     Course[]
+  courses       Course[]
 
   @@unique([name, section, tenantId])
   @@index([tenantId])
@@ -658,11 +673,11 @@ model Class {
 
 // Class ↔ Subject many-to-many with teachers
 model ClassSubject {
-  id        String @id @default(cuid())
-  classId   String
-  subjectId String
+  id            String  @id @default(cuid())
+  classId       String
+  subjectId     String
   weeklyPeriods Int?
-  room      String?
+  room          String?
 
   class    Class                 @relation(fields: [classId], references: [id], onDelete: Cascade)
   subject  Subject               @relation(fields: [subjectId], references: [id], onDelete: Cascade)
@@ -856,10 +871,10 @@ model ExamSchedule {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  exam        Exam                       @relation(fields: [examId], references: [id], onDelete: Cascade)
-  class       Class                      @relation(fields: [classId], references: [id], onDelete: Cascade)
-  subject     Subject                    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  tenant      Tenant                     @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+  exam         Exam                      @relation(fields: [examId], references: [id], onDelete: Cascade)
+  class        Class                     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subject      Subject                   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  tenant       Tenant                    @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
   invigilators ExamScheduleInvigilator[]
 
   @@unique([examId, classId, subjectId])
@@ -1459,44 +1474,44 @@ model LessonProgress {
 }
 
 model Quiz {
-  id          String         @id @default(cuid())
-  courseId    String
-  title       String
-  description String?
-  passPercent Int            @default(50)
-  published   Boolean        @default(true)
-  durationMin Int?
+  id            String         @id @default(cuid())
+  courseId      String
+  title         String
+  description   String?
+  passPercent   Int            @default(50)
+  published     Boolean        @default(true)
+  durationMin   Int?
   availableFrom DateTime?
-  deadline    DateTime?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-  course      Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  questions   QuizQuestion[]
-  attempts    QuizAttempt[]
+  deadline      DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  course        Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  questions     QuizQuestion[]
+  attempts      QuizAttempt[]
 
   @@index([courseId])
   @@map("quizzes")
 }
 
 model QuizQuestion {
-  id           String @id @default(cuid())
+  id           String   @id @default(cuid())
   quizId       String
   prompt       String
   options      Json
   correctIndex Int
-  points       Int    @default(1)
-  position     Int    @default(0)
-  questionType String @default("multiple_choice")
+  points       Int      @default(1)
+  position     Int      @default(0)
+  questionType String   @default("multiple_choice")
   modelAnswer  String?
   keywords     String[]
-  quiz         Quiz   @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  quiz         Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
 
   @@index([quizId, position])
   @@map("quiz_questions")
 }
 
 model QuizAttempt {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   quizId      String
   studentId   String
   answers     Json
@@ -1504,10 +1519,10 @@ model QuizAttempt {
   totalPoints Int
   percentage  Float
   passed      Boolean
-  submittedAt DateTime @default(now())
+  submittedAt DateTime  @default(now())
   completedAt DateTime?
-  quiz        Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
-  student     User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  quiz        Quiz      @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  student     User      @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@unique([quizId, studentId])
   @@map("quiz_attempts")
@@ -1757,9 +1772,9 @@ model SupportTicket {
   createdAt    DateTime              @default(now())
   updatedAt    DateTime              @updatedAt
 
-  tenant      Tenant @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
-  requester   User   @relation("SupportRequester", fields: [requesterId], references: [id], onDelete: Cascade)
-  assignedTo  User?  @relation("SupportAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  tenant     Tenant @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+  requester  User   @relation("SupportRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  assignedTo User?  @relation("SupportAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, status, createdAt])
   @@index([requesterId, createdAt])

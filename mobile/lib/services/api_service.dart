@@ -36,6 +36,25 @@ class ApiService {
     }
   }
 
+  Future<bool> _refreshAccessToken() async {
+    final refreshToken = await _storage.read(key: 'refresh_token');
+    if (refreshToken == null || refreshToken.isEmpty) return false;
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/auth/refresh'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'refreshToken': refreshToken}),
+      ).timeout(const Duration(seconds: 30));
+      if (response.statusCode != 200) return false;
+      final data = jsonDecode(response.body);
+      await saveToken(data['accessToken']);
+      await saveRefreshToken(data['refreshToken']);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   bool _canQueueWrite(String endpoint) {
     const sensitivePrefixes = [
       '/fees/pay',
@@ -54,9 +73,12 @@ class ApiService {
         final url = '$baseUrl$endpoint';
         debugPrint('GET Request: $url');
 
-        final response = await http
+        var response = await http
             .get(Uri.parse(url), headers: headers)
             .timeout(const Duration(seconds: 30));
+        if (response.statusCode == 401 && await _refreshAccessToken()) {
+          response = await http.get(Uri.parse(url), headers: await _getHeaders()).timeout(const Duration(seconds: 30));
+        }
 
         debugPrint('GET Response [$endpoint]: ${response.statusCode}');
         if (response.statusCode == 200) {
@@ -98,9 +120,12 @@ class ApiService {
         debugPrint('POST Request: $url');
         debugPrint('POST Body: ${jsonEncode(body)}');
 
-        final response = await http
+        var response = await http
             .post(Uri.parse(url), headers: headers, body: jsonEncode(body))
             .timeout(const Duration(seconds: 30));
+        if (response.statusCode == 401 && endpoint != '/auth/refresh' && await _refreshAccessToken()) {
+          response = await http.post(Uri.parse(url), headers: await _getHeaders(), body: jsonEncode(body)).timeout(const Duration(seconds: 30));
+        }
 
         debugPrint('POST Response [$endpoint]: ${response.statusCode}');
         if (response.statusCode >= 400) {
@@ -229,9 +254,12 @@ class ApiService {
         final url = '$baseUrl$endpoint';
         debugPrint('PUT Request: $url');
 
-        final response = await http
+        var response = await http
             .put(Uri.parse(url), headers: headers, body: jsonEncode(body))
             .timeout(const Duration(seconds: 30));
+        if (response.statusCode == 401 && await _refreshAccessToken()) {
+          response = await http.put(Uri.parse(url), headers: await _getHeaders(), body: jsonEncode(body)).timeout(const Duration(seconds: 30));
+        }
 
         debugPrint('PUT Response [$endpoint]: ${response.statusCode}');
         return response;
@@ -281,9 +309,12 @@ class ApiService {
         final url = '$baseUrl$endpoint';
         debugPrint('DELETE Request: $url');
 
-        final response = await http
+        var response = await http
             .delete(Uri.parse(url), headers: headers)
             .timeout(const Duration(seconds: 30));
+        if (response.statusCode == 401 && await _refreshAccessToken()) {
+          response = await http.delete(Uri.parse(url), headers: await _getHeaders()).timeout(const Duration(seconds: 30));
+        }
 
         debugPrint('DELETE Response [$endpoint]: ${response.statusCode}');
         return response;
@@ -353,6 +384,14 @@ class ApiService {
     await _storage.write(key: 'token', value: token);
   }
 
+  Future<void> saveRefreshToken(String token) async {
+    await _storage.write(key: 'refresh_token', value: token);
+  }
+
+  Future<String?> getRefreshToken() async {
+    return await _storage.read(key: 'refresh_token');
+  }
+
   // Helper method to get token
   Future<String?> getToken() async {
     return await _storage.read(key: 'token');
@@ -361,5 +400,6 @@ class ApiService {
   // Helper method to clear token
   Future<void> clearToken() async {
     await _storage.delete(key: 'token');
+    await _storage.delete(key: 'refresh_token');
   }
 }

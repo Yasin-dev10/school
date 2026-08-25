@@ -31,19 +31,18 @@ const userSelect = {
 
 const adminCredentialSelect = {
     ...userSelect,
-    passwordPlain: true
 };
 
 const formatUser = (u, { includeCredentials = false } = {}) => {
     if (!u) return null;
 
-    const { passwordPlain, password, ...safeUser } = u;
+    const { password, ...safeUser } = u;
 
     return {
         ...safeUser,
         _id: u.id,
         ...(includeCredentials
-            ? { password_plain: passwordPlain || null, username: u.username || null }
+            ? { username: u.username || null }
             : {}),
         profile: {
             phone: u.phone, address: u.profileAddress, avatarUrl: u.avatarUrl,
@@ -183,7 +182,6 @@ exports.createStudent = async (req, res) => {
                 email: email.toLowerCase(),
                 username,
                 password: hashed,
-                passwordPlain: generatedPassword,
                 role: 'student',
                 tenantId,
                 phone: profile?.phone || null,
@@ -671,7 +669,6 @@ exports.bulkImportStudents = async (req, res) => {
                     data: {
                         firstName: s.firstName, lastName: s.lastName,
                         email: s.email.toLowerCase(), username, password: hashed,
-                        passwordPlain: genPass,
                         role: 'student', tenantId,
                         admissionNo, studentId,
                         ...classProfile,
@@ -710,7 +707,6 @@ exports.resetStudentPassword = async (req, res) => {
         let username = student.username;
         const updateData = {
             password: hashed,
-            passwordPlain: newPassword,
             tokenVersion: { increment: 1 }
         };
         if (!username) {
@@ -722,6 +718,7 @@ exports.resetStudentPassword = async (req, res) => {
             where: { id: req.params.id },
             data: updateData
         });
+        await prisma.authSession.deleteMany({ where: { userId: req.params.id } });
 
         await logAction({ action: 'UPDATE', module: 'USER', details: `Reset password for student: ${student.firstName} ${student.lastName}`, userId: req.user._id, tenantId: req.user.tenantId });
         res.status(200).json({

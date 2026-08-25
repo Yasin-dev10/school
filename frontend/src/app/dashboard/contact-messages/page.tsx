@@ -4,6 +4,11 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { getApiUrl } from '@/app/utils/api';
 
+const secureFetch = (input: RequestInfo | URL, init: RequestInit = {}) => {
+    const csrf = document.cookie.split('; ').find(v => v.startsWith('csrfToken='))?.split('=').slice(1).join('=');
+    return fetch(input, { ...init, credentials: 'include', headers: { ...(init.headers || {}), ...(csrf ? { 'X-CSRF-Token': decodeURIComponent(csrf) } : {}) } });
+};
+
 interface ContactMessage {
     _id: string;
     firstName: string;
@@ -51,12 +56,7 @@ export default function ContactMessagesPage() {
 
     const fetchStats = async () => {
         try {
-            const token = localStorage.getItem('token');
-            const response = await fetch(getApiUrl('/contact-messages/stats'), {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
+            const response = await secureFetch(getApiUrl('/contact-messages/stats'));
 
             if (response.ok) {
                 const data = await response.json();
@@ -70,16 +70,11 @@ export default function ContactMessagesPage() {
     const fetchMessages = async () => {
         try {
             setLoading(true);
-            const token = localStorage.getItem('token');
             const url = filterStatus === 'all'
                 ? getApiUrl('/contact-messages')
                 : getApiUrl(`/contact-messages?status=${filterStatus}`);
 
-            const response = await fetch(url, {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
+            const response = await secureFetch(url);
 
             if (response.ok) {
                 const data = await response.json();
@@ -102,11 +97,9 @@ export default function ContactMessagesPage() {
 
     const handleUpdateStatus = async (messageId: string, newStatus: string) => {
         try {
-            const token = localStorage.getItem('token');
-            const response = await fetch(getApiUrl(`/contact-messages/${messageId}`), {
+            const response = await secureFetch(getApiUrl(`/contact-messages/${messageId}`), {
                 method: 'PATCH',
                 headers: {
-                    'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({ status: newStatus })
@@ -129,11 +122,9 @@ export default function ContactMessagesPage() {
 
         try {
             setIsSubmitting(true);
-            const token = localStorage.getItem('token');
-            const response = await fetch(getApiUrl(`/contact-messages/${selectedMessage._id}`), {
+            const response = await secureFetch(getApiUrl(`/contact-messages/${selectedMessage._id}`), {
                 method: 'PATCH',
                 headers: {
-                    'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
@@ -161,12 +152,8 @@ export default function ContactMessagesPage() {
         if (!confirm('Are you sure you want to delete this message?')) return;
 
         try {
-            const token = localStorage.getItem('token');
-            const response = await fetch(getApiUrl(`/contact-messages/${messageId}`), {
+            const response = await secureFetch(getApiUrl(`/contact-messages/${messageId}`), {
                 method: 'DELETE',
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
             });
 
             if (response.ok) {

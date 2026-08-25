@@ -207,6 +207,7 @@ exports.resetTeacherPassword = async (req, res) => {
                 data: { password: hashed, tokenVersion: { increment: 1 } }
             });
         }
+        await prisma.authSession.deleteMany({ where: { userId: req.params.id } });
 
         res.status(200).json({
             success: true,

@@ -20,23 +20,26 @@ const normalizeRoleKey = (role) => {
 };
 
 const signAccessToken = (payload) => {
-    return jwt.sign(payload, getJwtSecret(), { expiresIn: '1d' });
+    return jwt.sign(payload, getJwtSecret(), { expiresIn: process.env.ACCESS_TOKEN_TTL || '15m' });
 };
 
 const verifyAccessToken = (token) => {
     return jwt.verify(token, getJwtSecret());
 };
 
-const cookieOptions = () => {
+const cookieOptions = (httpOnly = true) => {
     const isProd = process.env.NODE_ENV === 'production';
     return {
-        httpOnly: true,
+        httpOnly,
         secure: isProd,
-        sameSite: isProd ? 'none' : 'lax',
-        maxAge: 24 * 60 * 60 * 1000,
+        sameSite: process.env.COOKIE_SAME_SITE || 'lax',
         path: '/',
     };
 };
+
+const accessCookieOptions = () => ({ ...cookieOptions(true), maxAge: 15 * 60 * 1000 });
+const refreshCookieOptions = () => ({ ...cookieOptions(true), maxAge: 7 * 24 * 60 * 60 * 1000 });
+const csrfCookieOptions = () => ({ ...cookieOptions(false), maxAge: 7 * 24 * 60 * 60 * 1000 });
 
 const redactSensitive = (body) => {
     if (!body || typeof body !== 'object') return body;
@@ -71,6 +74,9 @@ module.exports = {
     signAccessToken,
     verifyAccessToken,
     cookieOptions,
+    accessCookieOptions,
+    refreshCookieOptions,
+    csrfCookieOptions,
     redactSensitive,
     parseAllowedOrigins,
     cryptoRandomToken: (bytes = 32) => crypto.randomBytes(bytes).toString('hex'),

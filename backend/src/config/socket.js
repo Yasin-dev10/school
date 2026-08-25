@@ -2,6 +2,10 @@ const { Server } = require("socket.io");
 const { verifyAccessToken, parseAllowedOrigins, normalizeRole } = require('../utils/security');
 const { isRevoked } = require('../utils/tokenStore');
 const prisma = require('./prismaClient');
+const parseCookies = (header = '') => Object.fromEntries(header.split(';').map(v => v.trim()).filter(Boolean).map(v => {
+    const i = v.indexOf('=');
+    return i < 0 ? [v, ''] : [v.slice(0, i), decodeURIComponent(v.slice(i + 1))];
+}));
 
 let io;
 
@@ -19,12 +23,13 @@ const initSocket = (server) => {
         }
     });
 
-    io.use((socket, next) => {
+    io.use(async (socket, next) => {
         try {
+            const cookies = parseCookies(socket.handshake.headers?.cookie || '');
             const token =
                 socket.handshake.auth?.token ||
                 (socket.handshake.headers?.authorization || '').replace(/^Bearer\s+/i, '') ||
-                socket.handshake.query?.token;
+                socket.handshake.query?.token || cookies.token;
 
             if (!token) {
                 return next(new Error('Authentication required'));
@@ -34,12 +39,18 @@ const initSocket = (server) => {
             }
 
             const decoded = verifyAccessToken(token);
+            const activeUser = await prisma.user.findUnique({ where: { id: decoded.id }, select: { status: true, tokenVersion: true } });
+            if (!activeUser || activeUser.status !== 'active' || activeUser.tokenVersion !== decoded.tokenVersion) {
+                return next(new Error('Session revoked'));
+            }
             socket.user = {
                 id: decoded.id,
                 role: normalizeRole(decoded.role),
                 tenantId: decoded.tenantId,
                 tokenVersion: decoded.tokenVersion
             };
+            const remainingMs = Math.max(0, decoded.exp * 1000 - Date.now());
+            setTimeout(() => socket.disconnect(true), remainingMs).unref?.();
             next();
         } catch (err) {
             next(new Error('Invalid token'));

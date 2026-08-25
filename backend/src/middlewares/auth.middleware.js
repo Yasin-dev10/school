@@ -9,6 +9,7 @@ const extractToken = (req) => {
     if (req.cookies?.token) return req.cookies.token;
     return null;
 };
+exports.extractToken = extractToken;
 
 // Protect routes - Verify JWT
 exports.protect = async (req, res, next) => {

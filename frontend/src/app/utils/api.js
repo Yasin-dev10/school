@@ -18,12 +18,11 @@ const api = axios.create({
     },
 });
 
-// Prefer HttpOnly cookie; keep Bearer from localStorage as fallback for older sessions / SSR
 api.interceptors.request.use(
     (config) => {
-        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-        if (token) {
-            config.headers['Authorization'] = `Bearer ${token}`;
+        if (typeof document !== 'undefined' && !['get', 'head', 'options'].includes((config.method || 'get').toLowerCase())) {
+            const csrf = document.cookie.split('; ').find((entry) => entry.startsWith('csrfToken='))?.split('=').slice(1).join('=');
+            if (csrf) config.headers['X-CSRF-Token'] = decodeURIComponent(csrf);
         }
         return config;
     },
@@ -31,5 +30,27 @@ api.interceptors.request.use(
         return Promise.reject(error);
     }
 );
+
+let refreshing = null;
+api.interceptors.response.use(undefined, async (error) => {
+    const original = error.config;
+    const publicAuthRequest = ['/auth/login', '/auth/refresh', '/auth/forgot-password', '/auth/reset-password']
+        .some((path) => original?.url?.includes(path));
+    if (error.response?.status !== 401 || original?._retried || publicAuthRequest) {
+        return Promise.reject(error);
+    }
+    original._retried = true;
+    try {
+        refreshing ||= api.post('/auth/refresh').finally(() => { refreshing = null; });
+        await refreshing;
+        return api(original);
+    } catch (_) {
+        if (typeof window !== 'undefined') {
+            localStorage.removeItem('user');
+            if (!window.location.pathname.startsWith('/login')) window.location.assign('/login');
+        }
+        return Promise.reject(error);
+    }
+});
 
 export default api;

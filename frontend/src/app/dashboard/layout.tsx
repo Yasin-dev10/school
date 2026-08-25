@@ -106,10 +106,9 @@ export default function DashboardLayout({
 
     useEffect(() => {
         setMounted(true);
-        const token = localStorage.getItem('token');
         const userStr = localStorage.getItem('user');
 
-        if (!token || !userStr) {
+        if (!userStr) {
             router.push('/login');
             return;
         }
@@ -118,21 +117,25 @@ export default function DashboardLayout({
         try {
             parsedUser = JSON.parse(userStr);
         } catch {
-            localStorage.removeItem('token');
             localStorage.removeItem('user');
             router.replace('/login');
             return;
         }
         if (!parsedUser || typeof parsedUser !== 'object') {
-            localStorage.removeItem('token');
             localStorage.removeItem('user');
             router.replace('/login');
             return;
         }
-        const userData = { ...parsedUser, role: normalizeRole(parsedUser.role) };
-        localStorage.setItem('user', JSON.stringify(userData));
-        setUser(userData);
-        setIsAuthorized(true);
+        api.get('/auth/me').then(({ data }) => {
+            const current = data.data;
+            const userData = { ...current, _id: current.id, role: normalizeRole(current.role) };
+            localStorage.setItem('user', JSON.stringify(userData));
+            setUser(userData);
+            setIsAuthorized(true);
+        }).catch(() => {
+            localStorage.removeItem('user');
+            router.replace('/login');
+        });
 
         fetchUnreadCount();
 
@@ -185,8 +188,8 @@ export default function DashboardLayout({
         return () => document.removeEventListener('keydown', handleKeyboard);
     }, [isSidebarOpen]);
 
-    const handleLogout = () => {
-        localStorage.removeItem('token');
+    const handleLogout = async () => {
+        try { await api.post('/auth/logout'); } catch {}
         localStorage.removeItem('user');
         router.push('/login');
     };

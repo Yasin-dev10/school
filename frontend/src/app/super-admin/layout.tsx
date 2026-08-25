@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
+import api from '@/app/utils/api';
 import {
     LayoutDashboard,
     School,
@@ -39,20 +40,22 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
     const [sidebarOpen, setSidebarOpen]   = useState(false);
 
     useEffect(() => {
-        const token   = localStorage.getItem('token');
         const userStr = localStorage.getItem('user');
-        if (!token || !userStr) { router.push('/login'); return; }
-        const user = JSON.parse(userStr);
-        if (user.role !== 'super-admin') { router.push('/login'); return; }
-        setUserName(`${user.firstName} ${user.lastName}`);
-        setUserInitial(user.firstName?.charAt(0) || 'S');
-        setIsAuthorized(true);
+        if (!userStr) { router.push('/login'); return; }
+        api.get('/auth/me').then(({ data }) => {
+            const user = data.data;
+            if (user.role !== 'super-admin' && user.role !== 'super_admin') { router.push('/login'); return; }
+            localStorage.setItem('user', JSON.stringify(user));
+            setUserName(`${user.firstName} ${user.lastName}`);
+            setUserInitial(user.firstName?.charAt(0) || 'S');
+            setIsAuthorized(true);
+        }).catch(() => router.push('/login'));
     }, [router]);
 
     useEffect(() => { setSidebarOpen(false); }, [pathname]);
 
-    const handleLogout = () => {
-        localStorage.removeItem('token');
+    const handleLogout = async () => {
+        try { await api.post('/auth/logout'); } catch {}
         localStorage.removeItem('user');
         router.push('/login');
     };

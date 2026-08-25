@@ -5,9 +5,36 @@ const { sendEmail } = require('../services/notification.service');
 const {
     signAccessToken,
     normalizeRole,
-    cookieOptions,
+    accessCookieOptions,
+    refreshCookieOptions,
+    csrfCookieOptions,
+    cryptoRandomToken,
 } = require('../utils/security');
 const { revokeToken } = require('../utils/tokenStore');
+
+const hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
+const issueSession = async (req, res, user) => {
+    const payload = { id: user.id, role: normalizeRole(user.role), tenantId: user.tenantId, tokenVersion: user.tokenVersion };
+    const accessToken = signAccessToken(payload);
+    const refreshToken = cryptoRandomToken(48);
+    const csrfToken = cryptoRandomToken(24);
+    await prisma.authSession.create({ data: {
+        userId: user.id, tokenHash: hashToken(refreshToken),
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        userAgent: String(req.headers['user-agent'] || '').slice(0, 500) || null,
+        ipAddress: req.ip || null,
+    }});
+    res.cookie('token', accessToken, accessCookieOptions());
+    res.cookie('refreshToken', refreshToken, refreshCookieOptions());
+    res.cookie('csrfToken', csrfToken, csrfCookieOptions());
+    return { accessToken, refreshToken, csrfToken };
+};
+
+const clearAuthCookies = (res) => {
+    res.clearCookie('token', { ...accessCookieOptions(), maxAge: 0 });
+    res.clearCookie('refreshToken', { ...refreshCookieOptions(), maxAge: 0 });
+    res.clearCookie('csrfToken', { ...csrfCookieOptions(), maxAge: 0 });
+};
 
 const buildAuthUser = (user) => ({
     _id: user.id,
@@ -86,19 +113,12 @@ exports.login = async (req, res) => {
         await prisma.user.update({ where: { id: user.id }, data: { lastLogin: new Date() } });
 
         const mappedRole = normalizeRole(user.role);
-        const payload = {
-            id: user.id,
-            role: mappedRole,
-            tenantId: user.tenantId,
-            tokenVersion: user.tokenVersion
-        };
-        const token = signAccessToken(payload);
+        const session = await issueSession(req, res, { ...user, role: mappedRole });
 
-        res.cookie('token', token, cookieOptions());
-
+        const nativeClient = req.body?.clientType === 'mobile';
         res.json({
             success: true,
-            token,
+            ...(nativeClient && { accessToken: session.accessToken, refreshToken: session.refreshToken }),
             user: buildAuthUser({ ...user, role: mappedRole })
         });
     } catch (error) {
@@ -191,7 +211,8 @@ exports.changePassword = async (req, res) => {
         if (req.token) {
             revokeToken(req.token, Date.now() + 24 * 60 * 60 * 1000);
         }
-        res.clearCookie('token', { ...cookieOptions(), maxAge: 0 });
+        await prisma.authSession.deleteMany({ where: { userId: req.user.id } });
+        clearAuthCookies(res);
 
         res.status(200).json({ success: true, message: 'Password changed successfully. Please log in again.' });
     } catch (error) {
@@ -203,20 +224,38 @@ exports.changePassword = async (req, res) => {
 // @route   POST /api/auth/logout
 exports.logout = async (req, res) => {
     try {
-        if (req.user?.id) {
-            await prisma.user.update({
-                where: { id: req.user.id },
-                data: { tokenVersion: { increment: 1 } }
-            });
-        }
+        const refreshToken = req.cookies?.refreshToken || req.body?.refreshToken;
+        if (refreshToken) await prisma.authSession.deleteMany({ where: { tokenHash: hashToken(refreshToken) } });
         if (req.token) {
             revokeToken(req.token, Date.now() + 24 * 60 * 60 * 1000);
         }
-        res.clearCookie('token', { ...cookieOptions(), maxAge: 0 });
+        clearAuthCookies(res);
         res.status(200).json({ success: true, message: 'Logged out successfully' });
     } catch (error) {
-        res.clearCookie('token', { ...cookieOptions(), maxAge: 0 });
+        clearAuthCookies(res);
         res.status(200).json({ success: true, message: 'Logged out successfully' });
+    }
+};
+
+exports.refresh = async (req, res) => {
+    try {
+        const supplied = req.cookies?.refreshToken || req.body?.refreshToken;
+        if (!supplied) return res.status(401).json({ message: 'Refresh token required' });
+        const session = await prisma.authSession.findUnique({
+            where: { tokenHash: hashToken(String(supplied)) }, include: { user: true }
+        });
+        if (!session || session.expiresAt <= new Date() || session.user.status !== 'active') {
+            if (session) await prisma.authSession.delete({ where: { id: session.id } });
+            clearAuthCookies(res);
+            return res.status(401).json({ message: 'Refresh token is invalid or expired' });
+        }
+        await prisma.authSession.delete({ where: { id: session.id } });
+        const rotated = await issueSession(req, res, session.user);
+        const nativeClient = Boolean(req.body?.refreshToken);
+        res.json({ success: true, ...(nativeClient && { accessToken: rotated.accessToken, refreshToken: rotated.refreshToken }) });
+    } catch (_) {
+        clearAuthCookies(res);
+        res.status(401).json({ message: 'Could not refresh session' });
     }
 };
 
@@ -285,6 +324,7 @@ exports.resetPassword = async (req, res) => {
                 resetPasswordExpires: null
             }
         });
+        await prisma.authSession.deleteMany({ where: { userId: user.id } });
         res.json({ success: true, message: 'Password reset successfully. You can now log in.' });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Could not reset password' });
