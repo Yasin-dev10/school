@@ -1,7 +1,7 @@
 const prisma = require('../config/prismaClient');
 
 const getTeacherScope = async (teacherId, tenantId) => {
-    const [classes, subjects, timetables] = await Promise.all([
+    const [classes, subjects, classSubjects, timetables] = await Promise.all([
         prisma.class.findMany({
             where: {
                 tenantId,
@@ -24,11 +24,24 @@ const getTeacherScope = async (teacherId, tenantId) => {
             },
             select: { id: true }
         }),
+        prisma.classSubject.findMany({
+            where: {
+                class: { tenantId },
+                teachers: { some: { teacherId } }
+            },
+            select: { classId: true, subjectId: true }
+        }),
         prisma.timetable.findMany({
             where: { tenantId, teachers: { some: { teacherId } } },
             select: { classId: true, subjectId: true }
         })
     ]);
+
+    const assignedPairs = [...classSubjects, ...timetables]
+        .filter(pair => pair.classId && pair.subjectId)
+        .filter((pair, index, pairs) =>
+            pairs.findIndex(item => item.classId === pair.classId && item.subjectId === pair.subjectId) === index
+        );
 
     return {
         classIds: [...new Set(classes.map(c => c.id))],
@@ -37,6 +50,8 @@ const getTeacherScope = async (teacherId, tenantId) => {
             { profileClass: c.id }
         ]),
         subjectIds: [...new Set(subjects.map(s => s.id))],
+        assignedPairs,
+        // Kept for callers that specifically need timetable rows.
         timetablePairs: timetables.map(t => ({ classId: t.classId, subjectId: t.subjectId }))
     };
 };

@@ -48,6 +48,7 @@ import {
     BriefcaseBusiness,
     // Bot,
     Trophy,
+    GitBranch,
 } from 'lucide-react';
 
 type NavItem = {
@@ -104,6 +105,31 @@ function canOpenDashboardRoute(role: string, pathname: string) {
     const allowed = ROLE_ROUTES[role];
     if (!allowed) return true;
     return allowed.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+}
+
+const MODULE_ROUTE_PREFIXES: Array<[string, string]> = [
+    ['/dashboard/students', 'students'], ['/dashboard/teachers', 'teachers'],
+    ['/dashboard/classes', 'classes'], ['/dashboard/school-grades', 'classes'],
+    ['/dashboard/subjects', 'subjects'], ['/dashboard/subject-allocation', 'subjects'],
+    ['/dashboard/timetable', 'timetable'], ['/dashboard/calendar', 'calendar'],
+    ['/dashboard/attendance', 'attendance'], ['/dashboard/assignments', 'learning'],
+    ['/dashboard/online-learning', 'learning'], ['/dashboard/materials', 'learning'],
+    ['/dashboard/exams', 'exams'], ['/dashboard/grade-entry', 'exams'],
+    ['/dashboard/multi-marks', 'exams'], ['/dashboard/exam-results', 'exams'],
+    ['/dashboard/combined-results', 'exams'], ['/dashboard/top-students', 'exams'],
+    ['/dashboard/grades', 'exams'], ['/dashboard/finance', 'finance'],
+    ['/dashboard/fee-hub', 'finance'], ['/dashboard/fee-generator', 'finance'],
+    ['/dashboard/student-finance', 'finance'], ['/dashboard/payroll', 'payroll'],
+    ['/dashboard/payslips', 'payroll'], ['/dashboard/inventory', 'inventory'],
+    ['/dashboard/certificates', 'certificates'], ['/dashboard/reports', 'reports'],
+    ['/dashboard/analytics', 'reports'], ['/dashboard/communication', 'communication'],
+    ['/dashboard/notifications', 'communication'], ['/dashboard/alumni', 'alumni'],
+    ['/dashboard/customization', 'customization'], ['/dashboard/logs', 'settings'],
+    ['/dashboard/settings', 'settings'], ['/dashboard/help', 'support'],
+];
+
+function moduleForRoute(pathname: string) {
+    return MODULE_ROUTE_PREFIXES.find(([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`))?.[1];
 }
 
 export default function DashboardLayout({
@@ -333,6 +359,7 @@ export default function DashboardLayout({
                     { name: 'Certificates', href: '/dashboard/certificates', icon: icon(<FileBadge className="w-4 h-4" />) },
                     { name: 'Reports', href: '/dashboard/reports', icon: icon(<BarChart3 className="w-4 h-4" />) },
                     { name: 'Advanced Analytics', href: '/dashboard/analytics', icon: icon(<TrendingUp className="w-4 h-4" />) },
+                    // { name: 'Branches & Workflows', href: '/dashboard/customization', icon: icon(<GitBranch className="w-4 h-4" />) },
                 ],
             });
             push({
@@ -480,22 +507,34 @@ export default function DashboardLayout({
             });
         }
 
+        const limitedModules = tenant?.subscriptionAccess?.mode === 'limited'
+            ? new Set<string>(tenant.subscriptionAccess.allowedModules || [])
+            : null;
         return groups
             .map((group) => ({
                 ...group,
                 label: t(group.label),
                 items: group.items
                     .filter((item) => item.name !== 'Dashboard')
+                    .filter((item) => {
+                        if (!limitedModules) return true;
+                        const itemModule = moduleForRoute(item.href);
+                        return !itemModule || limitedModules.has(itemModule);
+                    })
                     .map((item) => ({ ...item, name: t(item.name) })),
             }))
             .filter((group) => group.items.length > 0);
-    }, [user, t]);
+    }, [user, tenant, t]);
 
     const dashboardItem: NavItem = {
         name: t('Dashboard'),
         href: user?.role === 'student' ? '/dashboard/student' : '/dashboard',
         icon: icon(<LayoutDashboard className="w-4 h-4" />),
     };
+    const accessMode = tenant?.subscriptionAccess?.mode || tenant?.accessMode || 'full';
+    const allowedModules: string[] = tenant?.subscriptionAccess?.allowedModules || tenant?.allowedModules || [];
+    const currentModule = moduleForRoute(pathname);
+    const currentModuleRestricted = accessMode === 'limited' && Boolean(currentModule) && !allowedModules.includes(currentModule as string);
 
     // Accordion group menu: keep active group open; others closed by default
     useEffect(() => {
@@ -766,7 +805,29 @@ export default function DashboardLayout({
                     </div>
                 </header>
 
-                <div id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6">{children}</div>
+                <div id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6">
+                    {tenant?.subscriptionAccess?.showWarning && accessMode !== 'suspended' && (
+                        <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                            <strong>Digniin lacag-bixin:</strong> Adeegga school-ka wuxuu dhacayaa {tenant.subscriptionValid ? new Date(tenant.subscriptionValid).toLocaleDateString() : 'dhowaan'}.
+                            {tenant.subscriptionAccess.overdue && tenant.subscriptionAccess.graceUntil ? ` Grace period-ku wuxuu ku egyahay ${new Date(tenant.subscriptionAccess.graceUntil).toLocaleDateString()}.` : ''}
+                        </div>
+                    )}
+                    {accessMode === 'suspended' ? (
+                        <div className="mx-auto mt-16 max-w-xl rounded-3xl border border-red-200 bg-white p-8 text-center shadow-xl dark:border-red-500/30 dark:bg-slate-900">
+                            <ShieldAlert className="mx-auto mb-4 h-14 w-14 text-red-500" />
+                            <h1 className="text-2xl font-black text-slate-900 dark:text-white">School-ka waa la xiray</h1>
+                            <p className="mt-3 text-slate-600 dark:text-slate-300">Mudadii lacag-bixinta ayaa dhammaatay. Fadlan la xiriir Super Admin-ka si adeegga dib loogu furo.</p>
+                            {tenant?.subscriptionValid && <p className="mt-3 text-sm font-semibold text-red-600">Taariikhda dhacday: {new Date(tenant.subscriptionValid).toLocaleDateString()}</p>}
+                        </div>
+                    ) : currentModuleRestricted ? (
+                        <div className="mx-auto mt-16 max-w-xl rounded-3xl border border-amber-200 bg-white p-8 text-center shadow-xl dark:border-amber-500/30 dark:bg-slate-900">
+                            <ShieldAlert className="mx-auto mb-4 h-12 w-12 text-amber-500" />
+                            <h1 className="text-xl font-black text-slate-900 dark:text-white">Qaybtan lama fasixin</h1>
+                            <p className="mt-3 text-slate-600 dark:text-slate-300">School-ku wuxuu hadda ku jiraa Limited Access. La xiriir Super Admin-ka si qaybtan loo furo.</p>
+                            <Link href="/dashboard" className="mt-5 inline-flex rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white">Ku noqo Dashboard</Link>
+                        </div>
+                    ) : children}
+                </div>
             </main>
         </div>
     );

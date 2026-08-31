@@ -134,6 +134,15 @@ export default function GradeEntryPage() {
     const isLocked    = currentExam?.isApproved === true;
     const isAdmin     = ['school-admin', 'super-admin'].includes(userRole);
     const canEdit     = !isLocked || isAdmin;
+    const subjectOptions = useMemo(() => {
+        if (userRole !== 'teacher') return subjects;
+        const selectedClass = classes.find(c => c._id === selClass);
+        return (selectedClass?.subjects || []).map(item => item.subject).filter(Boolean);
+    }, [classes, selClass, subjects, userRole]);
+
+    useEffect(() => {
+        if (selSubject && !subjectOptions.some(subject => subject._id === selSubject)) setSelSubject('');
+    }, [selSubject, subjectOptions]);
 
     const filteredStudents = useMemo(() => {
         if (!search.trim()) return students;
@@ -692,7 +701,7 @@ export default function GradeEntryPage() {
                         <select value={selSubject} onChange={e => setSelSubject(e.target.value)}
                             className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-sm text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 appearance-none pr-8">
                             <option value="">— Select Subject —</option>
-                            {subjects.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
+                            {subjectOptions.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
                         </select>
                         <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                     </div>

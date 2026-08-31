@@ -47,6 +47,12 @@ enum TenantStatus {
   pending
 }
 
+enum SubscriptionAccessMode {
+  full
+  limited
+  suspended
+}
+
 enum GradeLevel {
   elementary
   middle
@@ -370,9 +376,16 @@ model Tenant {
   gradeLevels    GradeLevel[] @default([elementary, middle, high])
 
   // Subscription (flattened)
-  subscriptionPlan   String    @default("basic")
+  subscriptionPlan   String                 @default("basic")
   subscriptionValid  DateTime?
-  subscriptionActive Boolean   @default(true)
+  subscriptionActive Boolean                @default(true)
+  billingCycle       String                 @default("Monthly")
+  accessMode         SubscriptionAccessMode @default(full)
+  allowedModules     String[]               @default([])
+  graceDays          Int                    @default(0)
+  warningDays        Int                    @default(5)
+  autoSuspend        Boolean                @default(true)
+  lastPaymentAt      DateTime?
 
   superAdminId String?
 
@@ -412,20 +425,107 @@ model Tenant {
   alumni              Alumni[]
   alumniEvents        AlumniEvent[]
   alumniDonations     AlumniDonation[]
+  branches            Branch[]
+  customFields        CustomField[]
+  customFieldValues   CustomFieldValue[]
+  workflows           Workflow[]
 
   @@map("tenants")
 }
 
+model Branch {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String
+  code        String
+  address     String?
+  phone       String?
+  email       String?
+  managerName String?
+  isMain      Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+  users   User[]
+  classes Class[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, isActive])
+  @@map("branches")
+}
+
+model CustomField {
+  id          String   @id @default(cuid())
+  tenantId    String
+  entityType  String
+  label       String
+  fieldKey    String
+  fieldType   String   @default("text")
+  placeholder String?
+  options     Json?
+  isRequired  Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant             @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+  values CustomFieldValue[]
+
+  @@unique([tenantId, entityType, fieldKey])
+  @@index([tenantId, entityType, isActive])
+  @@map("custom_fields")
+}
+
+model CustomFieldValue {
+  id            String   @id @default(cuid())
+  tenantId      String
+  customFieldId String
+  entityType    String
+  entityId      String
+  value         Json
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+  customField CustomField @relation(fields: [customFieldId], references: [id], onDelete: Cascade)
+
+  @@unique([customFieldId, entityId])
+  @@index([tenantId, entityType, entityId])
+  @@map("custom_field_values")
+}
+
+model Workflow {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String
+  description String?
+  entityType  String
+  trigger     String   @default("manual")
+  steps       Json
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
+
+  @@unique([tenantId, name])
+  @@index([tenantId, entityType, isActive])
+  @@map("workflows")
+}
+
 model AcademicYear {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   tenantId  String
   name      String
   startDate DateTime
   endDate   DateTime
-  isCurrent Boolean  @default(false)
+  isCurrent Boolean   @default(false)
   closedAt  DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [tenantId], onDelete: Cascade)
 
@@ -505,6 +605,7 @@ model AlumniDonation {
 model User {
   id                     String        @id @default(cuid())
   tenantId               String?
+  branchId               String?
   firstName              String
   lastName               String
   email                  String?
@@ -557,6 +658,7 @@ model User {
 
   // Relations
   tenant Tenant? @relation(fields: [tenantId], references: [tenantId])
+  branch Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
 
   // Parent-Child relationship (self-relation via join table)
   parentLinks StudentParent[] @relation("StudentParents")
@@ -622,6 +724,7 @@ model User {
   satisfactionSurveys     SatisfactionSurvey[]
 
   @@index([tenantId])
+  @@index([branchId])
   @@index([email])
   @@index([username])
   @@index([resetPasswordTokenHash])
@@ -666,14 +769,16 @@ model Class {
   room           String?
   classTeacherId String?
   tenantId       String
+  branchId       String?
   status         ClassStatus @default(active)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // Relations
-  tenant       Tenant @relation(fields: [tenantId], references: [tenantId])
-  classTeacher User?  @relation("ClassTeacher", fields: [classTeacherId], references: [id])
+  tenant       Tenant  @relation(fields: [tenantId], references: [tenantId])
+  branch       Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  classTeacher User?   @relation("ClassTeacher", fields: [classTeacherId], references: [id])
 
   subjects      ClassSubject[]
   timetables    Timetable[]
@@ -688,6 +793,7 @@ model Class {
 
   @@unique([name, section, tenantId])
   @@index([tenantId])
+  @@index([branchId])
   @@map("classes")
 }
 

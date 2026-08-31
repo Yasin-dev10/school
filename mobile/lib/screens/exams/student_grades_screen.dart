@@ -32,9 +32,10 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
   Widget build(BuildContext context) {
     final provider = Provider.of<StudentProvider>(context);
     final gradesData = provider.studentGrades;
+    final combinedResults = provider.combinedResults;
     final isLoading = provider.isLoading;
 
-    if (isLoading && gradesData == null) {
+    if (isLoading && gradesData == null && provider.combinedResultsLoading) {
       return const Scaffold(
         backgroundColor: Color(0xFFF8FAFC),
         body: Center(
@@ -107,38 +108,227 @@ class _StudentGradesScreenState extends State<StudentGradesScreen> {
             await provider.fetchStudentGrades(studentId.toString());
           }
         },
-        child: terms.isEmpty
-            ? const Center(child: Text('No grades available yet.'))
-            : SingleChildScrollView(
+        child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: 20),
-                    _buildTermFilters(terms),
-                    const SizedBox(height: 24),
-                    _buildStudentProfile(
-                      context.watch<AuthProvider>().user,
-                      currentTerm,
+                    _buildCombinedResults(
+                      combinedResults,
+                      isLoading: provider.combinedResultsLoading,
+                      error: provider.combinedResultsError,
                     ),
-                    const SizedBox(height: 24),
-                    _buildGpaCard(
-                      (currentTerm?['termGpa'] ?? '0.00').toString(),
-                      cumulativeGpa.toString(),
-                    ),
-                    const SizedBox(height: 32),
-                    _buildCoursesHeader(currentTerm?['totalCredits'] ?? 0),
-                    const SizedBox(height: 16),
-                    ...(currentTerm?['courses'] as List<dynamic>? ?? []).map(
-                      (course) => _buildCourseCard(course),
-                    ),
-                    const SizedBox(height: 24),
-                    _buildDownloadButton(),
+                    const SizedBox(height: 28),
+                    if (terms.isNotEmpty) ...[
+                      _buildTermFilters(terms),
+                      const SizedBox(height: 24),
+                      _buildStudentProfile(
+                        context.watch<AuthProvider>().user,
+                        currentTerm,
+                      ),
+                      const SizedBox(height: 24),
+                      _buildGpaCard(
+                        (currentTerm?['termGpa'] ?? '0.00').toString(),
+                        cumulativeGpa.toString(),
+                      ),
+                      const SizedBox(height: 32),
+                      _buildCoursesHeader(currentTerm?['totalCredits'] ?? 0),
+                      const SizedBox(height: 16),
+                      ...(currentTerm?['courses'] as List<dynamic>? ?? []).map(
+                        (course) => _buildCourseCard(course),
+                      ),
+                    ] else ...[
+                      const Center(child: Text('No grades available yet.')),
+                    ],
+                    if (terms.isNotEmpty) ...[
+                      const SizedBox(height: 24),
+                      _buildDownloadButton(),
+                    ],
                     const SizedBox(height: 40),
                   ],
                 ),
               ),
+      ),
+    );
+  }
+
+  Widget _buildCombinedResults(
+    List<dynamic> combinedResults, {
+    required bool isLoading,
+    required String? error,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Natiijada Guud',
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w900,
+            color: Color(0xFF1E293B),
+          ),
+        ),
+        const SizedBox(height: 14),
+        if (isLoading && combinedResults.isEmpty)
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: CircularProgressIndicator(color: Color(0xFF405BB2)),
+            ),
+          )
+        else if (error != null && combinedResults.isEmpty)
+          _combinedResultsMessage(error, Icons.error_outline)
+        else if (combinedResults.isEmpty)
+          _combinedResultsMessage(
+            'No combined results have been published yet.',
+            Icons.layers_clear_outlined,
+          )
+        else
+          ...combinedResults.map(_buildCombinedResultCard),
+      ],
+    );
+  }
+
+  Widget _combinedResultsMessage(String message, IconData icon) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: Colors.blueGrey),
+          const SizedBox(height: 8),
+          Text(message, textAlign: TextAlign.center),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCombinedResultCard(dynamic combined) {
+    final result = combined['result'] is Map
+        ? Map<String, dynamic>.from(combined['result'])
+        : <String, dynamic>{};
+    final subjects = combined['subjects'] as List<dynamic>? ?? [];
+    final subjectTotals = result['subjectTotals'] is Map
+        ? Map<String, dynamic>.from(result['subjectTotals'])
+        : <String, dynamic>{};
+    final percentage = double.tryParse('${result['percentage'] ?? 0}') ?? 0;
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFFC7D2FE)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(18),
+            decoration: const BoxDecoration(
+              color: Color(0xFFEEF2FF),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: Text(
+              combined['title']?.toString() ?? 'Natiijada Guud',
+              style: const TextStyle(
+                color: Color(0xFF405BB2),
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _combinedStat('Rank', '${result['rank'] ?? '—'}'),
+                _combinedStat(
+                  'Total',
+                  '${result['totalObtained'] ?? 0}/${result['totalMax'] ?? 0}',
+                ),
+                _combinedStat('Percentage', '${percentage.toStringAsFixed(1)}%'),
+                _combinedStat('Grade', '${result['grade'] ?? '—'}'),
+              ],
+            ),
+          ),
+          if (subjects.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 16),
+              child: Column(
+                children: subjects.map((subject) {
+                  final id = subject['id']?.toString() ?? '';
+                  final score = subjectTotals[id] is Map
+                      ? Map<String, dynamic>.from(subjectTotals[id])
+                      : <String, dynamic>{};
+                  return Container(
+                    margin: const EdgeInsets.only(top: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            subject['name']?.toString() ?? 'Subject',
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        Text(
+                          '${score['obtained'] ?? 0}/${score['max'] ?? 0}',
+                          style: const TextStyle(
+                            color: Color(0xFF405BB2),
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _combinedStat(String label, String value) {
+    return Container(
+      width: 140,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        children: [
+          Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Color(0xFF405BB2),
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
       ),
     );
   }

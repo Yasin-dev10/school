@@ -284,10 +284,20 @@ exports.getMarks = async (req, res) => {
 
         if (req.user.role === 'teacher') {
             const scope = await getTeacherScope(req.user.id, req.user.tenantId);
-            if (scope.classIds.length === 0 || scope.subjectIds.length === 0)
+            if (scope.assignedPairs.length === 0)
                 return res.status(200).json({ success: true, data: [] });
-            where.classId = classId || { in: scope.classIds };
-            where.subjectId = subjectId || { in: scope.subjectIds };
+
+            if (classId && subjectId) {
+                const allowed = scope.assignedPairs.some(pair => pair.classId === classId && pair.subjectId === subjectId);
+                if (!allowed) return res.status(403).json({ success: false, message: 'You are not assigned to this class subject' });
+            }
+
+            // Use exact class/subject assignments, not the cross-product of all
+            // classes and all subjects assigned to the teacher.
+            where.OR = scope.assignedPairs.map(pair => ({
+                classId: pair.classId,
+                subjectId: pair.subjectId
+            }));
         }
 
         const marks = await prisma.mark.findMany({

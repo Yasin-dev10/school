@@ -1,0 +1,14 @@
+DO $$ BEGIN
+    CREATE TYPE "SubscriptionAccessMode" AS ENUM ('full', 'limited', 'suspended');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+
+ALTER TABLE "tenants"
+ADD COLUMN IF NOT EXISTS "billingCycle" TEXT NOT NULL DEFAULT 'Monthly',
+ADD COLUMN IF NOT EXISTS "accessMode" "SubscriptionAccessMode" NOT NULL DEFAULT 'full',
+ADD COLUMN IF NOT EXISTS "allowedModules" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+ADD COLUMN IF NOT EXISTS "graceDays" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN IF NOT EXISTS "warningDays" INTEGER NOT NULL DEFAULT 5,
+ADD COLUMN IF NOT EXISTS "autoSuspend" BOOLEAN NOT NULL DEFAULT true,
+ADD COLUMN IF NOT EXISTS "lastPaymentAt" TIMESTAMP(3);

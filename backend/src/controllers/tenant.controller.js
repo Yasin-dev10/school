@@ -1,6 +1,12 @@
 const prisma = require('../config/prismaClient');
 const bcrypt = require('bcryptjs');
 const { logAction } = require('../utils/logger');
+const { AVAILABLE_MODULES } = require('../utils/subscriptionAccess');
+
+const validAccessModes = new Set(['full', 'limited', 'suspended']);
+const cleanModules = (modules) => Array.isArray(modules)
+    ? [...new Set(modules.filter((moduleName) => AVAILABLE_MODULES.has(moduleName)))]
+    : [];
 
 // @desc    Create a new school (Tenant)
 // @route   POST /api/tenants
@@ -44,7 +50,13 @@ exports.createTenant = async (req, res) => {
                 ...(subscription && {
                     subscriptionPlan: subscription.plan || 'basic',
                     subscriptionValid: subscription.validUntil,
-                    subscriptionActive: subscription.isActive !== undefined ? subscription.isActive : true
+                    subscriptionActive: subscription.isActive !== undefined ? subscription.isActive : true,
+                    billingCycle: subscription.billingCycle || 'Monthly',
+                    ...(validAccessModes.has(subscription.accessMode) && { accessMode: subscription.accessMode }),
+                    allowedModules: cleanModules(subscription.allowedModules),
+                    graceDays: Math.max(0, Number(subscription.graceDays) || 0),
+                    warningDays: Math.max(0, Number(subscription.warningDays ?? 5) || 0),
+                    autoSuspend: subscription.autoSuspend !== false,
                 }),
                 academicYear: initialAcademicYear,
                 academicYears: {
@@ -148,14 +160,19 @@ exports.updateTenant = async (req, res) => {
                         subscriptionValid: new Date(subscription.validUntil).toISOString()
                     }),
                     ...(subscription.isActive !== undefined && { subscriptionActive: subscription.isActive }),
-                    ...(subscription.billingCycle !== undefined && { billingCycle: subscription.billingCycle })
+                    ...(subscription.billingCycle !== undefined && { billingCycle: subscription.billingCycle }),
+                    ...(validAccessModes.has(subscription.accessMode) && { accessMode: subscription.accessMode }),
+                    ...(Array.isArray(subscription.allowedModules) && { allowedModules: cleanModules(subscription.allowedModules) }),
+                    ...(subscription.graceDays !== undefined && { graceDays: Math.max(0, Number(subscription.graceDays) || 0) }),
+                    ...(subscription.warningDays !== undefined && { warningDays: Math.max(0, Number(subscription.warningDays) || 0) }),
+                    ...(subscription.autoSuspend !== undefined && { autoSuspend: Boolean(subscription.autoSuspend) })
                 })
             }
         });
 
         await logAction({
             action: 'UPDATE', module: 'TENANT',
-            details: `Updated school: ${existing.name} -> ${tenant.name}`,
+            details: `Updated school: ${existing.name} -> ${tenant.name}. Subscription access: ${existing.accessMode || 'full'} -> ${tenant.accessMode}`,
             userId: req.user?._id, tenantId: 'platform'
         });
 
@@ -199,6 +216,8 @@ exports.recordTenantPayment = async (req, res) => {
             note,
             paymentDate,
             renewMonths = 1,
+            accessMode = 'full',
+            allowedModules,
         } = req.body;
 
         if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
@@ -217,13 +236,16 @@ exports.recordTenantPayment = async (req, res) => {
                 subscriptionActive: true,
                 subscriptionValid: baseDate.toISOString(),
                 status: 'active',
+                accessMode: accessMode === 'limited' ? 'limited' : 'full',
+                ...(accessMode === 'limited' && { allowedModules: cleanModules(allowedModules) }),
+                lastPaymentAt: paymentDate ? new Date(paymentDate) : new Date(),
             }
         });
 
         await logAction({
             action: 'UPDATE',
             module: 'TENANT',
-            details: `Payment recorded for ${tenant.name}: $${amount} via ${paymentMethod}. TxnID: ${transactionId || 'N/A'}. Note: ${note || '—'}`,
+            details: `Payment recorded for ${tenant.name}: $${amount} via ${paymentMethod}. Access granted: ${accessMode === 'limited' ? 'limited' : 'full'}. TxnID: ${transactionId || 'N/A'}. Note: ${note || '—'}`,
             userId: req.user?._id,
             tenantId: 'platform'
         });
@@ -254,7 +276,16 @@ exports.getMyTenant = async (req, res) => {
     try {
         const tenant = await prisma.tenant.findUnique({ where: { tenantId: req.user.tenantId } });
         if (!tenant) return res.status(404).json({ message: 'School not found' });
-        res.status(200).json({ success: true, data: tenant });
+        const subscription = req.subscription ? {
+            mode: req.subscription.mode,
+            overdue: req.subscription.overdue,
+            graceExpired: req.subscription.graceExpired,
+            graceUntil: req.subscription.graceUntil,
+            daysRemaining: req.subscription.daysRemaining,
+            showWarning: req.subscription.showWarning,
+            allowedModules: tenant.allowedModules,
+        } : null;
+        res.status(200).json({ success: true, data: { ...tenant, subscriptionAccess: subscription } });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }

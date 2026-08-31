@@ -147,6 +147,13 @@ exports.getClasses = async (req, res) => {
             _count: { id: true }
         });
 
+        const teacherTimetablePairs = role === 'teacher'
+            ? new Set((await prisma.timetable.findMany({
+                where: { tenantId, teachers: { some: { teacherId: req.user.id } } },
+                select: { classId: true, subjectId: true }
+            })).map(slot => `${slot.classId}:${slot.subjectId}`))
+            : null;
+
         const formattedClasses = classes.map(c => {
             const studentCount = studentCounts.reduce((total, sc) => {
                 const canonicalMatch = sc.profileClass === c.name && sc.profileSection === c.section;
@@ -154,8 +161,16 @@ exports.getClasses = async (req, res) => {
                 return canonicalMatch || legacyIdMatch ? total + sc._count.id : total;
             }, 0);
 
+            const formatted = formatClass(c);
+            if (role === 'teacher') {
+                formatted.subjects = formatted.subjects.filter(subjectEntry =>
+                    subjectEntry.teachers.some(teacher => teacher.id === req.user.id) ||
+                    teacherTimetablePairs.has(`${c.id}:${subjectEntry.subject.id}`)
+                );
+            }
+
             return {
-                ...formatClass(c),
+                ...formatted,
                 studentCount
             };
         });

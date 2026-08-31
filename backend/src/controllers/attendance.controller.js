@@ -1,6 +1,6 @@
 const prisma = require('../config/prismaClient');
 const { logAction } = require('../utils/logger');
-const { canTeacherAccessClassSubject, canTeacherAccessStudent } = require('../utils/teacherScope');
+const { getTeacherScope, canTeacherAccessClassSubject, canTeacherAccessStudent } = require('../utils/teacherScope');
 const { notifyStudentAndParents } = require('../services/notification.service');
 
 const startOfDay = (value) => {
@@ -210,6 +210,11 @@ exports.getAttendance = async (req, res) => {
             const allowed = await canTeacherAccessClassSubject(req.user.id, classId, subjectId, tenantId);
             if (!allowed) return res.status(403).json({ success: false, message: 'You are not assigned to this class subject' });
         }
+        if (req.user.role === 'teacher' && !classId) {
+            const scope = await getTeacherScope(req.user.id, tenantId);
+            if (!scope.assignedPairs.length) return res.status(200).json({ success: true, count: 0, data: [] });
+            where.OR = scope.assignedPairs.map(pair => ({ classId: pair.classId, subjectId: pair.subjectId }));
+        }
 
         const records = await prisma.attendance.findMany({
             where,
@@ -232,6 +237,7 @@ exports.getAttendanceSummary = async (req, res) => {
         let where = { tenantId };
 
         if (classId) where.classId = classId;
+        if (req.query.subjectId) where.subjectId = req.query.subjectId;
         if (studentId) where.studentId = studentId;
         if (req.user.role === 'student') where.studentId = req.user.id;
         if (startDate || endDate) {
@@ -289,10 +295,17 @@ exports.getStudentAttendance = async (req, res) => {
         if (req.user.role === 'teacher') {
             const allowed = await canTeacherAccessStudent(req.user.id, studentId, tenantId);
             if (!allowed) return res.status(403).json({ success: false, message: 'You are not assigned to this student' });
+            if (!subjectId) return res.status(400).json({ success: false, message: 'Subject is required for teacher attendance' });
         }
 
         const where = { tenantId, studentId };
         if (subjectId) where.subjectId = subjectId;
+        if (req.user.role === 'teacher') {
+            const scope = await getTeacherScope(req.user.id, tenantId);
+            const subjectPairs = scope.assignedPairs.filter(pair => pair.subjectId === subjectId);
+            if (!subjectPairs.length) return res.status(403).json({ success: false, message: 'You are not assigned to this subject' });
+            where.classId = { in: subjectPairs.map(pair => pair.classId) };
+        }
         if (startDate || endDate) {
             where.date = {};
             if (startDate) where.date.gte = new Date(startDate);

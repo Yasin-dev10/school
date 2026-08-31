@@ -46,6 +46,12 @@ const METHODS = [
     { value: 'cheque',        label: 'Cheque' },
     { value: 'ach',           label: 'ACH' },
 ];
+const PAYMENT_MODULES = [
+    ['students', 'Students'], ['teachers', 'Teachers'], ['classes', 'Classes'],
+    ['subjects', 'Subjects'], ['attendance', 'Attendance'], ['timetable', 'Timetable'],
+    ['exams', 'Exams'], ['learning', 'Learning'], ['finance', 'Finance'],
+    ['communication', 'Communication'], ['calendar', 'Calendar'], ['support', 'Support'],
+] as const;
 
 const PAGE_SIZE = 10;
 
@@ -65,6 +71,7 @@ export default function SuperAdminPaymentsPage() {
         tenantId: '', amount: '', paymentMethod: 'credit_card',
         transactionId: '', note: '', paymentDate: new Date().toISOString().slice(0, 10),
         renewMonths: '1',
+        accessMode: 'full', allowedModules: [] as string[],
     });
     const [saving, setSaving]   = useState(false);
     const [saveMsg, setSaveMsg] = useState('');
@@ -110,6 +117,8 @@ export default function SuperAdminPaymentsPage() {
             note:          '',
             paymentDate:   new Date().toISOString().slice(0, 10),
             renewMonths:   '1',
+            accessMode: 'full',
+            allowedModules: tenant?.subscriptionPlan ? ['students', 'classes', 'attendance', 'exams'] : [],
         });
         setSaveMsg(''); setSaveErr('');
         setModalOpen(true);
@@ -127,6 +136,8 @@ export default function SuperAdminPaymentsPage() {
                 note:          form.note || undefined,
                 paymentDate:   form.paymentDate ? new Date(form.paymentDate + 'T00:00:00Z').toISOString() : undefined,
                 renewMonths:   Number(form.renewMonths),
+                accessMode: form.accessMode,
+                allowedModules: form.allowedModules,
             });
             setSaveMsg(`Payment recorded! Subscription extended to ${new Date(data.data.newValidUntil).toLocaleDateString()}`);
             fetchTenants();
@@ -309,7 +320,7 @@ export default function SuperAdminPaymentsPage() {
             {modalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                     <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setModalOpen(false)} />
-                    <div className="relative w-full max-w-md bg-slate-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
+                    <div className="relative w-full max-w-2xl max-h-[92vh] overflow-y-auto bg-slate-900 border border-white/10 rounded-2xl shadow-2xl">
                         <div className="h-1 bg-gradient-to-r from-blue-600 to-indigo-600" />
                         <div className="p-6">
                             {/* Modal header */}
@@ -358,6 +369,28 @@ export default function SuperAdminPaymentsPage() {
                                             className={inputCls} />
                                     </div>
                                 </div>
+
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Access after payment</label>
+                                    <select value={form.accessMode} onChange={e => setForm(f => ({ ...f, accessMode: e.target.value }))} className={inputCls}>
+                                        <option value="full">Full Access — full payment</option>
+                                        <option value="limited">Limited Access — partial payment</option>
+                                    </select>
+                                </div>
+
+                                {form.accessMode === 'limited' && (
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Modules to allow</label>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 rounded-xl border border-white/10 bg-slate-950/50 p-3">
+                                            {PAYMENT_MODULES.map(([value, label]) => (
+                                                <label key={value} className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                                                    <input type="checkbox" checked={form.allowedModules.includes(value)} onChange={() => setForm(f => ({ ...f, allowedModules: f.allowedModules.includes(value) ? f.allowedModules.filter(m => m !== value) : [...f.allowedModules, value] }))} className="accent-amber-500" />
+                                                    {label}
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
 
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Payment Method</label>

@@ -186,6 +186,9 @@ class StudentProvider with ChangeNotifier {
   List<dynamic> _certificates = [];
   List<dynamic> _fees = [];
   Map<String, dynamic>? _studentGrades;
+  List<dynamic> _combinedResults = [];
+  bool _combinedResultsLoading = false;
+  String? _combinedResultsError;
 
   List<dynamic> get exams => _exams;
   List<dynamic> get results => _results;
@@ -194,6 +197,9 @@ class StudentProvider with ChangeNotifier {
   List<dynamic> get certificates => _certificates;
   List<dynamic> get fees => _fees;
   Map<String, dynamic>? get studentGrades => _studentGrades;
+  List<dynamic> get combinedResults => _combinedResults;
+  bool get combinedResultsLoading => _combinedResultsLoading;
+  String? get combinedResultsError => _combinedResultsError;
 
   Future<void> fetchFees(String? studentId) async {
     if (studentId == null) return;
@@ -216,20 +222,49 @@ class StudentProvider with ChangeNotifier {
 
   Future<void> fetchStudentGrades([String? studentId]) async {
     _isLoading = true;
+    _combinedResultsLoading = true;
+    _errorMessage = null;
+    _combinedResultsError = null;
     notifyListeners();
-    try {
-      final url = studentId != null
-          ? '/exams/student-grades/$studentId'
-          : '/exams/student-grades';
 
-      final response = await _apiService.get(url);
-      if (response.statusCode == 200) {
+    final gradesUrl = studentId != null
+        ? '/exams/student-grades/$studentId'
+        : '/exams/student-grades';
+    final combinedUrl = studentId != null
+        ? '/exams/combined-results/student/$studentId'
+        : '/exams/combined-results/student';
+
+    Future<void> loadGrades() async {
+      try {
+        final response = await _apiService.get(gradesUrl);
+        if (response.statusCode != 200) {
+          throw Exception('HTTP ${response.statusCode}');
+        }
         final data = jsonDecode(response.body);
         _studentGrades = data['data'];
+      } catch (e) {
+        _errorMessage = 'Failed to load grades';
+        debugPrint('Error fetching student grades: $e');
       }
-    } catch (e) {
-      debugPrint('Error fetching student grades: $e');
     }
+
+    Future<void> loadCombinedResults() async {
+      try {
+        final response = await _apiService.get(combinedUrl);
+        if (response.statusCode != 200) {
+          throw Exception('HTTP ${response.statusCode}');
+        }
+        final data = jsonDecode(response.body);
+        _combinedResults = data['data'] is List ? data['data'] : [];
+      } catch (e) {
+        _combinedResultsError = 'Unable to load combined results.';
+        debugPrint('Error fetching combined results: $e');
+      } finally {
+        _combinedResultsLoading = false;
+      }
+    }
+
+    await Future.wait([loadGrades(), loadCombinedResults()]);
     _isLoading = false;
     notifyListeners();
   }
@@ -344,6 +379,9 @@ class StudentProvider with ChangeNotifier {
     _materials = [];
     _certificates = [];
     _studentGrades = null;
+    _combinedResults = [];
+    _combinedResultsLoading = false;
+    _combinedResultsError = null;
     _fees = [];
     _errorMessage = null;
     notifyListeners();

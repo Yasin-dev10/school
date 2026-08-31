@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import api from '../../utils/api';
 import {
     Search, Loader2, Pencil, Trash2, X, CheckCircle2,
@@ -16,6 +16,11 @@ interface Tenant {
     subscriptionActive?: boolean;
     subscriptionValid?: string;
     billingCycle?: string;
+    accessMode?: 'full' | 'limited' | 'suspended';
+    allowedModules?: string[];
+    graceDays?: number;
+    warningDays?: number;
+    autoSuspend?: boolean;
     config?: { logoUrl?: string };
     subscription?: { plan?: string; billingCycle?: string; validUntil?: string };
     _count?: { users?: number };
@@ -28,6 +33,15 @@ const PLANS = [
 ];
 
 const BILLING_CYCLES = ['Monthly', 'Annual'];
+const MODULES = [
+    ['students', 'Students'], ['teachers', 'Teachers'], ['classes', 'Classes'],
+    ['subjects', 'Subjects'], ['attendance', 'Attendance'], ['timetable', 'Timetable'],
+    ['exams', 'Exams & Results'], ['learning', 'Learning'], ['finance', 'Finance'],
+    ['payroll', 'Payroll'], ['inventory', 'Inventory'], ['certificates', 'Certificates'],
+    ['reports', 'Reports & Analytics'], ['communication', 'Communication'],
+    ['calendar', 'Calendar'], ['alumni', 'Alumni'], ['customization', 'Customization'],
+    ['settings', 'Logs & Settings'], ['support', 'Help & Support'],
+] as const;
 
 export default function SubscriptionsPage() {
     const [tenants, setTenants] = useState<Tenant[]>([]);
@@ -38,7 +52,10 @@ export default function SubscriptionsPage() {
     // Edit modal
     const [editOpen, setEditOpen] = useState(false);
     const [editTenant, setEditTenant] = useState<Tenant | null>(null);
-    const [editForm, setEditForm] = useState({ plan: 'basic', billingCycle: 'Monthly', validUntil: '', status: 'active' });
+    const [editForm, setEditForm] = useState({
+        plan: 'basic', billingCycle: 'Monthly', validUntil: '', accessMode: 'full',
+        allowedModules: [] as string[], graceDays: 0, warningDays: 5, autoSuspend: true,
+    });
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState('');
 
@@ -69,7 +86,8 @@ export default function SubscriptionsPage() {
     };
 
     const getStatusMeta = (t: Tenant) => {
-        if (t.status === 'suspended') return { label: 'Canceled', cls: 'bg-slate-600/30 text-slate-400 border border-slate-500/20' };
+        if (t.accessMode === 'suspended' || t.status === 'suspended') return { label: 'Suspended', cls: 'bg-red-500/15 text-red-400 border border-red-500/25' };
+        if (t.accessMode === 'limited') return { label: 'Limited', cls: 'bg-amber-500/15 text-amber-300 border border-amber-500/25' };
         if (!t.subscriptionActive && t.subscriptionValid && new Date(t.subscriptionValid) < new Date())
             return { label: 'Expired', cls: 'bg-red-500/15 text-red-400 border border-red-500/25' };
         if (t.subscriptionActive || t.status === 'active')
@@ -95,7 +113,11 @@ export default function SubscriptionsPage() {
                 : tenant.subscription?.validUntil
                     ? new Date(tenant.subscription.validUntil).toISOString().slice(0, 10)
                     : '',
-            status: tenant.status,
+            accessMode: tenant.accessMode || (tenant.status === 'suspended' ? 'suspended' : 'full'),
+            allowedModules: tenant.allowedModules || [],
+            graceDays: tenant.graceDays ?? 0,
+            warningDays: tenant.warningDays ?? 5,
+            autoSuspend: tenant.autoSuspend !== false,
         });
         setSaveError('');
         setEditOpen(true);
@@ -107,20 +129,26 @@ export default function SubscriptionsPage() {
         setSaveError('');
         try {
             await api.put(`/tenants/${editTenant.id}`, {
-                status:       editForm.status,
+                status: editForm.accessMode === 'suspended' ? 'suspended' : 'active',
                 subscription: {
                     plan:         editForm.plan,
                     billingCycle: editForm.billingCycle,
+                    accessMode: editForm.accessMode,
+                    allowedModules: editForm.allowedModules,
+                    graceDays: editForm.graceDays,
+                    warningDays: editForm.warningDays,
+                    autoSuspend: editForm.autoSuspend,
+                    isActive: editForm.accessMode !== 'suspended',
                     // Convert "YYYY-MM-DD" → full ISO string so Prisma accepts it
                     ...(editForm.validUntil
-                        ? { validUntil: new Date(editForm.validUntil + 'T00:00:00.000Z').toISOString() }
+                        ? { validUntil: new Date(editForm.validUntil + 'T23:59:59.999Z').toISOString() }
                         : {}
                     ),
                 },
             });
             setTenants(prev => prev.map(t =>
                 t.id === editTenant.id
-                    ? { ...t, status: editForm.status, subscriptionPlan: editForm.plan, billingCycle: editForm.billingCycle, subscriptionValid: editForm.validUntil || t.subscriptionValid }
+                    ? { ...t, status: editForm.accessMode === 'suspended' ? 'suspended' : 'active', accessMode: editForm.accessMode as Tenant['accessMode'], allowedModules: editForm.allowedModules, graceDays: editForm.graceDays, warningDays: editForm.warningDays, autoSuspend: editForm.autoSuspend, subscriptionPlan: editForm.plan, billingCycle: editForm.billingCycle, subscriptionValid: editForm.validUntil || t.subscriptionValid }
                     : t
             ));
             setEditOpen(false);
@@ -346,7 +374,7 @@ export default function SubscriptionsPage() {
                     {/* Backdrop */}
                     <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setEditOpen(false)} />
                     {/* Panel */}
-                    <div className="relative w-full max-w-md bg-slate-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
+                    <div className="relative w-full max-w-2xl max-h-[92vh] overflow-y-auto bg-slate-900 border border-white/10 rounded-2xl shadow-2xl">
                         {/* Top accent */}
                         <div className="h-1 bg-gradient-to-r from-indigo-600 to-purple-600" />
 
@@ -414,18 +442,49 @@ export default function SubscriptionsPage() {
                                     />
                                 </div>
 
-                                {/* Status */}
+                                {/* Access mode */}
                                 <div>
-                                    <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Status</label>
+                                    <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">School Access</label>
                                     <select
-                                        value={editForm.status}
-                                        onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))}
+                                        value={editForm.accessMode}
+                                        onChange={e => setEditForm(f => ({ ...f, accessMode: e.target.value }))}
                                         className={inputCls}
                                     >
-                                        <option value="active">Active</option>
+                                        <option value="full">Full Access</option>
+                                        <option value="limited">Limited Access</option>
                                         <option value="suspended">Suspended</option>
                                     </select>
                                 </div>
+
+                                {editForm.accessMode === 'limited' && (
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Allowed Modules</label>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 rounded-xl border border-white/10 bg-slate-950/50 p-3">
+                                            {MODULES.map(([value, label]) => (
+                                                <label key={value} className="flex items-center gap-2 rounded-lg p-2 text-sm text-slate-300 hover:bg-white/5 cursor-pointer">
+                                                    <input type="checkbox" checked={editForm.allowedModules.includes(value)} onChange={() => setEditForm(f => ({ ...f, allowedModules: f.allowedModules.includes(value) ? f.allowedModules.filter(m => m !== value) : [...f.allowedModules, value] }))} className="accent-amber-500" />
+                                                    {label}
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Grace Days</label>
+                                        <input type="number" min="0" value={editForm.graceDays} onChange={e => setEditForm(f => ({ ...f, graceDays: Math.max(0, Number(e.target.value)) }))} className={inputCls} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Warning Days</label>
+                                        <input type="number" min="0" value={editForm.warningDays} onChange={e => setEditForm(f => ({ ...f, warningDays: Math.max(0, Number(e.target.value)) }))} className={inputCls} />
+                                    </div>
+                                </div>
+
+                                <label className="flex items-center justify-between rounded-xl border border-white/10 bg-slate-800 p-3 text-sm text-slate-300 cursor-pointer">
+                                    <span><strong className="block text-white">Automatic suspension</strong>Lock the school after renewal date + grace days.</span>
+                                    <input type="checkbox" checked={editForm.autoSuspend} onChange={e => setEditForm(f => ({ ...f, autoSuspend: e.target.checked }))} className="h-4 w-4 accent-red-500" />
+                                </label>
                             </div>
 
                             {/* Actions */}

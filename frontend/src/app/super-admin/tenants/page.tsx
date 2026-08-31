@@ -5,8 +5,18 @@ import Link from 'next/link';
 import {
     Search, Plus, Pencil, Trash2, Loader2,
     TrendingUp, TrendingDown, Users, School, Activity,
-    MoreHorizontal, Filter, ChevronDown
+    MoreHorizontal, Filter, ChevronDown, ShieldAlert, X, CheckCircle2
 } from 'lucide-react';
+
+const ACCESS_MODULES = [
+    ['students', 'Students'], ['teachers', 'Teachers'], ['classes', 'Classes'],
+    ['subjects', 'Subjects'], ['attendance', 'Attendance'], ['timetable', 'Timetable'],
+    ['exams', 'Exams & Results'], ['learning', 'Learning'], ['finance', 'Finance'],
+    ['payroll', 'Payroll'], ['inventory', 'Inventory'], ['certificates', 'Certificates'],
+    ['reports', 'Reports & Analytics'], ['communication', 'Communication'],
+    ['calendar', 'Calendar'], ['alumni', 'Alumni'], ['customization', 'Customization'],
+    ['settings', 'Logs & Settings'], ['support', 'Help & Support'],
+] as const;
 
 export default function TenantsPage() {
     const [tenants, setTenants] = useState<any[]>([]);
@@ -17,6 +27,10 @@ export default function TenantsPage() {
     const [openMenu, setOpenMenu] = useState<string | null>(null);
     const [selected, setSelected] = useState<Set<string>>(new Set());
     const menuRef = useRef<HTMLDivElement>(null);
+    const [accessTenant, setAccessTenant] = useState<any | null>(null);
+    const [accessForm, setAccessForm] = useState({ accessMode: 'full', allowedModules: [] as string[], validUntil: '', graceDays: 0, warningDays: 5, autoSuspend: true });
+    const [savingAccess, setSavingAccess] = useState(false);
+    const [accessError, setAccessError] = useState('');
 
     const fetchTenants = async () => {
         try {
@@ -46,6 +60,58 @@ export default function TenantsPage() {
             await api.delete(`/tenants/${id}`);
             setTenants(prev => prev.filter((t: any) => t.id !== id));
         } catch { alert('Failed to delete school.'); }
+    };
+
+    const openAccess = (tenant: any) => {
+        setOpenMenu(null);
+        setAccessTenant(tenant);
+        setAccessForm({
+            accessMode: tenant.accessMode || (tenant.status === 'suspended' ? 'suspended' : 'full'),
+            allowedModules: tenant.allowedModules || [],
+            validUntil: tenant.subscriptionValid ? new Date(tenant.subscriptionValid).toISOString().slice(0, 10) : '',
+            graceDays: tenant.graceDays ?? 0,
+            warningDays: tenant.warningDays ?? 5,
+            autoSuspend: tenant.autoSuspend !== false,
+        });
+        setAccessError('');
+    };
+
+    const saveAccess = async () => {
+        if (!accessTenant) return;
+        setSavingAccess(true);
+        setAccessError('');
+        try {
+            const { data } = await api.put(`/tenants/${accessTenant.id}`, {
+                status: accessForm.accessMode === 'suspended' ? 'suspended' : 'active',
+                subscription: {
+                    accessMode: accessForm.accessMode,
+                    allowedModules: accessForm.allowedModules,
+                    graceDays: accessForm.graceDays,
+                    warningDays: accessForm.warningDays,
+                    autoSuspend: accessForm.autoSuspend,
+                    isActive: accessForm.accessMode !== 'suspended',
+                    ...(accessForm.validUntil ? { validUntil: new Date(`${accessForm.validUntil}T23:59:59.999Z`).toISOString() } : {}),
+                },
+            });
+            setTenants(prev => prev.map(t => t.id === accessTenant.id ? data.data : t));
+            setAccessTenant(null);
+        } catch (error: any) {
+            setAccessError(error?.response?.data?.message || 'Failed to update school access.');
+        } finally {
+            setSavingAccess(false);
+        }
+    };
+
+    const toggleSchool = async (tenant: any) => {
+        const suspended = tenant.accessMode === 'suspended' || tenant.status === 'suspended';
+        const nextMode = suspended ? 'full' : 'suspended';
+        try {
+            const { data } = await api.put(`/tenants/${tenant.id}`, {
+                status: nextMode === 'suspended' ? 'suspended' : 'active',
+                subscription: { accessMode: nextMode, isActive: nextMode !== 'suspended' },
+            });
+            setTenants(prev => prev.map(t => t.id === tenant.id ? data.data : t));
+        } catch { alert('Failed to change school access.'); }
     };
 
     const filtered = tenants.filter(t => {
@@ -228,7 +294,8 @@ export default function TenantsPage() {
                             <tbody ref={menuRef as any}>
                                 {filtered.map((tenant: any, idx: number) => {
                                     const badge = planBadge(tenant.subscriptionPlan);
-                                    const isActive = tenant.status === 'active';
+                                    const accessMode = tenant.accessMode || (tenant.status === 'suspended' ? 'suspended' : 'full');
+                                    const isActive = accessMode !== 'suspended';
                                     const isSelected = selected.has(tenant.id);
                                     return (
                                         <tr
@@ -280,13 +347,14 @@ export default function TenantsPage() {
                                                 <div className="flex items-center gap-2">
                                                     {/* Toggle switch visual */}
                                                     <button
+                                                        onClick={() => toggleSchool(tenant)}
                                                         className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${isActive ? 'bg-emerald-500' : 'bg-slate-600'}`}
                                                         title={isActive ? 'Active' : 'Inactive'}
                                                     >
                                                         <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${isActive ? 'translate-x-4.5' : 'translate-x-0.5'}`} />
                                                     </button>
                                                     <span className={`text-sm font-medium ${isActive ? 'text-emerald-400' : 'text-slate-500'}`}>
-                                                        {isActive ? 'Active' : 'Inactive'}
+                                                        {accessMode === 'limited' ? 'Limited' : isActive ? 'Full Access' : 'Suspended'}
                                                     </span>
                                                 </div>
                                             </td>
@@ -310,6 +378,12 @@ export default function TenantsPage() {
                                                                 <Pencil className="w-3.5 h-3.5" /> Edit
                                                             </Link>
                                                             <button
+                                                                onClick={() => openAccess(tenant)}
+                                                                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-amber-300 hover:bg-amber-500/10 text-sm transition"
+                                                            >
+                                                                <ShieldAlert className="w-3.5 h-3.5" /> Manage Access
+                                                            </button>
+                                                            <button
                                                                 onClick={() => handleDelete(tenant.id, tenant.name)}
                                                                 className="w-full flex items-center gap-2.5 px-4 py-2.5 text-red-400 hover:bg-red-500/10 text-sm transition"
                                                             >
@@ -327,6 +401,67 @@ export default function TenantsPage() {
                     </div>
                 )}
             </div>
+
+            {accessTenant && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setAccessTenant(null)} />
+                    <div className="relative w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-2xl border border-white/10 bg-slate-900 shadow-2xl">
+                        <div className="h-1 bg-gradient-to-r from-amber-500 via-indigo-500 to-red-500" />
+                        <div className="p-6">
+                            <div className="mb-5 flex items-start justify-between">
+                                <div>
+                                    <p className="text-xs font-bold uppercase tracking-wider text-indigo-400">School Access Control</p>
+                                    <h2 className="mt-1 text-xl font-bold text-white">{accessTenant.name}</h2>
+                                </div>
+                                <button onClick={() => setAccessTenant(null)} className="rounded-lg p-2 text-slate-500 hover:bg-white/5 hover:text-white"><X className="h-5 w-5" /></button>
+                            </div>
+
+                            {accessError && <div className="mb-4 rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">{accessError}</div>}
+
+                            <div className="space-y-5">
+                                <div>
+                                    <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-slate-400">Access Level</label>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {[['full', 'Full Access'], ['limited', 'Limited Access'], ['suspended', 'Suspended']].map(([value, label]) => (
+                                            <button key={value} type="button" onClick={() => setAccessForm(f => ({ ...f, accessMode: value }))} className={`rounded-xl border px-3 py-3 text-sm font-bold transition ${accessForm.accessMode === value ? value === 'full' ? 'border-emerald-500 bg-emerald-500/15 text-emerald-300' : value === 'limited' ? 'border-amber-500 bg-amber-500/15 text-amber-300' : 'border-red-500 bg-red-500/15 text-red-300' : 'border-white/10 bg-slate-800 text-slate-400'}`}>{label}</button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {accessForm.accessMode === 'limited' && (
+                                    <div>
+                                        <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-slate-400">Meelaha loo fasaxayo</label>
+                                        <div className="grid grid-cols-2 gap-2 rounded-xl border border-white/10 bg-slate-950/50 p-3 sm:grid-cols-3">
+                                            {ACCESS_MODULES.map(([value, label]) => (
+                                                <label key={value} className="flex cursor-pointer items-center gap-2 rounded-lg p-2 text-sm text-slate-300 hover:bg-white/5">
+                                                    <input type="checkbox" checked={accessForm.allowedModules.includes(value)} onChange={() => setAccessForm(f => ({ ...f, allowedModules: f.allowedModules.includes(value) ? f.allowedModules.filter(m => m !== value) : [...f.allowedModules, value] }))} className="accent-amber-500" />
+                                                    {label}
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                                    <div><label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-slate-400">Payment Deadline</label><input type="date" value={accessForm.validUntil} onChange={e => setAccessForm(f => ({ ...f, validUntil: e.target.value }))} className="w-full rounded-xl border border-white/10 bg-slate-800 px-3 py-2.5 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500" /></div>
+                                    <div><label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-slate-400">Grace Days</label><input type="number" min="0" value={accessForm.graceDays} onChange={e => setAccessForm(f => ({ ...f, graceDays: Math.max(0, Number(e.target.value)) }))} className="w-full rounded-xl border border-white/10 bg-slate-800 px-3 py-2.5 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500" /></div>
+                                    <div><label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-slate-400">Warning Days</label><input type="number" min="0" value={accessForm.warningDays} onChange={e => setAccessForm(f => ({ ...f, warningDays: Math.max(0, Number(e.target.value)) }))} className="w-full rounded-xl border border-white/10 bg-slate-800 px-3 py-2.5 text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500" /></div>
+                                </div>
+
+                                <label className="flex cursor-pointer items-center justify-between rounded-xl border border-white/10 bg-slate-800 p-4 text-sm text-slate-300">
+                                    <span><strong className="block text-white">Automatic suspension</strong>Deadline + grace days kadib school-ka otomaatig u xir.</span>
+                                    <input type="checkbox" checked={accessForm.autoSuspend} onChange={e => setAccessForm(f => ({ ...f, autoSuspend: e.target.checked }))} className="h-4 w-4 accent-red-500" />
+                                </label>
+                            </div>
+
+                            <div className="mt-6 flex gap-3">
+                                <button onClick={saveAccess} disabled={savingAccess || (accessForm.accessMode === 'limited' && accessForm.allowedModules.length === 0)} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 py-2.5 text-sm font-bold text-white hover:bg-indigo-500 disabled:opacity-50">{savingAccess ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Save Access</button>
+                                <button onClick={() => setAccessTenant(null)} className="flex-1 rounded-xl border border-white/10 bg-slate-800 py-2.5 text-sm font-bold text-slate-300 hover:bg-slate-700">Cancel</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
