@@ -22,9 +22,6 @@ export default function AddStudentPage() {
         lastName: '',
         email: '',
         password: '',
-        admissionNo: '',
-        studentId: '',
-        rollNo: '',
         class: '',
         section: 'A',
         gender: 'male',
@@ -45,8 +42,8 @@ export default function AddStudentPage() {
         emergencyContactNo: '',
         schoolComments: '',
         absenteeismStatus: 'Active',
-        regDate: '',
-        editDate: '',
+        previousSchool: '',
+        paysTuition: 'yes',
         parentFirstName: '',
         parentLastName: '',
         parentEmail: '',
@@ -108,9 +105,6 @@ export default function AddStudentPage() {
                 email: formData.email,
                 password: formData.password || '', // Empty sends trigger to backend for auto-gen
                 profile: {
-                    admissionNo: formData.admissionNo,
-                    studentId: formData.studentId,
-                    rollNo: formData.rollNo,
                     class: formData.class,
                     section: formData.section,
                     gender: formData.gender,
@@ -133,8 +127,7 @@ export default function AddStudentPage() {
                     emergencyContactNo: formData.emergencyContactNo,
                     schoolComments: formData.schoolComments,
                     absenteeismStatus: formData.absenteeismStatus,
-                    regDate: formData.regDate,
-                    editDate: formData.editDate
+                    previousSchool: formData.previousSchool
                 },
                 parentDetails: formData.parentEmail ? {
                     firstName: formData.parentFirstName,
@@ -272,22 +265,6 @@ export default function AddStudentPage() {
                     <div className="absolute top-0 right-0 p-8 text-6xl opacity-5 pointer-events-none">📝</div>
                     <h2 className="text-xl font-bold text-white border-b border-white/5 pb-4">Academic Details</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                        <div className="space-y-2 lg:col-span-2">
-                            <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Admission Number</label>
-                            <input
-                                name="admissionNo" value={formData.admissionNo} onChange={handleChange}
-                                placeholder="[Auto-generated]"
-                                className="w-full px-5 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500/50 outline-none placeholder:text-slate-600"
-                            />
-                        </div>
-                        <div className="space-y-2 lg:col-span-2">
-                            <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Student ID</label>
-                            <input
-                                name="studentId" value={formData.studentId} onChange={handleChange}
-                                placeholder="[Auto-generated]"
-                                className="w-full px-5 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500/50 outline-none placeholder:text-slate-600"
-                            />
-                        </div>
                         <div className="space-y-2">
                             <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Class</label>
                             <select
@@ -299,6 +276,14 @@ export default function AddStudentPage() {
                                     <option key={name} value={name}>{name}</option>
                                 ))}
                             </select>
+                        </div>
+                        <div className="space-y-2 lg:col-span-2">
+                            <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Previous School (if transferred)</label>
+                            <input
+                                name="previousSchool" value={formData.previousSchool} onChange={handleChange}
+                                placeholder="Name of previous school"
+                                className="w-full px-5 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500/50 outline-none"
+                            />
                         </div>
                         <div className="space-y-2">
                             <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Section</label>
@@ -313,19 +298,14 @@ export default function AddStudentPage() {
                             </select>
                         </div>
                         <div className="space-y-2 lg:col-span-2">
-                            <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Roll Number</label>
-                            <input
-                                name="rollNo" value={formData.rollNo} onChange={handleChange}
-                                placeholder="[Auto-generated]"
-                                className="w-full px-5 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500/50 outline-none placeholder:text-slate-600"
-                            />
-                        </div>
-                        <div className="space-y-2 lg:col-span-2">
-                            <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Registration Date</label>
-                            <input
-                                type="datetime-local" name="regDate" value={formData.regDate} onChange={handleChange}
+                            <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Does the student pay tuition?</label>
+                            <select
+                                name="paysTuition" value={formData.paysTuition} onChange={handleChange}
                                 className="w-full px-5 py-3.5 bg-slate-950 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500/50 outline-none"
-                            />
+                            >
+                                <option value="yes">Yes</option>
+                                <option value="no">No</option>
+                            </select>
                         </div>
                     </div>
                 </section>

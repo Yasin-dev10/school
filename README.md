@@ -224,10 +224,9 @@ cd school
 
 ```bash
 cd backend
-npm install
 ```
 
-Create a `.env` file in the `backend` directory:
+Create a `.env` file in the `backend` directory before installing dependencies. Prisma generation runs during installation and requires both database URLs to be set (the database does not need to be running yet):
 
 ```env
 # Server Configuration
@@ -262,6 +261,12 @@ SOCKET_CORS_ORIGIN=http://localhost:3000
 # AI Assistant (Optional)
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-5.4
+```
+
+Then install the backend dependencies:
+
+```bash
+npm install
 ```
 
 ### 3. Frontend Setup

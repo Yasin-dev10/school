@@ -1,0 +1,4 @@
+ALTER TABLE "users"
+  ADD COLUMN IF NOT EXISTS "previousSchool" TEXT,
+  ADD COLUMN IF NOT EXISTS "transferSchool" TEXT,
+  ADD COLUMN IF NOT EXISTS "transferDate" TIMESTAMP(3);

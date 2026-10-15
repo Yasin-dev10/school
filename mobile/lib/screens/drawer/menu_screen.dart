@@ -22,6 +22,7 @@ import '../exams/student_grades_screen.dart';
 import '../student/student_fees_screen.dart';
 import '../login_screen.dart';
 import '../parent/parent_dashboard_screen.dart';
+import '../parent/parent_fees_screen.dart';
 import '../certificates/staff_certificates_screen.dart';
 import '../classes/class_list_screen.dart';
 import '../students/all_students_screen.dart';
@@ -235,6 +236,7 @@ class MenuScreen extends StatelessWidget {
     } else if (role == 'parent') {
       return [
         MenuItem('Dashboard', Icons.dashboard_rounded, ParentDashboardScreen()),
+        const MenuItem('Fees', Icons.account_balance_wallet_rounded, ParentFeesScreen()),
         const MenuItem('Profile', Icons.person_rounded, ProfileScreen()),
         const MenuItem(
           'Notifications',

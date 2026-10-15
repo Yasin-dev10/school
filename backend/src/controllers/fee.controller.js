@@ -1,5 +1,5 @@
 const prisma = require('../config/prismaClient');
-const { notifyStudentAndParents } = require('../services/notification.service');
+const { notifyStudentAndParents, getSchoolName } = require('../services/notification.service');
 const { logAction } = require('../utils/logger');
 
 // @desc    Create fee type
@@ -50,6 +50,11 @@ exports.createInvoice = async (req, res) => {
         const { invoiceNumber, studentId, classId, items, dueDate } = req.body;
         const tenantId = req.user.tenantId;
         const totalAmount = items?.reduce((s, i) => s + (i.amount || 0), 0) || 0;
+        const [schoolName, student] = await Promise.all([
+            getSchoolName(tenantId),
+            prisma.user.findFirst({ where: { id: studentId, tenantId, role: 'student' }, select: { firstName: true, lastName: true } })
+        ]);
+        const studentName = student ? `${student.firstName} ${student.lastName}`.trim() : 'ardayga';
 
         const invoice = await prisma.invoice.create({
             data: {
@@ -69,7 +74,8 @@ exports.createInvoice = async (req, res) => {
         await logAction({ action: 'CREATE', module: 'TENANT', details: `Created invoice ${invoiceNumber}`, userId: req.user._id, tenantId });
         await notifyStudentAndParents({
             tenantId, senderId: req.user.id, studentId, title: 'Fee payment due',
-            message: `Invoice ${invoiceNumber} for $${totalAmount.toLocaleString()} is due ${new Date(dueDate).toLocaleDateString()}.`,
+            message: `Biilka ${invoiceNumber} oo dhan $${totalAmount.toLocaleString()} wuxuu ku egyahay ${new Date(dueDate).toLocaleDateString()}.`,
+            smsMessage: `${schoolName}\nMudane/Marwo, ardayga ${studentName} waxaa laga rabaa lacag dhan $${totalAmount.toLocaleString()}. Bixi ugu dambayn ${new Date(dueDate).toLocaleDateString('en-GB')}.\nMahadsanid.\n${schoolName}`,
             type: 'fee_reminder', eventType: 'fee_due', deepLink: `/dashboard/student-finance?invoice=${invoice.id}`
         });
         res.status(201).json({ success: true, data: invoice });
@@ -157,6 +163,19 @@ exports.recordPayment = async (req, res) => {
         const newPaid = invoice.paidAmount + amountNum;
         const newStatus = newPaid >= invoice.totalAmount ? 'paid' : newPaid > 0 ? 'partially_paid' : 'unpaid';
         await prisma.invoice.update({ where: { id: invoiceId }, data: { paidAmount: newPaid, status: newStatus } });
+
+        const [schoolName, student] = await Promise.all([
+            getSchoolName(tenantId),
+            prisma.user.findFirst({ where: { id: invoice.studentId, tenantId, role: 'student' }, select: { firstName: true, lastName: true } })
+        ]);
+        const studentName = student ? `${student.firstName} ${student.lastName}`.trim() : 'ardayga';
+        const paymentStatus = newStatus === 'paid' ? 'si buuxda ayaa loo bixiyey' : 'qayb ayaa laga bixiyey';
+        await notifyStudentAndParents({
+            tenantId, senderId: req.user.id, studentId: invoice.studentId, title: 'Payment received',
+            message: `Lacag dhan $${amountNum.toLocaleString()} ${paymentStatus} kharashka ardayga ${studentName}.`,
+            smsMessage: `${schoolName}\nLacag dhan $${amountNum.toLocaleString()} ${paymentStatus} kharashka ardayga ${studentName}. Mahadsanid bixintaada.\n${schoolName}`,
+            type: 'fee_reminder', eventType: 'fee_paid', deepLink: `/dashboard/student-finance?invoice=${invoice.id}`
+        });
 
         res.status(201).json({ success: true, data: payment });
     } catch (error) {
@@ -257,6 +276,7 @@ exports.generateClassInvoices = async (req, res) => {
         }
 
         const totalAmount = feeTypes.reduce((sum, ft) => sum + ft.amount, 0);
+        const schoolName = await getSchoolName(tenantId);
 
         // Get all students in this class by profileClass/profileSection matching
         const targetStudents = await prisma.user.findMany({
@@ -320,7 +340,8 @@ exports.generateClassInvoices = async (req, res) => {
             created.push(invoice);
             await notifyStudentAndParents({
                 tenantId, senderId: req.user.id, studentId: student.id, title: 'Fee payment due',
-                message: `Invoice ${invoiceNumber} for $${totalAmount.toLocaleString()} is due ${new Date(dueDate).toLocaleDateString()}.`,
+                message: `Biilka ${invoiceNumber} oo dhan $${totalAmount.toLocaleString()} wuxuu ku egyahay ${new Date(dueDate).toLocaleDateString()}.`,
+                smsMessage: `${schoolName}\nMudane/Marwo, ardayga ${student.firstName} ${student.lastName} waxaa laga rabaa lacag dhan $${totalAmount.toLocaleString()}. Bixi ugu dambayn ${new Date(dueDate).toLocaleDateString('en-GB')}.\nMahadsanid.\n${schoolName}`,
                 type: 'fee_reminder', eventType: 'fee_due', deepLink: `/dashboard/student-finance?invoice=${invoice.id}`
             });
         }
@@ -333,6 +354,61 @@ exports.generateClassInvoices = async (req, res) => {
         });
     } catch (error) {
         console.error('generateClassInvoices error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// @desc Send a payment-due reminder to one student or all students in a class
+exports.sendPaymentDueReminder = async (req, res) => {
+    try {
+        const { studentId, classId } = req.body;
+        const tenantId = req.user.tenantId;
+        if ((!studentId && !classId) || (studentId && classId)) {
+            return res.status(400).json({ success: false, message: 'Choose one student or one class' });
+        }
+
+        if (classId) {
+            const targetClass = await prisma.class.findFirst({ where: { id: classId, tenantId }, select: { id: true } });
+            if (!targetClass) return res.status(404).json({ success: false, message: 'Class not found' });
+        }
+
+        const invoices = await prisma.invoice.findMany({
+            where: {
+                tenantId,
+                status: { in: ['unpaid', 'partially_paid'] },
+                ...(studentId ? { studentId } : { classId })
+            },
+            include: { student: { select: { id: true, firstName: true, lastName: true } } },
+            orderBy: { dueDate: 'asc' }
+        });
+        if (!invoices.length) {
+            return res.status(404).json({ success: false, message: 'No outstanding invoices found for this selection' });
+        }
+
+        const schoolName = await getSchoolName(tenantId);
+        const byStudent = new Map();
+        for (const invoice of invoices) {
+            const item = byStudent.get(invoice.studentId) || { student: invoice.student, balance: 0, dueDate: invoice.dueDate };
+            item.balance += Math.max(0, invoice.totalAmount - invoice.paidAmount);
+            if (invoice.dueDate < item.dueDate) item.dueDate = invoice.dueDate;
+            byStudent.set(invoice.studentId, item);
+        }
+
+        await Promise.all([...byStudent.entries()].map(([targetStudentId, item]) => {
+            const studentName = `${item.student.firstName} ${item.student.lastName}`.trim();
+            const dueDate = item.dueDate.toLocaleDateString('en-GB');
+            const amount = item.balance.toLocaleString();
+            return notifyStudentAndParents({
+                tenantId, senderId: req.user.id, studentId: targetStudentId,
+                title: 'Xusuusin lacag-bixin',
+                message: `Ardayga ${studentName} waxaa weli laga rabaa $${amount}. Taariikhda ugu dhow ee bixintu waa ${dueDate}.`,
+                smsMessage: `${schoolName}\nMudane/Marwo, ardayga ${studentName} waxaa laga rabaa lacag dhan $${amount}. Fadlan bixi ugu dambayn ${dueDate}.\nMahadsanid.\n${schoolName}`,
+                type: 'fee_reminder', eventType: 'fee_due', deepLink: '/dashboard/finance'
+            });
+        }));
+
+        res.status(200).json({ success: true, studentsNotified: byStudent.size });
+    } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
 };

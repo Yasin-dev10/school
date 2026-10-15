@@ -10,6 +10,8 @@ export default function TeacherDetailPage() {
     const [teacher, setTeacher] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [view, setView] = useState('profile');
+    const [resettingPassword, setResettingPassword] = useState(false);
+    const [newPassword, setNewPassword] = useState('');
 
     useEffect(() => {
         const fetchTeacher = async () => {
@@ -35,6 +37,21 @@ export default function TeacherDetailPage() {
             router.push('/dashboard/teachers');
         } catch (error: any) {
             alert(error.response?.data?.message || 'Failed to terminate teacher profile');
+        }
+    };
+
+    const handleResetPassword = async () => {
+        if (!confirm('Ma hubtaa inaad password cusub u samayso macalinkan?')) return;
+        setResettingPassword(true);
+        setNewPassword('');
+        try {
+            const { data } = await api.post(`/teachers/${id}/reset-password`);
+            setTeacher((current: any) => ({ ...current, username: data.username || current.username }));
+            setNewPassword(data.password);
+        } catch (error: any) {
+            alert(error.response?.data?.message || 'Password-ka dib looma samayn karin.');
+        } finally {
+            setResettingPassword(false);
         }
     };
 
@@ -109,6 +126,35 @@ export default function TeacherDetailPage() {
                                         </div>
                                     ))}
                                 </div>
+                            </div>
+                            <div className="glass-dark p-8 rounded-[2rem] border border-white/5 space-y-5">
+                                <div>
+                                    <h3 className="text-xl font-bold text-white">Login Details</h3>
+                                    <p className="text-sm text-slate-400 mt-1">Macalinku wuxuu xogtan ku geli karaa akoonkiisa.</p>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div>
+                                        <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest mb-1">Username</p>
+                                        <p className="text-slate-200 font-mono">{teacher.username || 'Lama hayo'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest mb-1">Password</p>
+                                        <p className="text-slate-400 text-sm">Password-ka hadda jira lama arki karo. Samee mid cusub si aad u hesho.</p>
+                                    </div>
+                                </div>
+                                {newPassword && (
+                                    <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-2xl" role="status">
+                                        <p className="text-xs text-green-300 font-bold mb-2">Password cusub (hal mar oo keliya ayaa la tusayaa)</p>
+                                        <p className="text-white font-mono select-all">{newPassword}</p>
+                                    </div>
+                                )}
+                                <button
+                                    onClick={handleResetPassword}
+                                    disabled={resettingPassword}
+                                    className="px-5 py-3 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white rounded-xl font-bold transition"
+                                >
+                                    {resettingPassword ? 'Waa la samaynayaa…' : 'Samee password cusub'}
+                                </button>
                             </div>
                         </div>
                         <div className="lg:col-span-1 space-y-6 animate-in fade-in slide-in-from-right-4">

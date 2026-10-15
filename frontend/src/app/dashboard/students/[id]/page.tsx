@@ -52,6 +52,9 @@ interface StudentProfile {
     emergencyContactNo?: string | null;
     schoolComments?: string | null;
     absenteeismStatus?: string | null;
+    previousSchool?: string | null;
+    transferSchool?: string | null;
+    transferDate?: DateInput;
     regDate?: DateInput;
     editDate?: DateInput;
     parentRelationship?: string | null;
@@ -61,6 +64,7 @@ interface StudentProfile {
 
 interface Student extends Person {
     profile?: StudentProfile;
+    status?: string | null;
     username?: string | null;
     password_plain?: string | null;
     createdAt?: DateInput;
@@ -261,6 +265,10 @@ export default function StudentDetailPage() {
     const [view, setView] = useState<View>('profile');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+    const [transferSchool, setTransferSchool] = useState('');
+    const [transferDate, setTransferDate] = useState(new Date().toISOString().split('T')[0]);
+    const [transferLoading, setTransferLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
     const [resettingPassword, setResettingPassword] = useState(false);
     const [attendanceData, setAttendanceData] = useState<AttendanceData>({ records: [], stats: emptyAttendanceStats });
@@ -442,6 +450,22 @@ export default function StudentDetailPage() {
         }
     };
 
+    const handleTransferStudent = async (event: React.FormEvent) => {
+        event.preventDefault();
+        if (!id || !transferSchool.trim()) return;
+        setTransferLoading(true);
+        try {
+            await api.post(`/students/${id}/transfer`, { schoolName: transferSchool.trim(), transferDate });
+            setIsTransferModalOpen(false);
+            alert('Student transfer recorded. The student account is now inactive.');
+            await fetchStudent();
+        } catch (error: unknown) {
+            alert(requestMessage(error, 'Could not record student transfer.'));
+        } finally {
+            setTransferLoading(false);
+        }
+    };
+
     const handleEditSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
         if (!student) return;
@@ -580,8 +604,43 @@ export default function StudentDetailPage() {
                     <button onClick={() => setIsEditModalOpen(true)} className="flex-1 md:flex-none px-6 py-3 bg-slate-800 text-slate-300 rounded-xl font-bold border border-white/5 hover:bg-slate-700 transition">
                         Edit Profile
                     </button>
+                    {student.status === 'active' && (
+                        <button onClick={() => setIsTransferModalOpen(true)} className="flex-1 md:flex-none px-6 py-3 bg-amber-500/10 border border-amber-500/20 text-amber-300 rounded-xl font-bold hover:bg-amber-500 hover:text-slate-950 transition">
+                            Transfer Out
+                        </button>
+                    )}
                 </div>
             </div>
+
+            {(student.profile?.previousSchool || student.profile?.transferSchool) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {student.profile?.previousSchool && <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4 text-sm text-slate-300">Previous school: <strong className="text-white">{student.profile.previousSchool}</strong></div>}
+                    {student.profile?.transferSchool && <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-slate-300">Transferred to <strong className="text-white">{student.profile.transferSchool}</strong>{student.profile.transferDate ? ` on ${formatDateTime(student.profile.transferDate)}` : ''}</div>}
+                </div>
+            )}
+
+            {isTransferModalOpen && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+                    <div className="glass-dark w-full max-w-lg p-8 rounded-[2rem] border border-white/10 shadow-2xl">
+                        <h2 className="text-2xl font-black text-white mb-2">Transfer Student</h2>
+                        <p className="text-sm text-slate-400 mb-6">Record the destination school. This will deactivate the student&apos;s account in this school.</p>
+                        <form onSubmit={handleTransferStudent} className="space-y-5">
+                            <div className="space-y-2">
+                                <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Destination School</label>
+                                <input required value={transferSchool} onChange={event => setTransferSchool(event.target.value)} className="w-full px-5 py-4 bg-slate-900 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500/50 outline-none" />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Transfer Date</label>
+                                <input required type="date" value={transferDate} onChange={event => setTransferDate(event.target.value)} className="w-full px-5 py-4 bg-slate-900 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-indigo-500/50 outline-none" />
+                            </div>
+                            <div className="flex gap-4 pt-2">
+                                <button type="submit" disabled={transferLoading} className="flex-1 py-4 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-2xl font-black transition disabled:opacity-50">{transferLoading ? 'Saving...' : 'Confirm Transfer'}</button>
+                                <button type="button" onClick={() => setIsTransferModalOpen(false)} className="flex-1 py-4 bg-slate-800 text-slate-300 rounded-2xl font-bold hover:bg-slate-700 transition">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
 
             {isModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">

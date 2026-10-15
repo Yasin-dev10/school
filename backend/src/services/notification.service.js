@@ -15,6 +15,12 @@ const sendSMS = async (phoneNumber, message) => {
     return true;
 };
 
+const getSchoolName = async (tenantId) => {
+    if (!tenantId) return 'Dugsiga';
+    const tenant = await prisma.tenant.findUnique({ where: { tenantId }, select: { name: true } });
+    return tenant?.name?.trim() || 'Dugsiga';
+};
+
 const sendEmail = async (to, subject, text, html) => {
     if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS || !to) return false;
     const transporter = nodemailer.createTransport({
@@ -108,15 +114,25 @@ const dispatchNotification = async (notification) => {
     let delivered = 0;
     for (const recipient of recipients) {
         const prefs = recipient.notificationPreference;
-        if (prefs && prefs[prefKey] === false) continue;
-        if (notification.channels.includes('push') && (!prefs || prefs.pushEnabled)) {
+        const categoryEnabled = !prefs || prefs[prefKey] !== false;
+        // Attendance absence SMS is a safety alert: keep sending it when SMS is
+        // enabled, even if the parent has muted in-app attendance alerts.
+        const attendanceSms = notification.type === 'attendance_alert'
+            && notification.data?.eventType === 'attendance_absent'
+            && notification.channels.includes('sms');
+        if (categoryEnabled && notification.channels.includes('push') && (!prefs || prefs.pushEnabled)) {
             for (const token of recipient.deviceTokens) { attempted++; if (await deliverPushToken(notification, recipient.id, token)) delivered++; }
         }
-        if (notification.channels.includes('email') && (!prefs || prefs.emailEnabled)) {
+        if (categoryEnabled && notification.channels.includes('email') && (!prefs || prefs.emailEnabled)) {
             attempted++; try { if (await sendEmail(recipient.email, notification.title, notification.message)) delivered++; } catch (_) {}
         }
-        if (notification.channels.includes('sms') && (!prefs || prefs.smsEnabled)) {
-            attempted++; try { if (await sendSMS(recipient.phone, notification.message)) delivered++; } catch (_) {}
+        if (notification.channels.includes('sms') && (!prefs || prefs.smsEnabled) && (categoryEnabled || attendanceSms)) {
+            attempted++;
+            try {
+                if (await sendSMS(recipient.phone, notification.data?.smsMessage || notification.message)) delivered++;
+            } catch (error) {
+                console.error(`SMS delivery failed for notification ${notification.id}:`, error.message);
+            }
         }
     }
     const status = delivered > 0 ? 'sent' : 'failed';
@@ -135,19 +151,20 @@ const retryFailedPushDeliveries = async () => {
     return deliveries.length;
 };
 
-const createAutomatedNotification = async ({ tenantId, senderId, targetUserId, targetRole = 'student', targetClass, title, message, type = 'alert', eventType, deepLink }) => {
+const createAutomatedNotification = async ({ tenantId, senderId, targetUserId, targetRole = 'student', targetClass, title, message, smsMessage, type = 'alert', eventType, deepLink, channels = ['in_app', 'push'] }) => {
     const notification = await prisma.notification.create({
-        data: { tenantId, senderId, targetUserId, targetRole, targetClass, title, message, type, channels: ['in_app', 'push'], status: 'pending', deepLink, data: eventType ? { eventType } : undefined }
+        data: { tenantId, senderId, targetUserId, targetRole, targetClass, title, message, type, channels, status: 'pending', deepLink, data: eventType || smsMessage ? { ...(eventType ? { eventType } : {}), ...(smsMessage ? { smsMessage } : {}) } : undefined }
     });
     dispatchNotification(notification).catch(error => console.error('Automated notification delivery failed:', error.message));
     return notification;
 };
 
-const notifyStudentAndParents = async ({ tenantId, senderId, studentId, title, message, type, eventType, deepLink }) => {
+const notifyStudentAndParents = async ({ tenantId, senderId, studentId, title, message, smsMessage, type, eventType, deepLink }) => {
     const links = await prisma.studentParent.findMany({ where: { studentId }, select: { parentId: true } });
     const targets = [{ id: studentId, role: 'student' }, ...links.map(link => ({ id: link.parentId, role: 'parent' }))];
     return Promise.all(targets.map(target => createAutomatedNotification({
-        tenantId, senderId, targetUserId: target.id, targetRole: target.role, title, message, type, eventType, deepLink
+        tenantId, senderId, targetUserId: target.id, targetRole: target.role, title, message, smsMessage, type, eventType, deepLink,
+        channels: target.role === 'parent' ? ['in_app', 'push', 'sms'] : ['in_app', 'push']
     })));
 };
 
@@ -172,4 +189,4 @@ const processEventReminders = async () => {
     return processed;
 };
 
-module.exports = { sendSMS, sendEmail, dispatchNotification, retryFailedPushDeliveries, createAutomatedNotification, notifyStudentAndParents, processEventReminders, getMessaging };
+module.exports = { sendSMS, sendEmail, dispatchNotification, retryFailedPushDeliveries, createAutomatedNotification, notifyStudentAndParents, processEventReminders, getMessaging, getSchoolName };

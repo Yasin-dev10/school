@@ -1,7 +1,7 @@
 const prisma = require('../config/prismaClient');
 const { logAction } = require('../utils/logger');
 const { getTeacherScope, canTeacherAccessClassSubject, canTeacherAccessStudent } = require('../utils/teacherScope');
-const { notifyStudentAndParents } = require('../services/notification.service');
+const { notifyStudentAndParents, getSchoolName } = require('../services/notification.service');
 
 const startOfDay = (value) => {
     const date = value ? new Date(value) : new Date();
@@ -179,11 +179,22 @@ exports.markAttendance = async (req, res) => {
 
         await logAction({ action: 'CREATE', module: 'USER', details: `Marked attendance for class ${classId}`, userId: req.user._id, tenantId });
         const alerts = results.filter(result => result.status === 'success' && ['absent', 'late'].includes(result.data.status));
+        const alertStudentIds = alerts.map(result => result.studentId);
+        const alertStudents = await prisma.user.findMany({ where: { id: { in: alertStudentIds }, tenantId }, select: { id: true, firstName: true, lastName: true } });
+        const alertStudentNames = new Map(alertStudents.map(student => [student.id, `${student.firstName} ${student.lastName}`.trim()]));
+        const schoolName = await getSchoolName(tenantId);
         await Promise.all(alerts.map(result => notifyStudentAndParents({
             tenantId, senderId: req.user.id, studentId: result.studentId,
-            title: result.data.status === 'absent' ? 'Attendance alert: Absent' : 'Attendance alert: Late',
-            message: `Attendance was marked ${result.data.status} for ${attendanceDate.toLocaleDateString()}.`,
-            type: 'attendance_alert', eventType: 'attendance', deepLink: '/dashboard/attendance'
+            title: result.data.status === 'absent' ? 'Ardaygu maanta waa maqanyahay' : 'Ardaygu maanta wuu soo daahay',
+            message: result.data.status === 'absent'
+                ? `${alertStudentNames.get(result.studentId) || 'Ardaygaaga'} waxaa maanta (${attendanceDate.toLocaleDateString()}) laga diiwaangeliyey maqane.`
+                : `${alertStudentNames.get(result.studentId) || 'Ardaygaaga'} waxaa maanta (${attendanceDate.toLocaleDateString()}) laga diiwaangeliyey inuu soo daahay.`,
+            smsMessage: result.data.status === 'absent'
+                ? `${schoolName}\nMudane/Marwo, waxaan idin ogeysiinaynaa in ardayga ${alertStudentNames.get(result.studentId) || 'ardaygaaga'} uu maanta (${attendanceDate.toLocaleDateString('en-GB')}) maqanyahay. Fadlan la soco xaaladdiisa.\nMahadsanid.`
+                : `${schoolName}\nMudane/Marwo, ardayga ${alertStudentNames.get(result.studentId) || 'ardaygaaga'} maanta (${attendanceDate.toLocaleDateString('en-GB')}) wuu soo daahay.\nMahadsanid.`,
+            type: 'attendance_alert',
+            eventType: result.data.status === 'absent' ? 'attendance_absent' : 'attendance_late',
+            deepLink: '/dashboard/attendance'
         })));
         res.status(200).json({ success: true, results });
     } catch (error) {
@@ -352,6 +363,27 @@ exports.updateAttendance = async (req, res) => {
             data: { status, remarks: remarks || null, markedById: req.user.id },
             include: includeAttendanceRelations
         });
+
+        // The attendance history editor uses this endpoint. Notify on the
+        // transition into absent as well as when attendance is first marked.
+        if (status === 'absent' && existing.status !== 'absent') {
+            const [student, schoolName] = await Promise.all([
+                prisma.user.findFirst({
+                    where: { id: existing.studentId, tenantId, role: 'student' },
+                    select: { firstName: true, lastName: true }
+                }),
+                getSchoolName(tenantId)
+            ]);
+            const studentName = student ? `${student.firstName} ${student.lastName}`.trim() : 'Ardaygaaga';
+            const absentDate = new Date(existing.date);
+            await notifyStudentAndParents({
+                tenantId, senderId: req.user.id, studentId: existing.studentId,
+                title: 'Ardaygu maanta waa maqanyahay',
+                message: `${studentName} waxaa maanta (${absentDate.toLocaleDateString()}) laga diiwaangeliyey maqane.`,
+                smsMessage: `${schoolName}\nMudane/Marwo, waxaan idin ogeysiinaynaa in ardayga ${studentName} uu maanta (${absentDate.toLocaleDateString('en-GB')}) maqanyahay. Fadlan la soco xaaladdiisa.\nMahadsanid.`,
+                type: 'attendance_alert', eventType: 'attendance_absent', deepLink: '/dashboard/attendance'
+            });
+        }
 
         await logAction({ action: 'UPDATE', module: 'USER', details: `Updated attendance record ${id}`, userId: req.user.id, tenantId });
         res.status(200).json({ success: true, data: formatAttendance(updated) });

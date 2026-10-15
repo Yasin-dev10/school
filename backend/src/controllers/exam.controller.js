@@ -1,6 +1,6 @@
 const prisma = require('../config/prismaClient');
 const { buildCombinedRankings } = require('../utils/combinedRankings');
-const { createAutomatedNotification } = require('../services/notification.service');
+const { createAutomatedNotification, getSchoolName } = require('../services/notification.service');
 const { logAction } = require('../utils/logger');
 const { emitToTenant } = require('../config/socket');
 const { generateExcelMatrix, generateReportCardPDF } = require('../utils/reportGenerator');
@@ -815,11 +815,44 @@ exports.approveResults = async (req, res) => {
             data: { isApproved: true, approvedById: req.user.id, approvalDate: new Date(), status: 'completed' }
         });
         const classes = await prisma.examClass.findMany({ where: { examId: exam.id }, select: { classId: true } });
+        const schoolName = await getSchoolName(req.user.tenantId);
         await Promise.all(classes.map(item => createAutomatedNotification({
             tenantId: req.user.tenantId, senderId: req.user.id, targetRole: 'student', targetClass: item.classId,
             title: 'Exam results published', message: `${exam.name} results are now available.`,
             eventType: 'exam_result', deepLink: `/dashboard/exam-results?exam=${exam.id}`
         })));
+        for (const item of classes) {
+            const marks = await prisma.mark.findMany({
+                where: { examId: exam.id, classId: item.classId, tenantId: req.user.tenantId },
+                include: {
+                    student: { select: { id: true, firstName: true, lastName: true } },
+                    subject: { select: { name: true } }
+                },
+                orderBy: { subject: { name: 'asc' } }
+            });
+            const marksByStudent = new Map();
+            for (const mark of marks) {
+                const studentMarks = marksByStudent.get(mark.studentId) || { student: mark.student, subjects: [] };
+                studentMarks.subjects.push(`${mark.subject.name}: ${mark.marksObtained}/${mark.maxMarks}`);
+                marksByStudent.set(mark.studentId, studentMarks);
+            }
+            for (const [studentId, result] of marksByStudent) {
+                const studentName = `${result.student.firstName} ${result.student.lastName}`.trim();
+                const subjectLines = result.subjects.length <= 4 ? result.subjects.join('; ') : '';
+                const detailedSms = `${schoolName}\nNatiijada ${exam.name} ee ardayga ${studentName}: ${subjectLines}. Waad ku mahadsan tahay la socodka waxbarashadiisa.`;
+                const smsMessage = subjectLines && detailedSms.length <= 500
+                    ? detailedSms
+                    : `${schoolName}\nNatiijada ${exam.name} ee ardayga ${studentName} waa diyaar. Fadlan gal School Portal-ka si aad u aragto dhammaan maadooyinka iyo dhibcaha ardayga.`;
+                const parentLinks = await prisma.studentParent.findMany({ where: { studentId }, select: { parentId: true } });
+                await Promise.all(parentLinks.map(link => createAutomatedNotification({
+                    tenantId: req.user.tenantId, senderId: req.user.id, targetUserId: link.parentId, targetRole: 'parent',
+                    title: 'Natiijada imtixaanka waa diyaar',
+                    message: `Natiijada ${exam.name} ee ardayga ${studentName} waa diyaar. Ka eeg dhammaan maadooyinka iyo dhibcaha School Portal-ka.`,
+                    smsMessage, type: 'exam_result', eventType: 'exam_result', channels: ['in_app', 'push', 'sms'],
+                    deepLink: `/dashboard/grades`
+                })));
+            }
+        }
         res.status(200).json({ success: true, data: exam });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });

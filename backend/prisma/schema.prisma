@@ -646,6 +646,9 @@ model User {
   emergencyContactNo String?
   schoolComments     String?
   absenteeismStatus  String?
+  previousSchool     String?
+  transferSchool     String?
+  transferDate       DateTime?
   regDate            DateTime?
   editDate           DateTime?
   parentRelationship ParentRelationship?

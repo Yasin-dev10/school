@@ -34,7 +34,6 @@ import {
     FolderOpen,
     MessageSquare,
     Receipt,
-    Info,
     Menu,
     X,
     Layers,
@@ -48,7 +47,6 @@ import {
     BriefcaseBusiness,
     // Bot,
     Trophy,
-    GitBranch,
 } from 'lucide-react';
 
 type NavItem = {
@@ -146,9 +144,38 @@ export default function DashboardLayout({
     const [mounted, setMounted] = useState(false);
     const [tenant, setTenant] = useState<any>(null);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+    const [sidebarWidth, setSidebarWidth] = useState(272);
     const [unreadCount, setUnreadCount] = useState(0);
     const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+    const [pageSearch, setPageSearch] = useState('');
     const menuButtonRef = useRef<HTMLButtonElement>(null);
+    const sidebarResizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
+
+    useEffect(() => {
+        const savedWidth = Number(localStorage.getItem('dashboard-sidebar-width'));
+        if (Number.isFinite(savedWidth) && savedWidth > 0) {
+            setSidebarWidth(Math.min(400, Math.max(240, savedWidth)));
+        }
+    }, []);
+
+    const handleSidebarResizeStart = (event: React.PointerEvent<HTMLButtonElement>) => {
+        if (window.innerWidth < 1024) return;
+        event.preventDefault();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        sidebarResizeRef.current = { startX: event.clientX, startWidth: sidebarWidth };
+    };
+
+    const handleSidebarResizeMove = (event: React.PointerEvent<HTMLButtonElement>) => {
+        const resize = sidebarResizeRef.current;
+        if (!resize) return;
+        const nextWidth = Math.min(400, Math.max(240, resize.startWidth + event.clientX - resize.startX));
+        setSidebarWidth(nextWidth);
+        localStorage.setItem('dashboard-sidebar-width', String(nextWidth));
+    };
+
+    const handleSidebarResizeEnd = () => {
+        sidebarResizeRef.current = null;
+    };
 
     const fetchUnreadCount = async () => {
         try {
@@ -297,30 +324,37 @@ export default function DashboardLayout({
             });
             push({
                 id: 'people',
-                label: 'Academic Management',
+                label: 'People & Academics',
                 groupIcon: <Users className="w-3.5 h-3.5" />,
                 items: [
                     { name: 'Students', href: '/dashboard/students', icon: icon(<GraduationCap className="w-4 h-4" />) },
                     { name: 'Teachers', href: '/dashboard/teachers', icon: icon(<Users className="w-4 h-4" />) },
                     { name: 'Classes', href: '/dashboard/classes', icon: icon(<Building2 className="w-4 h-4" />) },
-                    { name: 'School Grades', href: '/dashboard/school-grades', icon: icon(<Layers className="w-4 h-4" />) },
+                    { name: 'Grade Levels', href: '/dashboard/school-grades', icon: icon(<Layers className="w-4 h-4" />) },
                     { name: 'Subjects', href: '/dashboard/subjects', icon: icon(<BookOpen className="w-4 h-4" />) },
                     { name: 'Subject Allocation', href: '/dashboard/subject-allocation', icon: icon(<ClipboardList className="w-4 h-4" />) },
                     { name: 'Promote Students', href: '/dashboard/students/promote', icon: icon(<ArrowUpCircle className="w-4 h-4" />) },
                 ],
             });
             push({
-                id: 'teaching',
-                label: 'Teaching',
+                id: 'learning',
+                label: 'Teaching & Learning',
                 groupIcon: <BookOpen className="w-3.5 h-3.5" />,
                 items: [
-                    { name: 'Timetable', href: '/dashboard/timetable', icon: icon(<CalendarDays className="w-4 h-4" />) },
-                    { name: 'Calendar & Events', href: '/dashboard/calendar', icon: icon(<CalendarDays className="w-4 h-4" />) },
-                    { name: 'Attendance', href: '/dashboard/attendance', icon: icon(<CalendarCheck className="w-4 h-4" />) },
                     { name: 'Assignments', href: '/dashboard/assignments', icon: icon(<FileText className="w-4 h-4" />) },
                     { name: 'Online Learning', href: '/dashboard/online-learning', icon: icon(<CirclePlay className="w-4 h-4" />) },
                     { name: 'Library', href: '/dashboard/materials', icon: icon(<BookCopy className="w-4 h-4" />) },
                     { name: 'Communication', href: '/dashboard/communication', icon: icon(<MessageSquare className="w-4 h-4" />) },
+                ],
+            });
+            push({
+                id: 'schedule',
+                label: 'Schedule & Attendance',
+                groupIcon: <CalendarCheck className="w-3.5 h-3.5" />,
+                items: [
+                    { name: 'Timetable', href: '/dashboard/timetable', icon: icon(<CalendarDays className="w-4 h-4" />) },
+                    { name: 'Calendar & Events', href: '/dashboard/calendar', icon: icon(<CalendarDays className="w-4 h-4" />) },
+                    { name: 'Attendance', href: '/dashboard/attendance', icon: icon(<CalendarCheck className="w-4 h-4" />) },
                 ],
             });
             push({
@@ -334,7 +368,6 @@ export default function DashboardLayout({
                     { name: 'Exam Results', href: '/dashboard/exam-results', icon: icon(<TrendingUp className="w-4 h-4" />) },
                     { name: 'Combined Results', href: '/dashboard/combined-results', icon: icon(<Layers className="w-4 h-4" />) },
                     { name: 'Top Students', href: '/dashboard/top-students', icon: icon(<Trophy className="w-4 h-4" />) },
-                    { name: 'Grades', href: '/dashboard/grades', icon: icon(<BarChart3 className="w-4 h-4" />) },
                 ],
             });
             push({
@@ -343,35 +376,45 @@ export default function DashboardLayout({
                 groupIcon: <DollarSign className="w-3.5 h-3.5" />,
                 items: [
                     { name: 'Fees', href: '/dashboard/finance', icon: icon(<DollarSign className="w-4 h-4" />) },
-                    { name: 'Fee & Payment Hub', href: '/dashboard/fee-hub', icon: icon(<Wallet className="w-4 h-4" />) },
                     { name: 'Invoice Generator', href: '/dashboard/fee-generator', icon: icon(<Receipt className="w-4 h-4" />) },
                     { name: 'Payroll', href: '/dashboard/payroll', icon: icon(<Banknote className="w-4 h-4" />) },
                 ],
             });
             push({
                 id: 'operations',
-                label: 'Operations',
+                label: 'Reports & Operations',
                 groupIcon: <Package className="w-3.5 h-3.5" />,
                 items: [
                     { name: 'Human Resources', href: '/dashboard/hr', icon: icon(<Users2 className="w-4 h-4" />) },
                     { name: 'Alumni', href: '/dashboard/alumni', icon: icon(<BriefcaseBusiness className="w-4 h-4" />) },
                     { name: 'Inventory', href: '/dashboard/inventory', icon: icon(<Package className="w-4 h-4" />) },
                     { name: 'Certificates', href: '/dashboard/certificates', icon: icon(<FileBadge className="w-4 h-4" />) },
-                    { name: 'Reports', href: '/dashboard/reports', icon: icon(<BarChart3 className="w-4 h-4" />) },
-                    { name: 'Advanced Analytics', href: '/dashboard/analytics', icon: icon(<TrendingUp className="w-4 h-4" />) },
                     // { name: 'Branches & Workflows', href: '/dashboard/customization', icon: icon(<GitBranch className="w-4 h-4" />) },
                 ],
             });
             push({
+                id: 'reports',
+                label: 'Reports & Analytics',
+                groupIcon: <BarChart3 className="w-3.5 h-3.5" />,
+                items: [
+                    { name: 'Reports', href: '/dashboard/reports', icon: icon(<BarChart3 className="w-4 h-4" />) },
+                    { name: 'Advanced Analytics', href: '/dashboard/analytics', icon: icon(<TrendingUp className="w-4 h-4" />) },
+                ],
+            });
+            push({
                 id: 'system',
-                label: 'System',
+                label: 'System & Information',
                 groupIcon: <Settings className="w-3.5 h-3.5" />,
                 items: [
                     { name: 'Logs & Security', href: '/dashboard/logs', icon: icon(<ShieldAlert className="w-4 h-4" />) },
                     { name: 'Settings', href: '/dashboard/settings', icon: icon(<Settings className="w-4 h-4" />) },
-                    { name: 'Notifications', href: '/dashboard/notifications', icon: icon(<Bell className="w-4 h-4" />) },
-                    { name: 'About School', href: '/dashboard/about', icon: icon(<Info className="w-4 h-4" />) },
                 ],
+            });
+            push({
+                id: 'information',
+                label: 'School Information',
+                groupIcon: <Building2 className="w-3.5 h-3.5" />,
+                items: [{ name: 'About School', href: '/dashboard/about', icon: icon(<Building2 className="w-4 h-4" />) }],
             });
         }
 
@@ -384,8 +427,6 @@ export default function DashboardLayout({
                     { name: 'Dashboard', href: '/dashboard', icon: icon(<LayoutDashboard className="w-4 h-4" />) },
                     { name: 'Contact Messages', href: '/dashboard/contact-messages', icon: icon(<MessageSquare className="w-4 h-4" />) },
                     { name: 'Settings', href: '/dashboard/settings', icon: icon(<Settings className="w-4 h-4" />) },
-                    { name: 'Notifications', href: '/dashboard/notifications', icon: icon(<Bell className="w-4 h-4" />) },
-                    { name: 'About School', href: '/dashboard/about', icon: icon(<Info className="w-4 h-4" />) },
                 ],
             });
         }
@@ -402,18 +443,25 @@ export default function DashboardLayout({
             });
             push({
                 id: 'classes',
-                label: 'My Classes',
+                label: 'Classes & Learning',
                 groupIcon: <Building2 className="w-3.5 h-3.5" />,
                 items: [
                     { name: 'Students', href: '/dashboard/students', icon: icon(<GraduationCap className="w-4 h-4" />) },
                     { name: 'Classes', href: '/dashboard/classes', icon: icon(<Building2 className="w-4 h-4" />) },
                     { name: 'Subjects', href: '/dashboard/subjects', icon: icon(<BookOpen className="w-4 h-4" />) },
-                    { name: 'Timetable', href: '/dashboard/timetable', icon: icon(<CalendarDays className="w-4 h-4" />) },
-                    { name: 'Calendar & Events', href: '/dashboard/calendar', icon: icon(<CalendarDays className="w-4 h-4" />) },
-                    { name: 'Attendance', href: '/dashboard/attendance', icon: icon(<CalendarCheck className="w-4 h-4" />) },
                     { name: 'Assignments', href: '/dashboard/assignments', icon: icon(<FileText className="w-4 h-4" />) },
                     { name: 'Online Learning', href: '/dashboard/online-learning', icon: icon(<CirclePlay className="w-4 h-4" />) },
                     { name: 'Materials', href: '/dashboard/materials', icon: icon(<FolderOpen className="w-4 h-4" />) },
+                ],
+            });
+            push({
+                id: 'schedule',
+                label: 'Schedule & Attendance',
+                groupIcon: <CalendarCheck className="w-3.5 h-3.5" />,
+                items: [
+                    { name: 'Timetable', href: '/dashboard/timetable', icon: icon(<CalendarDays className="w-4 h-4" />) },
+                    { name: 'Calendar & Events', href: '/dashboard/calendar', icon: icon(<CalendarDays className="w-4 h-4" />) },
+                    { name: 'Attendance', href: '/dashboard/attendance', icon: icon(<CalendarCheck className="w-4 h-4" />) },
                 ],
             });
             push({
@@ -426,21 +474,23 @@ export default function DashboardLayout({
                     { name: 'Exam Results', href: '/dashboard/exam-results', icon: icon(<TrendingUp className="w-4 h-4" />) },
                     { name: 'Combined Results', href: '/dashboard/combined-results', icon: icon(<Layers className="w-4 h-4" />) },
                     { name: 'Top Students', href: '/dashboard/top-students', icon: icon(<Trophy className="w-4 h-4" />) },
-                    { name: 'Grades', href: '/dashboard/grades', icon: icon(<BarChart3 className="w-4 h-4" />) },
                 ],
             });
             push({
-                id: 'more',
-                label: 'More',
+                id: 'work',
+                label: 'Communication & Records',
                 groupIcon: <Layers className="w-3.5 h-3.5" />,
                 items: [
                     { name: 'Communication', href: '/dashboard/communication', icon: icon(<MessageSquare className="w-4 h-4" />) },
                     { name: 'Payslips', href: '/dashboard/payslips', icon: icon(<Receipt className="w-4 h-4" />) },
                     { name: 'Certificates', href: '/dashboard/certificates', icon: icon(<FileBadge className="w-4 h-4" />) },
-                    { name: 'Reports', href: '/dashboard/reports', icon: icon(<BarChart3 className="w-4 h-4" />) },
-                    { name: 'Notifications', href: '/dashboard/notifications', icon: icon(<Bell className="w-4 h-4" />) },
-                    { name: 'About School', href: '/dashboard/about', icon: icon(<Info className="w-4 h-4" />) },
                 ],
+            });
+            push({
+                id: 'reports',
+                label: 'Reports & Results',
+                groupIcon: <BarChart3 className="w-3.5 h-3.5" />,
+                items: [{ name: 'Reports', href: '/dashboard/reports', icon: icon(<BarChart3 className="w-4 h-4" />) }],
             });
         }
 
@@ -451,8 +501,6 @@ export default function DashboardLayout({
                 groupIcon: <DollarSign className="w-3.5 h-3.5" />,
                 items: [
                     { name: 'Fees & Finance', href: '/dashboard/finance', icon: icon(<DollarSign className="w-4 h-4" />) },
-                    { name: 'Notifications', href: '/dashboard/notifications', icon: icon(<Bell className="w-4 h-4" />) },
-                    { name: 'About School', href: '/dashboard/about', icon: icon(<Info className="w-4 h-4" />) },
                 ],
             });
         }
@@ -470,18 +518,25 @@ export default function DashboardLayout({
             });
             push({
                 id: 'academic',
-                label: 'Academics',
+                label: 'Learning & Academics',
                 groupIcon: <BookOpen className="w-3.5 h-3.5" />,
                 items: [
-                    { name: 'Timetable', href: '/dashboard/timetable', icon: icon(<CalendarDays className="w-4 h-4" />) },
-                    { name: 'Calendar & Events', href: '/dashboard/calendar', icon: icon(<CalendarDays className="w-4 h-4" />) },
-                    { name: 'Attendance', href: '/dashboard/attendance', icon: icon(<CalendarCheck className="w-4 h-4" />) },
                     { name: 'Assignments', href: '/dashboard/assignments', icon: icon(<FileText className="w-4 h-4" />) },
                     { name: 'Online Learning', href: '/dashboard/online-learning', icon: icon(<CirclePlay className="w-4 h-4" />) },
                     { name: 'Exams', href: '/dashboard/exams', icon: icon(<FileText className="w-4 h-4" />) },
                     { name: 'My Grades', href: '/dashboard/grades', icon: icon(<TrendingUp className="w-4 h-4" />) },
                     { name: 'Materials', href: '/dashboard/materials', icon: icon(<FolderOpen className="w-4 h-4" />) },
                     ...(user.role === 'student' ? [{ name: 'Communication', href: '/dashboard/communication', icon: icon(<MessageSquare className="w-4 h-4" />) }] : []),
+                ],
+            });
+            push({
+                id: 'schedule',
+                label: 'Schedule & Attendance',
+                groupIcon: <CalendarCheck className="w-3.5 h-3.5" />,
+                items: [
+                    { name: 'Timetable', href: '/dashboard/timetable', icon: icon(<CalendarDays className="w-4 h-4" />) },
+                    { name: 'Calendar & Events', href: '/dashboard/calendar', icon: icon(<CalendarDays className="w-4 h-4" />) },
+                    { name: 'Attendance', href: '/dashboard/attendance', icon: icon(<CalendarCheck className="w-4 h-4" />) },
                 ],
             });
             push({
@@ -492,8 +547,6 @@ export default function DashboardLayout({
                     { name: 'Fees', href: '/dashboard/student-finance', icon: icon(<DollarSign className="w-4 h-4" />) },
                     { name: 'Certificates', href: '/dashboard/certificates', icon: icon(<FileBadge className="w-4 h-4" />) },
                     ...(user.role === 'parent' ? [{ name: 'Communication', href: '/dashboard/communication', icon: icon(<MessageSquare className="w-4 h-4" />) }] : []),
-                    { name: 'Notifications', href: '/dashboard/notifications', icon: icon(<Bell className="w-4 h-4" />) },
-                    { name: 'About School', href: '/dashboard/about', icon: icon(<Info className="w-4 h-4" />) },
                 ],
             });
         }
@@ -531,6 +584,10 @@ export default function DashboardLayout({
         href: user?.role === 'student' ? '/dashboard/student' : '/dashboard',
         icon: icon(<LayoutDashboard className="w-4 h-4" />),
     };
+    const searchablePages = [dashboardItem, ...navGroups.flatMap((group) => group.items)];
+    const matchingPages = pageSearch.trim()
+        ? searchablePages.filter((item) => item.name.toLowerCase().includes(pageSearch.trim().toLowerCase())).slice(0, 7)
+        : [];
     const accessMode = tenant?.subscriptionAccess?.mode || tenant?.accessMode || 'full';
     const allowedModules: string[] = tenant?.subscriptionAccess?.allowedModules || tenant?.allowedModules || [];
     const currentModule = moduleForRoute(pathname);
@@ -584,10 +641,11 @@ export default function DashboardLayout({
             <aside
                 aria-label="Dashboard navigation"
                 className={`
-                fixed inset-y-0 left-0 w-[17rem] bg-slate-900 dark:bg-slate-950 flex flex-col z-50 shadow-xl border-r border-white/10
+                fixed inset-y-0 left-0 w-[var(--dashboard-sidebar-width)] lg:shrink-0 bg-slate-900 dark:bg-slate-950 flex flex-col z-50 shadow-xl border-r border-white/10
                 transition-transform duration-300 transform lg:translate-x-0 lg:static lg:h-full
                 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
             `}
+                style={{ '--dashboard-sidebar-width': `${sidebarWidth}px` } as React.CSSProperties}
             >
                 <div className="relative px-3.5 py-4 border-b border-white/10">
                     <div className="flex items-start">
@@ -736,6 +794,16 @@ export default function DashboardLayout({
                         <span>{t('Logout')}</span>
                     </button>
                 </div>
+                <button
+                    type="button"
+                    aria-label={t('Resize navigation sidebar')}
+                    title={t('Drag to resize sidebar')}
+                    className="absolute inset-y-0 right-0 z-10 hidden w-1.5 cursor-col-resize touch-none bg-transparent transition-colors hover:bg-indigo-400/60 active:bg-indigo-400 lg:block"
+                    onPointerDown={handleSidebarResizeStart}
+                    onPointerMove={handleSidebarResizeMove}
+                    onPointerUp={handleSidebarResizeEnd}
+                    onPointerCancel={handleSidebarResizeEnd}
+                />
             </aside>
 
             <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
@@ -756,13 +824,35 @@ export default function DashboardLayout({
                         </h1>
                     </div>
 
-                    <div className="flex-1 max-w-sm hidden sm:flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
-                        <Search className="w-4 h-4 text-slate-400 shrink-0" />
-                        <input
-                            type="text"
-                            placeholder={t('Search students, records, or files...')}
-                            className="bg-transparent text-sm text-slate-600 dark:text-slate-300 placeholder-slate-400 outline-none flex-1 min-w-0"
-                        />
+                    <div className="relative hidden flex-1 max-w-sm sm:block">
+                        <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-100 px-3 py-1.5 dark:border-slate-700 dark:bg-slate-800">
+                            <Search className="h-4 w-4 shrink-0 text-slate-400" />
+                            <input
+                                type="search"
+                                value={pageSearch}
+                                onChange={(event) => setPageSearch(event.target.value)}
+                                onKeyDown={(event) => {
+                                    if (event.key === 'Escape') setPageSearch('');
+                                    if (event.key === 'Enter' && matchingPages[0]) {
+                                        router.push(matchingPages[0].href);
+                                        setPageSearch('');
+                                    }
+                                }}
+                                aria-label={t('Search dashboard pages')}
+                                aria-controls="dashboard-search-results"
+                                placeholder={t('Search pages...')}
+                                className="min-w-0 flex-1 bg-transparent text-sm text-slate-600 outline-none placeholder-slate-400 dark:text-slate-300"
+                            />
+                        </div>
+                        {pageSearch.trim() && (
+                            <div id="dashboard-search-results" role="listbox" className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white p-1 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                                {matchingPages.length ? matchingPages.map((item) => (
+                                    <Link key={item.href} href={item.href} role="option" onClick={() => setPageSearch('')} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800">
+                                        <span className="text-slate-400">{item.icon}</span>{item.name}
+                                    </Link>
+                                )) : <p className="px-3 py-2 text-sm text-slate-500">{t('No matching pages')}</p>}
+                            </div>
+                        )}
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
@@ -776,14 +866,6 @@ export default function DashboardLayout({
                                     {unreadCount > 9 ? '9+' : unreadCount}
                                 </span>
                             )}
-                        </Link>
-
-                        <Link
-                            href="/dashboard/about"
-                            aria-label={t('Help and system information')}
-                            className="w-9 h-9 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400 transition-colors"
-                        >
-                            <HelpCircle className="w-4 h-4" />
                         </Link>
 
                         <div className="w-px h-5 bg-slate-200 dark:bg-slate-700" />

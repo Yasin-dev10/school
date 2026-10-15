@@ -110,7 +110,14 @@ exports.login = async (req, res) => {
             return res.status(401).json({ message: 'Invalid credentials' });
         }
 
-        await prisma.user.update({ where: { id: user.id }, data: { lastLogin: new Date() } });
+        // The auth flow only needs to update lastLogin. Avoid returning every
+        // User scalar field, since older databases may not have newer profile
+        // columns yet (for example previousSchool).
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { lastLogin: new Date() },
+            select: { id: true }
+        });
 
         const mappedRole = normalizeRole(user.role);
         const session = await issueSession(req, res, { ...user, role: mappedRole });

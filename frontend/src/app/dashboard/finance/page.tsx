@@ -12,16 +12,21 @@ export default function FinancePage() {
     const [children, setChildren] = useState([]);
     const [selectedChild, setSelectedChild] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [invoiceClassFilter, setInvoiceClassFilter] = useState('');
+    const [invoiceSearch, setInvoiceSearch] = useState('');
 
     // Modal States
     const [isFeeModalOpen, setIsFeeModalOpen] = useState(false);
     const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+    const [isReminderModalOpen, setIsReminderModalOpen] = useState(false);
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
     const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
 
     // Form States
     const [feeForm, setFeeForm] = useState({ name: '', amount: '', description: '' });
     const [bulkForm, setBulkForm] = useState({ classId: '', feeTypeIds: [], dueDate: '' });
+    const [reminderClassId, setReminderClassId] = useState('');
+    const [reminderBusy, setReminderBusy] = useState('');
     const [paymentForm, setPaymentForm] = useState({ invoiceId: '', amount: '', paymentMethod: 'cash', transactionId: '' });
     const [expenseForm, setExpenseForm] = useState({ title: '', category: 'supplies', amount: '', date: new Date().toISOString().split('T')[0], description: '' });
     const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
@@ -139,6 +144,20 @@ export default function FinancePage() {
         }
     };
 
+    const sendPaymentReminder = async (target: { studentId?: string; classId?: string }) => {
+        const busyKey = target.studentId || target.classId || '';
+        setReminderBusy(busyKey);
+        try {
+            const { data } = await api.post('/fees/reminders/due', target);
+            if (target.classId) setIsReminderModalOpen(false);
+            alert(`Payment reminder sent to parents of ${data.studentsNotified} student(s).`);
+        } catch (err: any) {
+            alert(err.response?.data?.message || 'Failed to send payment reminder');
+        } finally {
+            setReminderBusy('');
+        }
+    };
+
     const handleCreateExpense = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
@@ -169,6 +188,15 @@ export default function FinancePage() {
     };
 
     const isAdmin = user && ['school-admin', 'accountant'].includes(user.role);
+    const filteredInvoices = invoices.filter((invoice: any) => {
+        const classId = invoice.classId || invoice.class?._id || invoice.class?.id;
+        const studentName = `${invoice.student?.firstName || ''} ${invoice.student?.lastName || ''}`.trim();
+        const query = invoiceSearch.trim().toLocaleLowerCase();
+        const matchesClass = !invoiceClassFilter || classId === invoiceClassFilter;
+        const matchesSearch = !query || [studentName, invoice.invoiceNumber, invoice.status]
+            .some(value => String(value || '').toLocaleLowerCase().includes(query));
+        return matchesClass && matchesSearch;
+    });
 
     return (
         <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-6 sm:space-y-8">
@@ -223,9 +251,14 @@ export default function FinancePage() {
                                     <p className="text-green-400 font-black text-lg sm:text-xl">${invoices.reduce((s, i: any) => s + (i.paidAmount || 0), 0).toLocaleString()}</p>
                                 </div>
                             </div>
-                            <button onClick={() => setIsBulkModalOpen(true)} className="px-6 py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-bold transition shadow-lg shadow-indigo-500/20">
-                                + Generate Invoices
-                            </button>
+                            <div className="flex flex-col sm:flex-row gap-3">
+                                <button onClick={() => setIsReminderModalOpen(true)} className="px-6 py-3.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/20 rounded-2xl font-bold transition">
+                                    Remind Class
+                                </button>
+                                <button onClick={() => setIsBulkModalOpen(true)} className="px-6 py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-bold transition shadow-lg shadow-indigo-500/20">
+                                    + Generate Invoices
+                                </button>
+                            </div>
                         </div>
                     )}
 
@@ -233,6 +266,28 @@ export default function FinancePage() {
                         <button onClick={() => setView('parent-portal')} className="text-indigo-400 text-sm font-bold hover:underline mb-4 flex items-center gap-2">
                             ← Back to Children List
                         </button>
+                    )}
+
+                    {isAdmin && (
+                        <div className="flex flex-col sm:flex-row gap-3">
+                            <select
+                                value={invoiceClassFilter}
+                                onChange={e => setInvoiceClassFilter(e.target.value)}
+                                className="sm:w-64 px-4 py-3 bg-slate-900 border border-white/10 rounded-xl text-sm text-white outline-none focus:ring-2 focus:ring-indigo-500/50"
+                                aria-label="Filter invoices by class"
+                            >
+                                <option value="">All classes</option>
+                                {classes.map((c: any) => <option key={c._id} value={c._id}>{c.name} - {c.section}</option>)}
+                            </select>
+                            <input
+                                type="search"
+                                value={invoiceSearch}
+                                onChange={e => setInvoiceSearch(e.target.value)}
+                                placeholder="Search student or invoice number..."
+                                className="flex-1 px-4 py-3 bg-slate-900 border border-white/10 rounded-xl text-sm text-white placeholder:text-slate-500 outline-none focus:ring-2 focus:ring-indigo-500/50"
+                                aria-label="Search invoices"
+                            />
+                        </div>
                     )}
 
                     <div className="glass-dark rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl overflow-x-auto custom-scrollbar">
@@ -250,7 +305,7 @@ export default function FinancePage() {
                             <tbody className="divide-y divide-white/5">
                                 {loading ? (
                                     <tr><td colSpan={6} className="py-20 text-center text-slate-600 animate-pulse italic">Loading ledgers...</td></tr>
-                                ) : invoices.length > 0 ? invoices.map((inv: any) => (
+                                ) : filteredInvoices.length > 0 ? filteredInvoices.map((inv: any) => (
                                     <tr key={inv._id} className="hover:bg-white/5 transition-colors group">
                                         <td className="px-8 py-4 font-mono text-indigo-400 text-xs font-bold">{inv.invoiceNumber}</td>
                                         <td className="px-8 py-4">
@@ -281,18 +336,27 @@ export default function FinancePage() {
                                                     View Receipt
                                                 </button>
                                                 {isAdmin && inv.status !== 'paid' && (
-                                                    <button
-                                                        onClick={() => { setSelectedInvoice(inv); setIsPaymentModalOpen(true); }}
-                                                        className="px-4 py-1.5 bg-green-600/10 hover:bg-green-600 text-green-400 hover:text-white border border-green-600/20 rounded-lg text-[10px] font-bold transition-all"
-                                                    >
-                                                        Add Payment
-                                                    </button>
+                                                    <>
+                                                        <button
+                                                            disabled={reminderBusy === inv.studentId}
+                                                            onClick={() => sendPaymentReminder({ studentId: inv.studentId })}
+                                                            className="px-4 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/20 rounded-lg text-[10px] font-bold transition-all disabled:opacity-50"
+                                                        >
+                                                            {reminderBusy === inv.studentId ? 'Sending…' : 'Notify Parent'}
+                                                        </button>
+                                                        <button
+                                                            onClick={() => { setSelectedInvoice(inv); setIsPaymentModalOpen(true); }}
+                                                            className="px-4 py-1.5 bg-green-600/10 hover:bg-green-600 text-green-400 hover:text-white border border-green-600/20 rounded-lg text-[10px] font-bold transition-all"
+                                                        >
+                                                            Add Payment
+                                                        </button>
+                                                    </>
                                                 )}
                                             </div>
                                         </td>
                                     </tr>
                                 )) : (
-                                    <tr><td colSpan={6} className="py-20 text-center text-slate-500">No invoices found.</td></tr>
+                                    <tr><td colSpan={6} className="py-20 text-center text-slate-500">{invoiceSearch || invoiceClassFilter ? 'No invoices match your filters.' : 'No invoices found.'}</td></tr>
                                 )}
                             </tbody>
                         </table>
@@ -378,6 +442,29 @@ export default function FinancePage() {
             )}
 
             {/* Modals */}
+            {isReminderModalOpen && isAdmin && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
+                    <div className="glass-dark w-full max-w-lg p-6 sm:p-8 rounded-[2.5rem] border border-white/10 shadow-2xl animate-in zoom-in-95">
+                        <h2 className="text-xl sm:text-2xl font-black text-white mb-2">Remind a Class</h2>
+                        <p className="text-sm text-slate-400 mb-6">Send payment reminders to parents of students with unpaid or partially paid invoices.</p>
+                        <form onSubmit={e => { e.preventDefault(); if (reminderClassId) sendPaymentReminder({ classId: reminderClassId }); }} className="space-y-5">
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1">Select Class</label>
+                                <select required value={reminderClassId} onChange={e => setReminderClassId(e.target.value)} className="w-full px-5 py-3 bg-slate-900 border border-white/10 rounded-2xl text-white outline-none focus:ring-2 focus:ring-amber-500/50">
+                                    <option value="">Choose Class...</option>
+                                    {classes.map((c: any) => <option key={c._id} value={c._id}>{c.name} - {c.section}</option>)}
+                                </select>
+                            </div>
+                            <div className="flex gap-4 pt-2">
+                                <button disabled={!reminderClassId || reminderBusy === reminderClassId} type="submit" className="flex-1 py-4 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-2xl font-black disabled:opacity-50">
+                                    {reminderBusy === reminderClassId ? 'Sending…' : 'Send Reminder'}
+                                </button>
+                                <button type="button" onClick={() => setIsReminderModalOpen(false)} className="flex-1 py-4 bg-slate-800 text-slate-400 rounded-2xl font-bold">Cancel</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
             {isBulkModalOpen && isAdmin && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in overflow-y-auto">
                     <div className="glass-dark w-full max-w-lg p-6 sm:p-8 rounded-[2.5rem] border border-white/10 shadow-2xl animate-in zoom-in-95 my-8">

@@ -24,6 +24,7 @@ const userSelect = {
     studentState: true, studentRegion: true, studentDistrict: true,
     studentVillage: true, guardianName: true, guardianTelephone: true,
     emergencyContactNo: true, schoolComments: true, absenteeismStatus: true,
+    previousSchool: true, transferSchool: true, transferDate: true,
     regDate: true, editDate: true,
     qualification: true, salary: true, stripeCustomerId: true,
     createdAt: true, updatedAt: true
@@ -58,6 +59,8 @@ const formatUser = (u, { includeCredentials = false } = {}) => {
             guardianName: u.guardianName, guardianTelephone: u.guardianTelephone,
             emergencyContactNo: u.emergencyContactNo,
             schoolComments: u.schoolComments, absenteeismStatus: u.absenteeismStatus,
+            previousSchool: u.previousSchool, transferSchool: u.transferSchool,
+            transferDate: u.transferDate,
             regDate: u.regDate, editDate: u.editDate,
             parentRelationship: u.parentRelationship,
             qualification: u.qualification, salary: u.salary,
@@ -208,6 +211,7 @@ exports.createStudent = async (req, res) => {
                 emergencyContactNo: profile?.emergencyContactNo || null,
                 schoolComments: profile?.schoolComments || null,
                 absenteeismStatus: profile?.absenteeismStatus || null,
+                previousSchool: profile?.previousSchool || null,
                 regDate: optionalDate(profile?.regDate),
                 editDate: optionalDate(profile?.editDate),
                 parentRelationship: parentRelationship || parentDetails?.relationship || 'Guardian'
@@ -380,6 +384,7 @@ exports.updateStudent = async (req, res) => {
                 ...(profile?.emergencyContactNo !== undefined && { emergencyContactNo: profile.emergencyContactNo }),
                 ...(profile?.schoolComments !== undefined && { schoolComments: profile.schoolComments }),
                 ...(profile?.absenteeismStatus !== undefined && { absenteeismStatus: profile.absenteeismStatus }),
+                ...(profile?.previousSchool !== undefined && { previousSchool: profile.previousSchool || null }),
                 ...(profile?.regDate !== undefined && { regDate: optionalDate(profile.regDate) }),
                 ...(profile?.editDate !== undefined && { editDate: optionalDate(profile.editDate) }),
                 ...(profile?.rollNo !== undefined && { rollNo: profile.rollNo }),
@@ -394,6 +399,39 @@ exports.updateStudent = async (req, res) => {
         await logAction({ action: 'UPDATE', module: 'USER', details: `Updated student: ${updated.firstName} ${updated.lastName}`, userId: req.user._id, tenantId: req.user.tenantId });
         emitToTenant(req.user.tenantId, 'student:updated', formatUser(updated));
         res.status(200).json({ success: true, data: formatUser(updated) });
+    } catch (error) {
+        sendError(res, error);
+    }
+};
+
+// @desc    Transfer a student to another school
+exports.transferStudent = async (req, res) => {
+    try {
+        const { schoolName, transferDate } = req.body;
+        if (!schoolName || !schoolName.trim()) {
+            return res.status(400).json({ success: false, message: 'Destination school name is required' });
+        }
+
+        const student = await prisma.user.findFirst({
+            where: { id: req.params.id, tenantId: req.user.tenantId, role: 'student', status: 'active' }
+        });
+        if (!student) return res.status(404).json({ success: false, message: 'Active student not found' });
+
+        const transferred = await prisma.user.update({
+            where: { id: student.id },
+            data: {
+                status: 'inactive',
+                transferSchool: schoolName.trim(),
+                transferDate: transferDate ? new Date(transferDate) : new Date(),
+                tokenVersion: { increment: 1 }
+            },
+            select: userSelect
+        });
+
+        await prisma.authSession.deleteMany({ where: { userId: student.id } });
+        await logAction({ action: 'UPDATE', module: 'USER', details: `Transferred student: ${student.firstName} ${student.lastName} to ${schoolName.trim()}`, userId: req.user._id, tenantId: req.user.tenantId });
+        emitToTenant(req.user.tenantId, 'student:deleted', { id: student.id });
+        res.status(200).json({ success: true, message: 'Student transfer recorded', data: formatUser(transferred) });
     } catch (error) {
         sendError(res, error);
     }

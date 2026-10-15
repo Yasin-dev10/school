@@ -11,7 +11,8 @@ const {
     getChildren,
     bulkImportStudents,
     resetStudentPassword,
-    restoreStudent
+    restoreStudent,
+    transferStudent
 } = require('../controllers/student.controller');
 const { protect, authorize } = require('../middlewares/auth.middleware');
 const { validate, validateObjectId, validateBulkOperation } = require('../middlewares/validation.middleware');
@@ -32,6 +33,7 @@ router.route('/')
 
 router.post('/:id/reset-password', authorize('school-admin', 'receptionist'), validateObjectId('id'), resetStudentPassword);
 router.post('/:id/restore', authorize('school-admin'), validateObjectId('id'), restoreStudent);
+router.post('/:id/transfer', authorize('school-admin'), validateObjectId('id'), transferStudent);
 
 router.route('/:id')
     .get(authorize('school-admin', 'teacher', 'student', 'parent', 'receptionist'), validateObjectId('id'), getStudentById)

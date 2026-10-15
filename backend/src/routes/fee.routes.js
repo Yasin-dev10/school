@@ -7,6 +7,7 @@ const {
     getInvoices,
     recordPayment,
     getInvoiceById,
+    sendPaymentDueReminder,
     createExpense,
     getExpenses,
     getAllPayments
@@ -27,6 +28,7 @@ router.route('/invoices')
 router.get('/invoices/:id', authorize('school-admin', 'accountant', 'receptionist', 'student', 'parent'), getInvoiceById);
 
 router.post('/generate-invoices', authorize('school-admin'), generateClassInvoices);
+router.post('/reminders/due', authorize('school-admin', 'accountant'), sendPaymentDueReminder);
 
 // Payments
 router.post('/pay', authorize('school-admin', 'receptionist'), recordPayment);
