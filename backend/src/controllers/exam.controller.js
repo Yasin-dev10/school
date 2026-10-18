@@ -5,6 +5,7 @@ const { logAction } = require('../utils/logger');
 const { emitToTenant } = require('../config/socket');
 const { generateExcelMatrix, generateReportCardPDF } = require('../utils/reportGenerator');
 const { getTeacherScope, canTeacherAccessClassSubject, canTeacherAccessStudent } = require('../utils/teacherScope');
+const { getParentScope } = require('../utils/parentScope');
 
 const calculateGrade = (percentage, gradeConfigs) => {
     if (!gradeConfigs?.length) {
@@ -52,6 +53,10 @@ exports.getExams = async (req, res) => {
         let where = { tenantId: req.user.tenantId };
         if (req.user.role === 'teacher') {
             const scope = await getTeacherScope(req.user.id, req.user.tenantId);
+            if (scope.classIds.length === 0) return res.status(200).json({ success: true, count: 0, data: [] });
+            where.classes = { some: { classId: { in: scope.classIds } } };
+        } else if (req.user.role === 'parent') {
+            const scope = await getParentScope(req.user.id, req.user.tenantId);
             if (scope.classIds.length === 0) return res.status(200).json({ success: true, count: 0, data: [] });
             where.classes = { some: { classId: { in: scope.classIds } } };
         }
@@ -280,7 +285,11 @@ exports.getMarks = async (req, res) => {
         if (subjectId) where.subjectId = subjectId;
         if (classId) where.classId = classId;
         if (req.user.role === 'student') where.studentId = req.user.id;
-        else if (studentId) where.studentId = studentId;
+        else if (req.user.role === 'parent') {
+            const scope = await getParentScope(req.user.id, req.user.tenantId);
+            if (studentId && !scope.studentIds.includes(studentId)) return res.status(403).json({ success: false, message: 'Access denied. Student is not linked to your account.' });
+            where.studentId = studentId || { in: scope.studentIds.length ? scope.studentIds : ['__none__'] };
+        } else if (studentId) where.studentId = studentId;
 
         if (req.user.role === 'teacher') {
             const scope = await getTeacherScope(req.user.id, req.user.tenantId);
@@ -309,7 +318,8 @@ exports.getMarks = async (req, res) => {
             }
         });
 
-        res.status(200).json({ success: true, data: marks });
+        const visibleMarks = req.user.role === 'parent' ? marks.filter(mark => mark.exam?.isApproved) : marks;
+        res.status(200).json({ success: true, data: visibleMarks });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -907,6 +917,9 @@ exports.getStudentReport = async (req, res) => {
         ]);
 
         if (!exam) return res.status(404).json({ message: 'Exam not found' });
+        if (['student', 'parent'].includes(req.user.role) && !exam.isApproved) {
+            return res.status(403).json({ success: false, message: 'Exam results have not been published.' });
+        }
         if (!marks.length) return res.status(404).json({ message: 'No marks found' });
 
         const gradeConfigs = gradeSystem?.grades || [];

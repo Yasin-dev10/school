@@ -27,6 +27,7 @@ export default function StudentPortalPage() {
     const [user, setUser] = useState<any>(null);
     const [studentData, setStudentData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(false);
 
     useEffect(() => {
         const userStr = localStorage.getItem('user');
@@ -38,6 +39,8 @@ export default function StudentPortalPage() {
     }, []);
 
     const fetchStudentData = async (studentId: string) => {
+        setLoading(true);
+        setLoadError(false);
         try {
             const [profileRes, attendanceRes, gradesRes, feesRes, timetableRes] = await Promise.all([
                 api.get(`/students/${studentId}`),
@@ -56,6 +59,7 @@ export default function StudentPortalPage() {
             });
         } catch (error) {
             console.error('Error fetching student data:', error);
+            setLoadError(true);
         } finally {
             setLoading(false);
         }
@@ -70,6 +74,10 @@ export default function StudentPortalPage() {
                 </div>
             </div>
         );
+    }
+
+    if (loadError) {
+        return <div role="alert" className="mx-auto mt-8 max-w-xl rounded-2xl border border-rose-200 bg-white p-6 text-center dark:border-rose-900 dark:bg-slate-900"><h1 className="font-bold text-slate-900 dark:text-white">{t('Your dashboard could not load')}</h1><p className="mt-2 text-sm text-slate-500">{t('Check your connection and try again.')}</p><button onClick={() => user?._id && fetchStudentData(user._id)} className="mt-4 rounded-xl bg-[#1e3a8a] px-4 py-2 text-sm font-semibold text-white">{t('Try again')}</button></div>;
     }
 
     const profile = studentData?.profile || {};
@@ -179,7 +187,7 @@ export default function StudentPortalPage() {
                             title: 'Progress Reports',
                             description: 'Access detailed academic reports and analytics',
                             icon: <FileText className="w-8 h-8" />,
-                            href: '/dashboard/reports',
+                            href: '/dashboard/grades',
                             color: 'bg-purple-500',
                             stats: t('View Reports')
                         },
@@ -187,7 +195,7 @@ export default function StudentPortalPage() {
                             title: 'Fee Management',
                             description: 'Track and manage your fee payments',
                             icon: <DollarSign className="w-8 h-8" />,
-                            href: '/dashboard/finance',
+                            href: '/dashboard/student-finance',
                             color: 'bg-orange-500',
                             stats: pendingFees > 0 ? `$${pendingFees} ${t('Due')}` : t('Up to Date')
                         },

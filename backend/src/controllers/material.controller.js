@@ -1,5 +1,6 @@
 const prisma = require('../config/prismaClient');
 const { canTeacherAccessClassSubject } = require('../utils/teacherScope');
+const { getParentScope } = require('../utils/parentScope');
 
 // @desc    Create material
 exports.createMaterial = async (req, res) => {
@@ -42,18 +43,32 @@ exports.getMaterials = async (req, res) => {
         const role = req.user.role;
         const { classId, subjectId } = req.query;
         let where = { tenantId };
+        let scopedClassIds = null;
 
         if (role === 'teacher') {
             where.teacherId = req.user.id;
         } else if (role === 'student') {
             where.visibleToStudents = true;
             if (req.user.profile?.class) {
-                const cls = await prisma.class.findFirst({ where: { name: req.user.profile.class, tenantId } });
-                if (cls) where.classId = cls.id;
+                const cls = await prisma.class.findFirst({ where: { OR: [{ id: req.user.profile.class }, { name: req.user.profile.class }], tenantId, ...(req.user.profile.section ? { section: req.user.profile.section } : {}) } });
+                scopedClassIds = cls ? [cls.id] : [];
+                where.classId = cls?.id || '__none__';
+            } else {
+                scopedClassIds = [];
+                where.classId = '__none__';
             }
+        } else if (role === 'parent') {
+            const scope = await getParentScope(req.user.id, tenantId);
+            if (!scope.classIds.length) return res.status(200).json({ success: true, count: 0, data: [] });
+            scopedClassIds = scope.classIds;
+            where.visibleToStudents = true;
+            where.classId = { in: scope.classIds };
         }
 
-        if (classId) where.classId = classId;
+        if (classId) {
+            if (scopedClassIds && !scopedClassIds.includes(classId)) return res.status(403).json({ success: false, message: 'Access denied. Class is not linked to your records.' });
+            where.classId = classId;
+        }
         if (subjectId) where.subjectId = subjectId;
 
         const materials = await prisma.material.findMany({

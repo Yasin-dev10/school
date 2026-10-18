@@ -214,11 +214,11 @@ exports.updateClass = async (req, res) => {
 
         const { name, section, room, classTeacher, gradeLevel, grade, subjects } = req.body;
 
-        let subjectCreate = [];
+        let validatedSubjects = null;
         if (subjects !== undefined) {
             if (!Array.isArray(subjects)) return res.status(400).json({ success: false, message: 'Subjects must be an array' });
 
-            const validatedSubjects = [];
+            validatedSubjects = [];
             for (const sub of subjects) {
                 if (!sub.subject) return res.status(400).json({ success: false, message: 'Each subject entry must have a subject ID' });
                 const subjectExists = await prisma.subject.findFirst({ where: { id: sub.subject, tenantId: req.user.tenantId } });
@@ -236,12 +236,6 @@ exports.updateClass = async (req, res) => {
                 });
             }
 
-            subjectCreate = validatedSubjects.map(vs => ({
-                subject: { connect: { id: vs.subjectId } },
-                weeklyPeriods: vs.weeklyPeriods,
-                room: vs.room,
-                teachers: { create: vs.teachers.map(tId => ({ teacher: { connect: { id: tId } } })) }
-            }));
         }
 
         const nextName = name !== undefined ? name : exists.name;
@@ -249,10 +243,6 @@ exports.updateClass = async (req, res) => {
         const classIdentityChanged = nextName !== exists.name || nextSection !== exists.section;
 
         const updated = await prisma.$transaction(async (tx) => {
-            if (subjects !== undefined) {
-                await tx.classSubject.deleteMany({ where: { classId: req.params.id } });
-            }
-
             const updatedClass = await tx.class.update({
                 where: { id: req.params.id },
                 data: {
@@ -261,9 +251,79 @@ exports.updateClass = async (req, res) => {
                     ...(room !== undefined && { room }),
                     ...(classTeacher !== undefined && { classTeacherId: classTeacher || null }),
                     ...(gradeLevel !== undefined && { gradeLevel }),
-                    ...(grade !== undefined && { grade }),
-                    ...(subjects !== undefined && subjectCreate.length > 0 && { subjects: { create: subjectCreate } })
-                },
+                    ...(grade !== undefined && { grade })
+                }
+            });
+
+            if (validatedSubjects !== null) {
+                const existingClassSubjects = await tx.classSubject.findMany({
+                    where: { classId: req.params.id },
+                    select: { id: true, subjectId: true }
+                });
+                const existingIds = existingClassSubjects.map(({ id }) => id);
+
+                // Clear child rows explicitly before removing or rebuilding teacher
+                // allocations. This also works on databases whose FK is RESTRICT.
+                if (existingIds.length > 0) {
+                    await tx.classSubjectTeacher.deleteMany({
+                        where: { classSubjectId: { in: existingIds } }
+                    });
+                }
+
+                const desiredSubjectIds = new Set(validatedSubjects.map(({ subjectId }) => subjectId));
+                const obsoleteIds = existingClassSubjects
+                    .filter(({ subjectId }) => !desiredSubjectIds.has(subjectId))
+                    .map(({ id }) => id);
+
+                if (obsoleteIds.length > 0) {
+                    await tx.classSubject.deleteMany({ where: { id: { in: obsoleteIds } } });
+                }
+
+                for (const allocation of validatedSubjects) {
+                    await tx.classSubject.upsert({
+                        where: {
+                            classId_subjectId: {
+                                classId: req.params.id,
+                                subjectId: allocation.subjectId
+                            }
+                        },
+                        create: {
+                            classId: req.params.id,
+                            subjectId: allocation.subjectId,
+                            weeklyPeriods: allocation.weeklyPeriods,
+                            room: allocation.room
+                        },
+                        update: {
+                            weeklyPeriods: allocation.weeklyPeriods,
+                            room: allocation.room
+                        }
+                    });
+                }
+
+                const savedClassSubjects = await tx.classSubject.findMany({
+                    where: {
+                        classId: req.params.id,
+                        subjectId: { in: [...desiredSubjectIds] }
+                    },
+                    select: { id: true, subjectId: true }
+                });
+                const classSubjectIdBySubjectId = new Map(
+                    savedClassSubjects.map(({ id, subjectId }) => [subjectId, id])
+                );
+                const teacherLinks = validatedSubjects.flatMap(allocation =>
+                    allocation.teachers.map(teacherId => ({
+                        classSubjectId: classSubjectIdBySubjectId.get(allocation.subjectId),
+                        teacherId
+                    }))
+                ).filter(link => link.classSubjectId);
+
+                if (teacherLinks.length > 0) {
+                    await tx.classSubjectTeacher.createMany({ data: teacherLinks });
+                }
+            }
+
+            const classWithSubjects = await tx.class.findUnique({
+                where: { id: req.params.id },
                 include: classInclude
             });
 
@@ -271,14 +331,14 @@ exports.updateClass = async (req, res) => {
                 await tx.user.updateMany({
                     where: studentWhereForClass(req.user.tenantId, exists),
                     data: {
-                        profileClass: updatedClass.name,
-                        profileSection: updatedClass.section
+                        profileClass: classWithSubjects.name,
+                        profileSection: classWithSubjects.section
                     }
                 });
             }
 
-            return updatedClass;
-        });
+            return classWithSubjects;
+        }, { timeout: 30000 });
 
         await logAction({ action: 'UPDATE', module: 'CLASS', details: `Updated class: ${updated.name} - ${updated.section}`, userId: req.user._id, tenantId: req.user.tenantId });
         res.status(200).json({ success: true, data: formatClass(updated) });

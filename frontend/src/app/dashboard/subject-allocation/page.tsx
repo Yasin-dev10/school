@@ -204,15 +204,18 @@ export default function SubjectAllocationPage() {
     const allocations = selectedClass?.subjects || [];
 
     return (
-        <div className="p-4 sm:p-6 max-w-7xl mx-auto min-h-screen flex flex-col gap-6">
+        <div className="p-4 sm:p-6 max-w-7xl mx-auto flex min-h-full flex-col gap-6">
             {/* Header */}
-            <div>
-                <h1 className="text-2xl font-bold text-slate-800 dark:text-white">
-                    Class Subject Allocation Management
-                </h1>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-                    Assign subjects and teachers to each class section.
-                </p>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                    <span className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-cyan-800 dark:border-cyan-400/20 dark:bg-cyan-400/10 dark:text-cyan-200"><BookOpen className="h-3 w-3" /> Academic setup</span>
+                    <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">Subject allocation</h1>
+                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Connect subjects, teachers, periods, and rooms to each class section.</p>
+                </div>
+                <div className="flex gap-2 text-xs">
+                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 font-semibold text-slate-600 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-300">{classes.length} classes</span>
+                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 font-semibold text-slate-600 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-300">{classes.reduce((sum, cls) => sum + (cls.subjects?.length || 0), 0)} allocations</span>
+                </div>
             </div>
 
             {loading ? (
@@ -222,7 +225,7 @@ export default function SubjectAllocationPage() {
             ) : (
                 <div className="flex flex-col lg:flex-row gap-4 flex-1">
                     {/* ── Left Panel: Class List ── */}
-                    <div className="w-full lg:w-64 shrink-0 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col">
+                    <div className="w-full lg:w-72 shrink-0 bg-white dark:bg-slate-900/70 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col overflow-hidden">
                         <div className="px-4 pt-4 pb-3 border-b border-slate-200 dark:border-slate-700">
                             <h2 className="text-sm font-bold text-slate-700 dark:text-white mb-2">Classes</h2>
                             <div className="relative">
@@ -245,7 +248,7 @@ export default function SubjectAllocationPage() {
                                         onClick={() => { setSelectedClass(c); setEditingIdx(null); }}
                                         className={`w-full text-left px-4 py-2.5 text-sm font-medium transition ${
                                             selectedClass?._id === c._id
-                                                ? 'bg-blue-600 text-white'
+                                                ? 'bg-[#1e3a8a] text-white shadow-sm'
                                                 : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'
                                         }`}
                                     >
@@ -260,15 +263,15 @@ export default function SubjectAllocationPage() {
                     </div>
 
                     {/* ── Right Panel: Allocations ── */}
-                    <div className="flex-1 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col overflow-hidden">
+                    <div className="flex-1 bg-white dark:bg-slate-900/70 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col overflow-hidden">
                         {/* Panel header */}
                         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700">
                             <h2 className="text-base font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                                <BookOpen className="w-4 h-4 text-blue-500" />
+                                <BookOpen className="w-4 h-4 text-cyan-600 dark:text-cyan-300" />
                                 {selectedClass ? `${classLabel(selectedClass)} Allocations` : 'Select a class'}
                             </h2>
                             {saving && (
-                                <span className="flex items-center gap-1 text-xs text-blue-500">
+                                <span className="flex items-center gap-1 text-xs text-cyan-600 dark:text-cyan-300">
                                     <Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving...
                                 </span>
                             )}
@@ -380,7 +383,7 @@ export default function SubjectAllocationPage() {
 
                                             if (isEditing) {
                                                 return (
-                                                    <tr key={idx} className="bg-blue-50 dark:bg-blue-900/10">
+                                                    <tr key={idx} className="bg-cyan-50 dark:bg-cyan-900/10">
                                                         <td className="px-4 py-2.5">
                                                             <select
                                                                 value={editSubjectId}
@@ -483,7 +486,7 @@ export default function SubjectAllocationPage() {
                                                             <div className="flex items-center justify-end gap-1">
                                                                 <button
                                                                     onClick={() => startEdit(idx)}
-                                                                    className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-600 hover:border-blue-400 hover:text-blue-500 text-slate-400 transition"
+                                                                    className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-600 hover:border-blue-400 hover:text-cyan-600 dark:text-cyan-300 text-slate-400 transition"
                                                                 >
                                                                     <Pencil className="w-3.5 h-3.5" />
                                                                 </button>

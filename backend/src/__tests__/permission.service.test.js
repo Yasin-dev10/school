@@ -18,6 +18,19 @@ describe('PermissionService', () => {
         expect(PermissionService.hasPermissionByRole(role, resource, action)).toBe(expected);
     });
 
+    test.each([
+        ['super-admin', 'users', 'delete', true],
+        ['school-admin', 'classes', 'create', true],
+        ['teacher', 'classes', 'read', true],
+        ['teacher', 'classes', 'delete', false],
+        ['student', 'grades', 'read', true],
+        ['student', 'grades', 'update', false],
+        ['parent', 'attendance', 'read', true],
+        ['parent', 'attendance', 'create', false]
+    ])('role scope matrix: %s cannot exceed %s:%s (expected %s)', (role, resource, action, expected) => {
+        expect(PermissionService.hasPermissionByRole(role, resource, action)).toBe(expected);
+    });
+
     test('normalizes Prisma underscore roles', () => {
         expect(PermissionService.hasPermissionByRole('school_admin', 'users', 'create')).toBe(true);
     });

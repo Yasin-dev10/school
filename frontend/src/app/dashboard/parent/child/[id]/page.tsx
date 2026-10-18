@@ -1,275 +1,123 @@
 "use client";
-import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import api from '../../../../utils/api';
+
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import { Activity, ArrowLeft, BookOpen, CalendarClock, ClipboardList, CreditCard, MessageSquare } from 'lucide-react';
+import api from '../../../../utils/api';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { PageLoader } from '@/components/ui/Spinner';
+
+type Tab = 'overview' | 'attendance' | 'academics' | 'timetable' | 'fees' | 'assignments' | 'materials';
 
 export default function ChildDetailPage() {
-    const { id } = useParams();
-    const router = useRouter();
+    const { id } = useParams<{ id: string }>();
     const [child, setChild] = useState<any>(null);
     const [attendance, setAttendance] = useState<any>(null);
-    const [marks, setMarks] = useState([]);
-    const [timetable, setTimetable] = useState([]);
+    const [marks, setMarks] = useState<any[]>([]);
+    const [timetable, setTimetable] = useState<any[]>([]);
+    const [invoices, setInvoices] = useState<any[]>([]);
+    const [assignments, setAssignments] = useState<any[]>([]);
+    const [materials, setMaterials] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState('overview');
+    const [error, setError] = useState('');
+    const [activeTab, setActiveTab] = useState<Tab>('overview');
 
-    useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const [childRes, attRes, marksRes, ttRes] = await Promise.all([
-                    api.get(`/students/${id}`),
-                    api.get(`/parent/child/${id}/attendance`),
-                    api.get(`/parent/child/${id}/marks`),
-                    api.get(`/parent/child/${id}/timetable`)
+    const load = useCallback(async () => {
+        setLoading(true);
+        setError('');
+        try {
+            const [childRes, attendanceRes, marksRes, timetableRes, invoicesRes, classesRes] = await Promise.all([
+                api.get(`/students/${id}`),
+                api.get(`/parent/child/${id}/attendance`),
+                api.get(`/parent/child/${id}/marks`),
+                api.get(`/parent/child/${id}/timetable`),
+                api.get(`/fees/invoices?studentId=${id}`),
+                api.get('/classes'),
+            ]);
+            const student = childRes.data.data;
+            setChild(student);
+            setAttendance(attendanceRes.data.data);
+            setMarks(marksRes.data.data || []);
+            setTimetable(timetableRes.data.data || []);
+            setInvoices((invoicesRes.data.data || []).filter((invoice: any) => invoice.studentId === id));
+            const studentClass = (classesRes.data.data || []).find((item: any) => item.name === student.profile?.class && (!student.profile?.section || item.section === student.profile.section));
+            if (studentClass) {
+                const [assignmentRes, materialRes] = await Promise.all([
+                    api.get('/assignments', { params: { classId: studentClass.id } }),
+                    api.get('/materials', { params: { classId: studentClass.id } }),
                 ]);
-
-                setChild(childRes.data.data);
-                setAttendance(attRes.data.data);
-                setMarks(marksRes.data.data);
-                setTimetable(ttRes.data.data);
-            } catch (error) {
-                console.error("Failed to fetch child data", error);
-            } finally {
-                setLoading(false);
+                setAssignments(assignmentRes.data.data || []);
+                setMaterials(materialRes.data.data || []);
+            } else {
+                setAssignments([]);
+                setMaterials([]);
             }
-        };
-        fetchData();
+        } catch {
+            setError('We could not load this student record. Check your connection and try again.');
+        } finally {
+            setLoading(false);
+        }
     }, [id]);
 
-    if (loading) return (
-        <div className="flex items-center justify-center min-h-[60vh]">
-            <div className="w-12 h-12 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
-        </div>
-    );
+    useEffect(() => { void load(); }, [load]);
 
-    if (!child) return <div className="p-8 text-center text-white">Child not found.</div>;
+    if (loading) return <PageLoader label="Loading student records…" />;
+    if (error || !child) return <div role="alert" className="mx-auto mt-8 max-w-xl rounded-2xl border border-rose-200 bg-white p-6 text-center dark:border-rose-900 dark:bg-slate-900"><h1 className="font-bold text-slate-900 dark:text-white">{error || 'Student record unavailable'}</h1><button onClick={() => void load()} className="mt-4 rounded-xl bg-[#1e3a8a] px-4 py-2 text-sm font-semibold text-white">Try again</button><Link href="/dashboard" className="ml-3 text-sm font-semibold text-[#1e3a8a] dark:text-cyan-300">Back to family portal</Link></div>;
+
+    const today = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date());
+    const todaysClasses = timetable.filter((slot) => slot.day.toLowerCase() === today.toLowerCase());
+    const unpaidBalance = invoices.filter((invoice) => invoice.status !== 'paid').reduce((sum, invoice) => sum + Math.max(0, Number(invoice.totalAmount || 0) - Number(invoice.paidAmount || 0)), 0);
+    const average = marks.length ? marks.reduce((sum, mark) => sum + (mark.maxMarks ? Number(mark.marksObtained) / Number(mark.maxMarks) * 100 : 0), 0) / marks.length : null;
+    const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
+        { id: 'overview', label: 'Overview', icon: <Activity className="h-4 w-4" /> },
+        { id: 'attendance', label: 'Attendance', icon: <CalendarClock className="h-4 w-4" /> },
+        { id: 'academics', label: 'Results', icon: <BookOpen className="h-4 w-4" /> },
+        { id: 'timetable', label: 'Timetable', icon: <CalendarClock className="h-4 w-4" /> },
+        { id: 'fees', label: 'Fees', icon: <CreditCard className="h-4 w-4" /> },
+        { id: 'assignments', label: 'Assignments', icon: <ClipboardList className="h-4 w-4" /> },
+        { id: 'materials', label: 'Materials', icon: <BookOpen className="h-4 w-4" /> },
+    ];
+    const surface = 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900';
 
     return (
-        <div className="p-8 max-w-7xl mx-auto space-y-10">
-            {/* Header */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-                <div className="flex items-center gap-6">
-                    <div className="w-20 h-20 rounded-3xl bg-indigo-600 flex items-center justify-center text-3xl font-black text-white shadow-2xl shadow-indigo-500/20">
-                        {child.firstName.charAt(0)}
-                    </div>
-                    <div>
-                        <h1 className="text-3xl font-black text-white tracking-tight">{child.firstName} {child.lastName}</h1>
-                        <p className="text-slate-500 font-bold uppercase tracking-widest text-xs mt-1">
-                            Class {child.profile?.class} - {child.profile?.section} • Roll No: {child.profile?.rollNo}
-                        </p>
-                    </div>
+        <div className="mx-auto max-w-7xl space-y-6">
+            <header className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                    <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-lg font-bold text-[#1e3a8a] dark:bg-blue-950 dark:text-cyan-300">{child.firstName?.charAt(0)}{child.lastName?.charAt(0)}</span>
+                    <div><p className="text-sm font-semibold text-cyan-700 dark:text-cyan-300">Family portal / Student</p><h1 className="text-xl font-bold text-slate-900 dark:text-white">{child.firstName} {child.lastName}</h1><p className="text-xs text-slate-500">{[child.profile?.class && `Class ${child.profile.class}`, child.profile?.section && `Section ${child.profile.section}`, child.profile?.rollNo && `Roll ${child.profile.rollNo}`].filter(Boolean).join(' · ') || 'Class information unavailable'}</p></div>
                 </div>
-                <div className="flex gap-3">
-                    <button className="px-5 py-2.5 bg-white/5 hover:bg-white/10 text-slate-300 rounded-xl font-bold transition border border-white/5 text-sm">
-                        💬 Message Teacher
-                    </button>
-                    <button onClick={() => router.back()} className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold transition text-sm">
-                        Back to Portal
-                    </button>
-                </div>
-            </div>
+                <div className="flex gap-2"><Link href="/dashboard" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"><ArrowLeft className="h-4 w-4" /> All children</Link><Link href="/dashboard/communication" className="inline-flex items-center gap-2 rounded-xl bg-[#1e3a8a] px-3 py-2 text-sm font-semibold text-white hover:bg-blue-900"><MessageSquare className="h-4 w-4" /> Message teacher</Link></div>
+            </header>
 
-            {/* Quick Stats */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 animate-in fade-in slide-in-from-bottom-4">
+            <section aria-label="Student summary" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 {[
-                    { label: 'Attendance', value: attendance?.stats?.percentage + '%', icon: '📅', color: 'text-green-400', bg: 'bg-green-400/10' },
-                    { label: 'Average Mark', value: marks.length > 0 ? (marks.reduce((acc: any, m: any) => acc + (m.marksObtained / m.maxMarks * 100), 0) / marks.length).toFixed(1) + '%' : 'N/A', icon: '📈', color: 'text-indigo-400', bg: 'bg-indigo-400/10' },
-                    { label: 'Pending Assignments', value: '4', icon: '📝', color: 'text-amber-400', bg: 'bg-amber-400/10' },
-                    { label: 'Behavhior Score', value: 'Excellent', icon: '🌟', color: 'text-purple-400', bg: 'bg-purple-400/10' },
-                ].map((stat, i) => (
-                    <div key={i} className="glass-dark p-6 rounded-3xl border border-white/5 relative overflow-hidden group hover:border-white/10 transition-all duration-300">
-                        <div className={`${stat.bg} w-12 h-12 rounded-2xl flex items-center justify-center text-xl mb-4 group-hover:scale-110 transition-transform`}>
-                            {stat.icon}
-                        </div>
-                        <p className="text-slate-500 text-xs font-bold uppercase tracking-widest">{stat.label}</p>
-                        <p className={`text-3xl font-black mt-1 ${stat.color}`}>{stat.value}</p>
-                    </div>
-                ))}
-            </div>
+                    { label: 'Attendance', value: `${attendance?.stats?.percentage ?? '0'}%`, icon: <Activity className="h-5 w-5" /> },
+                    { label: 'Average mark', value: average === null ? '—' : `${average.toFixed(1)}%`, icon: <BookOpen className="h-5 w-5" /> },
+                    { label: 'Unpaid fees', value: `$${unpaidBalance.toLocaleString()}`, icon: <CreditCard className="h-5 w-5" /> },
+                    { label: 'Classes today', value: todaysClasses.length, icon: <CalendarClock className="h-5 w-5" /> },
+                ].map((stat) => <div key={stat.label} className={`${surface} flex items-center gap-4`}><span className="rounded-xl bg-cyan-50 p-3 text-[#1e3a8a] dark:bg-cyan-950/50 dark:text-cyan-300">{stat.icon}</span><div><p className="text-xs font-medium text-slate-500">{stat.label}</p><p className="mt-1 text-2xl font-bold text-slate-900 dark:text-white">{stat.value}</p></div></div>)}
+            </section>
 
-            {/* Tabs */}
-            <div className="flex gap-4 border-b border-white/5 pb-1 overflow-x-auto no-scrollbar">
-                {['overview', 'attendance', 'academics', 'timetable'].map((tab) => (
-                    <button
-                        key={tab}
-                        onClick={() => setActiveTab(tab)}
-                        className={`px-6 py-4 text-sm font-bold capitalize transition-all relative ${activeTab === tab ? 'text-indigo-400' : 'text-slate-500 hover:text-white'}`}
-                    >
-                        {tab}
-                        {activeTab === tab && (
-                            <div className="absolute bottom-0 left-0 right-0 h-1 bg-indigo-500 rounded-full shadow-lg shadow-indigo-500/50" />
-                        )}
-                    </button>
-                ))}
-            </div>
+            <section className={`${surface} !p-2`}>
+                <div role="tablist" aria-label="Student records" className="flex gap-1 overflow-x-auto">
+                    {tabs.map((tab) => <button key={tab.id} role="tab" aria-selected={activeTab === tab.id} onClick={() => setActiveTab(tab.id)} className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${activeTab === tab.id ? 'bg-[#1e3a8a] text-white' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}`}>{tab.icon}{tab.label}</button>)}
+                </div>
+            </section>
 
-            {/* Tab Content */}
-            <div className="animate-in fade-in duration-500">
-                {activeTab === 'overview' && (
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                        {/* Recent Performance */}
-                        <div className="glass-dark p-8 rounded-[2.5rem] border border-white/5">
-                            <h2 className="text-xl font-bold text-white mb-6">Recent Exam Results</h2>
-                            <div className="space-y-4">
-                                {marks.slice(0, 5).map((m: any) => (
-                                    <div key={m._id} className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors group">
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-indigo-400 font-bold border border-white/5">
-                                                {m.subject?.name?.charAt(0)}
-                                            </div>
-                                            <div>
-                                                <h4 className="font-bold text-white group-hover:text-indigo-400 transition">{m.subject?.name}</h4>
-                                                <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">{m.exam?.name}</p>
-                                            </div>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="text-lg font-black text-white">{m.marksObtained}/{m.maxMarks}</p>
-                                            <p className="text-[10px] text-green-400 font-bold uppercase">{((m.marksObtained / m.maxMarks) * 100).toFixed(0)}%</p>
-                                        </div>
-                                    </div>
-                                ))}
-                                {marks.length === 0 && <div className="py-20 text-center text-slate-600 italic">No academic records yet.</div>}
-                            </div>
-                        </div>
+            {activeTab === 'overview' && <section className="grid gap-5 lg:grid-cols-2"><div className={surface}><h2 className="font-bold text-slate-900 dark:text-white">Recent results</h2><div className="mt-4 space-y-2">{marks.slice(0, 5).map((mark) => <div key={mark.id || mark._id} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 p-3 dark:bg-slate-800"><div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-900 dark:text-white">{mark.subject?.name || 'Subject'}</p><p className="text-xs text-slate-500">{mark.exam?.name || 'Exam'}</p></div><span className="shrink-0 text-sm font-bold text-[#1e3a8a] dark:text-cyan-300">{mark.marksObtained}/{mark.maxMarks}</span></div>)}{!marks.length && <EmptyState icon={<BookOpen className="h-6 w-6" />} title="No results yet" description="Published results for this student will appear here." />}</div></div><div className={surface}><h2 className="font-bold text-slate-900 dark:text-white">Recent attendance</h2><div className="mt-4 space-y-2">{(attendance?.records || []).slice(0, 5).map((record: any) => <div key={record.id || record._id} className="flex items-center justify-between rounded-xl bg-slate-50 p-3 dark:bg-slate-800"><span className="text-sm text-slate-700 dark:text-slate-200">{new Date(record.date).toLocaleDateString()}</span><span className="rounded-full bg-cyan-50 px-2.5 py-1 text-xs font-semibold capitalize text-[#1e3a8a] dark:bg-cyan-950 dark:text-cyan-200">{record.status}</span></div>)}{!attendance?.records?.length && <EmptyState icon={<CalendarClock className="h-6 w-6" />} title="No attendance records" description="Attendance records will appear here when available." />}</div></div></section>}
 
-                        {/* Recent Attendance */}
-                        <div className="glass-dark p-8 rounded-[2.5rem] border border-white/5">
-                            <h2 className="text-xl font-bold text-white mb-6">Recent Attendance</h2>
-                            <div className="space-y-3">
-                                {attendance?.records?.slice(0, 7).map((rec: any) => (
-                                    <div key={rec._id} className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5">
-                                        <div className="flex items-center gap-4">
-                                            <div className={`w-2 h-10 rounded-full ${rec.status === 'present' ? 'bg-green-500' : rec.status === 'absent' ? 'bg-red-500' : 'bg-amber-500'}`} />
-                                            <div>
-                                                <p className="text-sm font-bold text-white">{new Date(rec.date).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                                                <p className="text-[10px] text-slate-500 font-bold uppercase">{rec.remarks || 'Standard Session'}</p>
-                                            </div>
-                                        </div>
-                                        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${rec.status === 'present' ? 'bg-green-500/10 text-green-400' : rec.status === 'absent' ? 'bg-red-500/10 text-red-400' : 'bg-amber-500/10 text-amber-400'}`}>
-                                            {rec.status}
-                                        </span>
-                                    </div>
-                                ))}
-                                {attendance?.records?.length === 0 && <div className="py-20 text-center text-slate-600 italic">No attendance records yet.</div>}
-                            </div>
-                        </div>
-                    </div>
-                )}
+            {activeTab === 'attendance' && <section className={surface}><h2 className="font-bold text-slate-900 dark:text-white">Attendance record</h2><div className="mt-4 overflow-x-auto"><table className="w-full min-w-[540px] text-left text-sm"><thead className="text-xs uppercase text-slate-500"><tr><th className="py-3">Date</th><th>Class</th><th>Subject</th><th>Status</th><th>Notes</th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{(attendance?.records || []).map((record: any) => <tr key={record.id || record._id}><td className="py-3 text-slate-700 dark:text-slate-200">{new Date(record.date).toLocaleDateString()}</td><td>{record.class?.name || '—'}</td><td>{record.subject?.name || '—'}</td><td className="capitalize">{record.status}</td><td>{record.remarks || '—'}</td></tr>)}</tbody></table></div>{!attendance?.records?.length && <EmptyState icon={<CalendarClock className="h-6 w-6" />} title="No attendance records" description="Attendance records will appear here when available." />}</section>}
 
-                {activeTab === 'attendance' && (
-                    <div className="glass-dark p-10 rounded-[3rem] border border-white/5">
-                        <div className="flex justify-between items-center mb-10">
-                            <h2 className="text-2xl font-black text-white">Attendance Detailed Log</h2>
-                            <div className="flex gap-4">
-                                <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/5 text-center">
-                                    <p className="text-[9px] text-slate-500 font-black uppercase">Present</p>
-                                    <h4 className="text-xl font-black text-green-400">{attendance?.stats?.present}</h4>
-                                </div>
-                                <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/5 text-center">
-                                    <p className="text-[9px] text-slate-500 font-black uppercase">Absent</p>
-                                    <h4 className="text-xl font-black text-red-400">{attendance?.stats?.absent}</h4>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {attendance?.records?.map((rec: any) => (
-                                <div key={rec._id} className="p-6 rounded-[2rem] bg-slate-900 border border-white/5 flex flex-col justify-between hover:border-white/10 transition-all">
-                                    <div className="flex justify-between items-start mb-4">
-                                        <div className="p-3 bg-white/5 rounded-2xl text-xl">📅</div>
-                                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${rec.status === 'present' ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
-                                            {rec.status}
-                                        </span>
-                                    </div>
-                                    <h4 className="text-white font-bold">{new Date(rec.date).toLocaleDateString()}</h4>
-                                    <p className="text-[11px] text-slate-500 mt-1 uppercase font-black tracking-tighter">Normal School Day</p>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
+            {activeTab === 'academics' && <section className={surface}><h2 className="font-bold text-slate-900 dark:text-white">Exam results</h2><div className="mt-4 overflow-x-auto"><table className="w-full min-w-[480px] text-left text-sm"><thead className="text-xs uppercase text-slate-500"><tr><th className="py-3">Subject</th><th>Exam</th><th>Score</th><th>Percentage</th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{marks.map((mark) => <tr key={mark.id || mark._id}><td className="py-3 font-medium">{mark.subject?.name || '—'}</td><td>{mark.exam?.name || '—'}</td><td>{mark.marksObtained}/{mark.maxMarks}</td><td>{mark.maxMarks ? `${((mark.marksObtained / mark.maxMarks) * 100).toFixed(1)}%` : '—'}</td></tr>)}</tbody></table></div>{!marks.length && <EmptyState icon={<BookOpen className="h-6 w-6" />} title="No results yet" description="Results appear after the school publishes them." />}</section>}
 
-                {activeTab === 'academics' && (
-                    <div className="glass-dark p-10 rounded-[3rem] border border-white/5">
-                        <h2 className="text-2xl font-black text-white mb-10 text-center">Academic Performance Board</h2>
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left">
-                                <thead>
-                                    <tr className="border-b border-white/5">
-                                        <th className="pb-6 text-[10px] font-black text-slate-500 uppercase tracking-widest px-4">Subject</th>
-                                        <th className="pb-6 text-[10px] font-black text-slate-500 uppercase tracking-widest px-4">Exam</th>
-                                        <th className="pb-6 text-[10px] font-black text-slate-500 uppercase tracking-widest px-4">Marks</th>
-                                        <th className="pb-6 text-[10px] font-black text-slate-500 uppercase tracking-widest px-4">Grade</th>
-                                        <th className="pb-6 text-[10px] font-black text-slate-500 uppercase tracking-widest px-4 text-right">Progress</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {marks.map((m: any) => {
-                                        const perc = (m.marksObtained / m.maxMarks) * 100;
-                                        return (
-                                            <tr key={m._id} className="border-b border-white/5 group hover:bg-white/5 transition-colors">
-                                                <td className="py-6 px-4">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center font-bold">
-                                                            {m.subject?.code || 'S'}
-                                                        </div>
-                                                        <p className="font-bold text-white">{m.subject?.name}</p>
-                                                    </div>
-                                                </td>
-                                                <td className="py-6 px-4">
-                                                    <p className="text-sm text-slate-400 font-medium">{m.exam?.name} </p>
-                                                    <p className="text-[9px] text-slate-600 font-black uppercase">{m.exam?.term}</p>
-                                                </td>
-                                                <td className="py-6 px-4 font-black text-white">{m.marksObtained} / {m.maxMarks}</td>
-                                                <td className="py-6 px-4">
-                                                    <span className={`px-3 py-1 rounded-lg text-[10px] font-black ${m.grade === 'F' ? 'bg-red-400/10 text-red-400' : m.grade ? 'bg-indigo-400/10 text-indigo-400' : 'bg-slate-400/10 text-slate-400'}`}>
-                                                        {m.grade || 'N/A'}{m.gpa !== null && m.gpa !== undefined ? ` / ${Number(m.gpa).toFixed(1)}` : ''}
-                                                    </span>
-                                                    {m.gradeRemarks && <p className="mt-2 text-[10px] text-slate-500 font-bold uppercase">{m.gradeRemarks}</p>}
-                                                </td>
-                                                <td className="py-6 px-4 text-right">
-                                                    <div className="w-full max-w-[120px] ml-auto h-2 bg-slate-800 rounded-full overflow-hidden">
-                                                        <div className="h-full bg-indigo-600 rounded-full shadow-lg shadow-indigo-500/50" style={{ width: `${perc}%` }} />
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                )}
+            {activeTab === 'timetable' && <section className={surface}><h2 className="font-bold text-slate-900 dark:text-white">Class timetable</h2><div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{timetable.map((slot) => <article key={slot.id || slot._id} className="rounded-xl border border-slate-200 p-4 dark:border-slate-700"><p className="text-xs font-semibold text-cyan-700 dark:text-cyan-300">{slot.day} · {slot.startTime}–{slot.endTime}</p><h3 className="mt-2 font-bold text-slate-900 dark:text-white">{slot.subject?.name || 'Lesson'}</h3><p className="mt-1 text-xs text-slate-500">{slot.class?.name || child.profile?.class || 'Class'} · Room {slot.room || '—'}</p><p className="mt-1 text-xs text-slate-500">Teacher: {slot.teachers?.map((teacher: any) => `${teacher.firstName} ${teacher.lastName}`).join(', ') || '—'}</p></article>)}{!timetable.length && <EmptyState icon={<CalendarClock className="h-6 w-6" />} title="No timetable available" description="The school has not published this class timetable yet." />}</div></section>}
 
-                {activeTab === 'timetable' && (
-                    <div className="glass-dark p-10 rounded-[3rem] border border-white/5 overflow-x-auto">
-                        <div className="grid grid-cols-6 gap-6 min-w-[1000px]">
-                            {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((day) => (
-                                <div key={day} className="space-y-6">
-                                    <div className="text-center p-3 rounded-2xl bg-indigo-600/10 border border-indigo-500/20">
-                                        <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">{day}</p>
-                                    </div>
-                                    <div className="space-y-4">
-                                        {timetable
-                                            .filter((slot: any) => slot.day === day)
-                                            .map((slot: any, idx: number) => (
-                                                <div key={idx} className="p-4 rounded-3xl bg-slate-900/50 border border-white/5 hover:border-indigo-500/20 transition-all group">
-                                                    <p className="text-[9px] font-black text-slate-500 uppercase mb-2">{slot.startTime} - {slot.endTime}</p>
-                                                    <h5 className="text-sm font-bold text-white group-hover:text-indigo-400 transition">{slot.subject?.name}</h5>
-                                                    <p className="text-[10px] text-slate-500 mt-1">Room {slot.room || 'TBD'}</p>
-                                                    <p className="text-[9px] text-indigo-400 font-bold mt-2 uppercase">{slot.teacher?.firstName}</p>
-                                                </div>
-                                            ))}
-                                        {timetable.filter((t: any) => t.day === day).length === 0 && (
-                                            <div className="h-40 rounded-3xl border border-dashed border-white/5 flex items-center justify-center italic text-[10px] text-slate-600">No classes</div>
-                                        )}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-            </div>
+            {activeTab === 'fees' && <section className={surface}><div className="mb-4 flex items-center justify-between"><h2 className="font-bold text-slate-900 dark:text-white">Fee invoices</h2><Link href="/dashboard/student-finance" className="text-sm font-semibold text-[#1e3a8a] hover:underline dark:text-cyan-300">Open fee portal</Link></div><div className="space-y-2">{invoices.map((invoice) => <article key={invoice.id || invoice._id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-50 p-4 dark:bg-slate-800"><div><p className="font-semibold text-slate-900 dark:text-white">{invoice.invoiceNumber || 'Invoice'}</p><p className="mt-1 text-xs text-slate-500">Due {invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : '—'}</p></div><div className="text-right"><p className="font-bold text-slate-900 dark:text-white">${Number(invoice.totalAmount || 0).toLocaleString()}</p><p className="text-xs capitalize text-slate-500">{invoice.status}</p></div></article>)}{!invoices.length && <EmptyState icon={<CreditCard className="h-6 w-6" />} title="No invoices" description="There are no fee invoices linked to this student." />}</div></section>}
+
+            {activeTab === 'assignments' && <section className={surface}><h2 className="font-bold text-slate-900 dark:text-white">Class assignments</h2><div className="mt-4 grid gap-3 sm:grid-cols-2">{assignments.map((assignment) => <article key={assignment.id || assignment._id} className="rounded-xl border border-slate-200 p-4 dark:border-slate-700"><h3 className="font-semibold text-slate-900 dark:text-white">{assignment.title}</h3><p className="mt-1 text-xs text-slate-500">{assignment.subject?.name || 'Subject'} · Due {assignment.dueDate ? new Date(assignment.dueDate).toLocaleDateString() : '—'}</p></article>)}{!assignments.length && <EmptyState icon={<ClipboardList className="h-6 w-6" />} title="No assignments" description="Assignments for this class will appear here." />}</div></section>}
+
+            {activeTab === 'materials' && <section className={surface}><h2 className="font-bold text-slate-900 dark:text-white">Learning materials</h2><div className="mt-4 grid gap-3 sm:grid-cols-2">{materials.map((material) => <article key={material.id || material._id} className="rounded-xl border border-slate-200 p-4 dark:border-slate-700"><h3 className="font-semibold text-slate-900 dark:text-white">{material.title}</h3><p className="mt-1 text-xs text-slate-500">{material.subject?.name || 'Class material'}</p>{material.fileUrl && <a href={material.fileUrl} target="_blank" rel="noreferrer" className="mt-3 inline-block text-sm font-semibold text-[#1e3a8a] underline dark:text-cyan-300">Open material</a>}</article>)}{!materials.length && <EmptyState icon={<BookOpen className="h-6 w-6" />} title="No materials" description="Materials shared with this class will appear here." />}</div></section>}
         </div>
     );
 }

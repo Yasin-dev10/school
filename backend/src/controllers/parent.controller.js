@@ -88,7 +88,7 @@ exports.getChildMarks = async (req, res) => {
             orderBy: { createdAt: 'desc' }
         });
 
-        res.status(200).json({ success: true, data: marks });
+        res.status(200).json({ success: true, data: marks.filter(mark => mark.exam?.isApproved) });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -102,10 +102,23 @@ exports.getChildTimetable = async (req, res) => {
         if (!child) return res.status(403).json({ message: 'Access denied.' });
 
         let where = { tenantId: req.user.tenantId };
-        if (child.profileClass) {
-            const cls = await prisma.class.findFirst({ where: { name: child.profileClass, tenantId: req.user.tenantId } });
-            if (cls) where.classId = cls.id;
-        }
+        if (!child.profileClass) return res.status(200).json({ success: true, data: [] });
+        const candidateClasses = await prisma.class.findMany({
+            where: {
+                tenantId: req.user.tenantId,
+                OR: [{ id: child.profileClass }, { name: child.profileClass }],
+            },
+            select: { id: true, name: true, section: true }
+        });
+        const matchingClasses = candidateClasses.filter(schoolClass =>
+            schoolClass.id === child.profileClass ||
+            (schoolClass.name === child.profileClass && (child.profileSection
+                ? schoolClass.section === child.profileSection
+                : candidateClasses.filter(item => item.name === schoolClass.name).length === 1))
+        );
+        const cls = matchingClasses.length === 1 ? matchingClasses[0] : null;
+        if (!cls) return res.status(200).json({ success: true, data: [] });
+        where.classId = cls.id;
 
         const timetable = await prisma.timetable.findMany({
             where,

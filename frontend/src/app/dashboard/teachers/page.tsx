@@ -4,7 +4,7 @@ import api from '../../utils/api';
 import Link from 'next/link';
 import {
     Search, Plus, FileDown, ChevronDown, MessageSquare,
-    UserCheck, RotateCcw, Eye, SlidersHorizontal
+    UserCheck, RotateCcw, Eye, SlidersHorizontal, Users, BriefcaseBusiness
 } from 'lucide-react';
 
 /* ─── Types ─────────────────────────────────────────────────────────────── */
@@ -84,14 +84,14 @@ function TeacherCard({ teacher, onReset }: { teacher: Teacher; onReset: (id: str
     const designation = teacher.profile?.designation || 'Teacher';
 
     return (
-        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden hover:shadow-lg transition-shadow flex flex-col">
+        <div className="bg-white dark:bg-slate-900/70 rounded-3xl border border-slate-200/80 dark:border-slate-800 overflow-hidden shadow-sm hover:-translate-y-0.5 hover:shadow-xl transition-all flex flex-col">
             {/* Photo / Avatar area */}
             <div className="relative h-44 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-600 flex items-center justify-center">
                 {teacher.profile?.photoUrl ? (
                     <img src={teacher.profile.photoUrl} alt={`${teacher.firstName} ${teacher.lastName}`}
                         className="w-full h-full object-cover object-top" />
                 ) : (
-                    <div className="w-20 h-20 rounded-full bg-indigo-500/20 dark:bg-indigo-500/30 border-2 border-indigo-400/30 flex items-center justify-center text-2xl font-black text-indigo-600 dark:text-indigo-300">
+                    <div className="w-20 h-20 rounded-full bg-cyan-100 dark:bg-cyan-400/15 border-2 border-cyan-200 dark:border-cyan-400/20 flex items-center justify-center text-2xl font-black text-cyan-800 dark:text-cyan-200">
                         {initials}
                     </div>
                 )}
@@ -133,7 +133,7 @@ function TeacherCard({ teacher, onReset }: { teacher: Teacher; onReset: (id: str
                 {/* Buttons */}
                 <div className="mt-auto pt-2 flex gap-2">
                     <Link href={`/dashboard/teachers/${teacher._id}`}
-                        className="flex-1 py-2 rounded-lg bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold text-center transition">
+                        className="flex-1 py-2.5 rounded-xl bg-[#1e3a8a] hover:bg-cyan-700 text-white text-xs font-semibold text-center transition">
                         View Profile
                     </Link>
                     <ActionMenu teacher={teacher} onReset={onReset} />
@@ -220,12 +220,13 @@ export default function TeachersPage() {
     const canManage = user && ['school-admin', 'super-admin', 'receptionist'].includes(user.role);
 
     return (
-        <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-5">
+        <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
             {/* Header */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Enhanced Professional Teacher Management</h1>
-                    <p className="text-sm text-slate-500 mt-0.5">Manage teachers, departments, and class assignments.</p>
+                    <span className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-cyan-800 dark:border-cyan-400/20 dark:bg-cyan-400/10 dark:text-cyan-200"><Users className="h-3 w-3" /> People directory</span>
+                    <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">Teachers</h1>
+                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Manage staff profiles, departments, and teaching assignments.</p>
                 </div>
                 {canManage && (
                     <div className="flex gap-2">
@@ -234,21 +235,34 @@ export default function TeachersPage() {
                             <FileDown className="w-4 h-4" /> Export
                         </button>
                         <Link href="/dashboard/teachers/add"
-                            className="flex items-center gap-1.5 px-4 py-2.5 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-sm font-semibold transition shadow-sm">
+                            className="flex items-center gap-1.5 px-4 py-2.5 bg-[#1e3a8a] hover:bg-cyan-700 text-white rounded-xl text-sm font-semibold transition shadow-md shadow-blue-950/10">
                             <Plus className="w-4 h-4" /> Add Teacher
                         </Link>
                     </div>
                 )}
             </div>
 
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                {[
+                    { label: 'Total teachers', value: teachers.length, icon: <Users className="h-4 w-4" />, tone: 'bg-cyan-50 text-cyan-700 dark:bg-cyan-400/10 dark:text-cyan-200' },
+                    { label: 'Active staff', value: teachers.filter(t => t.status === 'active').length, icon: <UserCheck className="h-4 w-4" />, tone: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200' },
+                    { label: 'Departments', value: departments.length, icon: <BriefcaseBusiness className="h-4 w-4" />, tone: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-400/10 dark:text-indigo-200' },
+                ].map(metric => (
+                    <div key={metric.label} className="flex items-center gap-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
+                        <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${metric.tone}`}>{metric.icon}</span>
+                        <span className="min-w-0"><span className="block text-xs font-medium text-slate-500 dark:text-slate-400">{metric.label}</span><strong className="mt-0.5 block text-xl font-black text-slate-900 dark:text-white">{metric.value}</strong></span>
+                    </div>
+                ))}
+            </div>
+
             {/* Toolbar */}
-            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
                 {/* Search */}
                 <div className="relative flex-1 max-w-sm">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input value={search} onChange={e => setSearch(e.target.value)}
                         placeholder="Search..."
-                        className="w-full pl-9 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-white placeholder-slate-400 outline-none focus:ring-2 focus:ring-teal-500" />
+                        className="w-full pl-9 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-800 dark:text-white placeholder-slate-400 outline-none focus:ring-2 focus:ring-cyan-500" />
                 </div>
 
                 <div className="flex flex-wrap gap-2 items-center text-sm text-slate-500">
@@ -256,7 +270,7 @@ export default function TeachersPage() {
                     <span className="text-xs font-medium shrink-0">Sort by:</span>
                     <div className="relative">
                         <select value={sortBy} onChange={e => setSortBy(e.target.value)}
-                            className="pl-3 pr-8 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-teal-500 appearance-none">
+                            className="pl-3 pr-8 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-cyan-500 appearance-none">
                             <option value="name">Name</option>
                             <option value="designation">Designation</option>
                             <option value="department">Department</option>
@@ -268,7 +282,7 @@ export default function TeachersPage() {
                     <span className="text-xs font-medium shrink-0">Filter by:</span>
                     <div className="relative">
                         <select value={filterDept} onChange={e => setFilterDept(e.target.value)}
-                            className="pl-3 pr-8 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-teal-500 appearance-none">
+                            className="pl-3 pr-8 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-cyan-500 appearance-none">
                             <option value="">All Departments</option>
                             {departments.map(d => <option key={d} value={d}>{d}</option>)}
                         </select>
@@ -276,7 +290,7 @@ export default function TeachersPage() {
                     </div>
                     <div className="relative">
                         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-                            className="pl-3 pr-8 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-teal-500 appearance-none">
+                            className="pl-3 pr-8 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-cyan-500 appearance-none">
                             <option value="">All Status</option>
                             <option value="active">Active</option>
                             <option value="inactive">Inactive</option>
@@ -294,7 +308,7 @@ export default function TeachersPage() {
 
             {/* Grid */}
             {loading ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     {Array.from({ length: 8 }).map((_, i) => (
                         <div key={i} className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 h-64 animate-pulse" />
                     ))}
@@ -305,7 +319,7 @@ export default function TeachersPage() {
                     <p>No teachers found.</p>
                 </div>
             ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     {filtered.map(t => (
                         <TeacherCard key={t._id} teacher={t} onReset={handleResetPassword} />
                     ))}

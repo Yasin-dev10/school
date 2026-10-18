@@ -10,7 +10,7 @@ import {
 import { PermissionGuard } from '@/components/PermissionGuard';
 import { usePermission, RESOURCES, ACTIONS, ROLES } from '@/hooks/usePermission';
 
-const DAYS = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday'];
+const DAYS = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday'];
 
 const TIME_SLOTS = [
     { start: '07:30', end: '08:10', label: 'Period 1' },
@@ -19,7 +19,7 @@ const TIME_SLOTS = [
     { start: '09:30', end: '10:00', label: 'Break', type: 'break' },
     { start: '10:00', end: '10:40', label: 'Period 4' },
     { start: '10:40', end: '11:20', label: 'Period 5' },
-    { start: '11:20', end: '12:00', label: 'Period 6' },
+    { start: '11:20', end: '12:05', label: 'Period 6' },
 ];
 
 const SUBJECT_COLORS: any = {
@@ -314,7 +314,7 @@ export default function TimetablePage() {
             DAYS.forEach(day => {
                 TIME_SLOTS.forEach((ts, idx) => {
                     const cell = schedule[day][idx];
-                    if (cell.subject && cell.teachers?.length > 0) {
+                    if (cell.subject) {
                         slotsToSave.push({
                             day,
                             startTime: ts.start,

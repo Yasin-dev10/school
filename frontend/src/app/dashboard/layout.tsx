@@ -53,6 +53,7 @@ type NavItem = {
     name: string;
     href: string;
     icon: ReactNode;
+    category?: string;
 };
 
 type NavGroup = {
@@ -93,16 +94,26 @@ const ROLE_ROUTES: Record<string, string[]> = {
         '/dashboard/reports', '/dashboard/notifications', '/dashboard/about',
         '/dashboard/help', '/dashboard/profile',
     ],
+    parent: [
+        '/dashboard', '/dashboard/parent', '/dashboard/profile', '/dashboard/grades',
+        '/dashboard/student-finance',
+        '/dashboard/communication', '/dashboard/notifications', '/dashboard/help',
+        '/dashboard/assignments', '/dashboard/materials',
+    ],
+    'super-admin': ['/super-admin'],
 };
 
 function roleHome(role: string) {
+    if (role === 'super-admin') return '/super-admin/dashboard';
     return role === 'student' ? '/dashboard/student' : '/dashboard';
 }
 
 function canOpenDashboardRoute(role: string, pathname: string) {
     const allowed = ROLE_ROUTES[role];
     if (!allowed) return true;
-    return allowed.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+    return allowed.some((route) => route === '/dashboard'
+        ? pathname === route
+        : pathname === route || pathname.startsWith(`${route}/`));
 }
 
 const MODULE_ROUTE_PREFIXES: Array<[string, string]> = [
@@ -148,6 +159,7 @@ export default function DashboardLayout({
     const [unreadCount, setUnreadCount] = useState(0);
     const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
     const [pageSearch, setPageSearch] = useState('');
+    const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
     const menuButtonRef = useRef<HTMLButtonElement>(null);
     const sidebarResizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
@@ -327,26 +339,26 @@ export default function DashboardLayout({
                 label: 'People & Academics',
                 groupIcon: <Users className="w-3.5 h-3.5" />,
                 items: [
-                    { name: 'Students', href: '/dashboard/students', icon: icon(<GraduationCap className="w-4 h-4" />) },
-                    { name: 'Teachers', href: '/dashboard/teachers', icon: icon(<Users className="w-4 h-4" />) },
-                    { name: 'Classes', href: '/dashboard/classes', icon: icon(<Building2 className="w-4 h-4" />) },
-                    { name: 'Grade Levels', href: '/dashboard/school-grades', icon: icon(<Layers className="w-4 h-4" />) },
-                    { name: 'Subjects', href: '/dashboard/subjects', icon: icon(<BookOpen className="w-4 h-4" />) },
-                    { name: 'Subject Allocation', href: '/dashboard/subject-allocation', icon: icon(<ClipboardList className="w-4 h-4" />) },
-                    { name: 'Promote Students', href: '/dashboard/students/promote', icon: icon(<ArrowUpCircle className="w-4 h-4" />) },
+                    { name: 'Students', href: '/dashboard/students', category: 'People', icon: icon(<GraduationCap className="w-4 h-4" />) },
+                    { name: 'Teachers', href: '/dashboard/teachers', category: 'People', icon: icon(<Users className="w-4 h-4" />) },
+                    { name: 'Classes', href: '/dashboard/classes', category: 'Academics', icon: icon(<Building2 className="w-4 h-4" />) },
+                    { name: 'Grade Levels', href: '/dashboard/school-grades', category: 'Academics', icon: icon(<Layers className="w-4 h-4" />) },
+                    { name: 'Subjects', href: '/dashboard/subjects', category: 'Academics', icon: icon(<BookOpen className="w-4 h-4" />) },
+                    { name: 'Subject Allocation', href: '/dashboard/subject-allocation', category: 'Academics', icon: icon(<ClipboardList className="w-4 h-4" />) },
+                    { name: 'Promote Students', href: '/dashboard/students/promote', category: 'Progression', icon: icon(<ArrowUpCircle className="w-4 h-4" />) },
                 ],
             });
-            push({
-                id: 'learning',
-                label: 'Teaching & Learning',
-                groupIcon: <BookOpen className="w-3.5 h-3.5" />,
-                items: [
-                    { name: 'Assignments', href: '/dashboard/assignments', icon: icon(<FileText className="w-4 h-4" />) },
-                    { name: 'Online Learning', href: '/dashboard/online-learning', icon: icon(<CirclePlay className="w-4 h-4" />) },
-                    { name: 'Library', href: '/dashboard/materials', icon: icon(<BookCopy className="w-4 h-4" />) },
-                    { name: 'Communication', href: '/dashboard/communication', icon: icon(<MessageSquare className="w-4 h-4" />) },
-                ],
-            });
+            // push({
+            //     id: 'learning',
+            //     label: 'Teaching & Learning',
+            //     groupIcon: <BookOpen className="w-3.5 h-3.5" />,
+            //     items: [
+            //         { name: 'Assignments', href: '/dashboard/assignments', icon: icon(<FileText className="w-4 h-4" />) },
+            //         { name: 'Online Learning', href: '/dashboard/online-learning', icon: icon(<CirclePlay className="w-4 h-4" />) },
+            //         { name: 'Library', href: '/dashboard/materials', icon: icon(<BookCopy className="w-4 h-4" />) },
+            //         { name: 'Communication', href: '/dashboard/communication', icon: icon(<MessageSquare className="w-4 h-4" />) },
+            //     ],
+            // });
             push({
                 id: 'schedule',
                 label: 'Schedule & Attendance',
@@ -522,14 +534,14 @@ export default function DashboardLayout({
                 groupIcon: <BookOpen className="w-3.5 h-3.5" />,
                 items: [
                     { name: 'Assignments', href: '/dashboard/assignments', icon: icon(<FileText className="w-4 h-4" />) },
-                    { name: 'Online Learning', href: '/dashboard/online-learning', icon: icon(<CirclePlay className="w-4 h-4" />) },
-                    { name: 'Exams', href: '/dashboard/exams', icon: icon(<FileText className="w-4 h-4" />) },
+                    ...(user.role === 'student' ? [{ name: 'Online Learning', href: '/dashboard/online-learning', icon: icon(<CirclePlay className="w-4 h-4" />) }] : []),
+                    ...(user.role === 'student' ? [{ name: 'Exams', href: '/dashboard/exams', icon: icon(<FileText className="w-4 h-4" />) }] : []),
                     { name: 'My Grades', href: '/dashboard/grades', icon: icon(<TrendingUp className="w-4 h-4" />) },
                     { name: 'Materials', href: '/dashboard/materials', icon: icon(<FolderOpen className="w-4 h-4" />) },
                     ...(user.role === 'student' ? [{ name: 'Communication', href: '/dashboard/communication', icon: icon(<MessageSquare className="w-4 h-4" />) }] : []),
                 ],
             });
-            push({
+            if (user.role === 'student') push({
                 id: 'schedule',
                 label: 'Schedule & Attendance',
                 groupIcon: <CalendarCheck className="w-3.5 h-3.5" />,
@@ -545,7 +557,7 @@ export default function DashboardLayout({
                 groupIcon: <Wallet className="w-3.5 h-3.5" />,
                 items: [
                     { name: 'Fees', href: '/dashboard/student-finance', icon: icon(<DollarSign className="w-4 h-4" />) },
-                    { name: 'Certificates', href: '/dashboard/certificates', icon: icon(<FileBadge className="w-4 h-4" />) },
+                    ...(user.role === 'student' ? [{ name: 'Certificates', href: '/dashboard/certificates', icon: icon(<FileBadge className="w-4 h-4" />) }] : []),
                     ...(user.role === 'parent' ? [{ name: 'Communication', href: '/dashboard/communication', icon: icon(<MessageSquare className="w-4 h-4" />) }] : []),
                 ],
             });
@@ -581,7 +593,7 @@ export default function DashboardLayout({
 
     const dashboardItem: NavItem = {
         name: t('Dashboard'),
-        href: user?.role === 'student' ? '/dashboard/student' : '/dashboard',
+        href: roleHome(user?.role || ''),
         icon: icon(<LayoutDashboard className="w-4 h-4" />),
     };
     const searchablePages = [dashboardItem, ...navGroups.flatMap((group) => group.items)];
@@ -641,7 +653,7 @@ export default function DashboardLayout({
             <aside
                 aria-label="Dashboard navigation"
                 className={`
-                fixed inset-y-0 left-0 w-[var(--dashboard-sidebar-width)] lg:shrink-0 bg-slate-900 dark:bg-slate-950 flex flex-col z-50 shadow-xl border-r border-white/10
+                fixed inset-y-0 left-0 w-[var(--dashboard-sidebar-width)] lg:shrink-0 bg-[#1e3a8a] flex flex-col z-50 shadow-xl border-r border-white/10
                 transition-transform duration-300 transform lg:translate-x-0 lg:static lg:h-full
                 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
             `}
@@ -654,7 +666,7 @@ export default function DashboardLayout({
                                 {tenant?.logoUrl ? (
                                     <img src={tenant.logoUrl} alt="School Logo" className="h-full w-full object-contain p-1" />
                                 ) : (
-                                    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-indigo-500 to-violet-600 text-lg font-bold text-white">
+                                    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[#1e3a8a] to-[#06b6d4] text-lg font-bold text-white">
                                         {tenant?.name?.charAt(0) || 'S'}
                                     </div>
                                 )}
@@ -682,7 +694,7 @@ export default function DashboardLayout({
                             href={dashboardItem.href}
                             className={`flex items-center gap-2.5 rounded-xl px-2.5 py-2.5 text-[13px] transition-all duration-150 ${
                                 isItemActive(pathname, dashboardItem.href)
-                                    ? 'bg-indigo-500/90 text-white font-semibold shadow-sm shadow-indigo-950/30'
+                                    ? 'bg-cyan-600 text-white font-semibold shadow-sm shadow-blue-950/30'
                                     : 'text-white/70 hover:bg-white/[0.07] hover:text-white'
                             }`}
                         >
@@ -694,14 +706,19 @@ export default function DashboardLayout({
                     {navGroups.map((group) => {
                         const isOpen = !!openGroups[group.id];
                         const activeInGroup = groupContainsActive(pathname, group);
+                        const isPeopleGroup = group.id === 'people';
 
                         return (
                             <div
                                 key={group.id}
-                                className={`rounded-xl overflow-hidden transition-colors ${
-                                    activeInGroup || isOpen
-                                        ? 'bg-white/[0.05]'
-                                        : 'bg-transparent'
+                                className={`rounded-2xl overflow-hidden transition-all duration-200 ${
+                                    isPeopleGroup
+                                        ? activeInGroup || isOpen
+                                            ? 'bg-gradient-to-br from-cyan-400/[0.12] via-indigo-400/[0.08] to-white/[0.03] ring-1 ring-cyan-200/15 shadow-lg shadow-blue-950/10'
+                                            : 'bg-white/[0.025] ring-1 ring-white/[0.06] hover:bg-white/[0.045]'
+                                        : activeInGroup || isOpen
+                                            ? 'bg-white/[0.05]'
+                                            : 'bg-transparent'
                                 }`}
                             >
                                 <button
@@ -709,57 +726,72 @@ export default function DashboardLayout({
                                     onClick={() => toggleGroup(group.id)}
                                     aria-expanded={isOpen}
                                     aria-controls={`nav-group-${group.id}`}
-                                    className={`w-full flex items-center gap-2.5 px-2.5 py-2 text-left rounded-xl transition-colors ${
+                                    className={`w-full flex items-center gap-2.5 text-left transition-all ${
+                                        isPeopleGroup
+                                            ? 'px-3 py-3 rounded-2xl'
+                                            : 'px-2.5 py-2 rounded-xl'
+                                    } ${
                                         activeInGroup
-                                            ? 'text-indigo-200'
+                                            ? isPeopleGroup ? 'text-white' : 'text-indigo-200'
                                             : 'text-white/70 hover:text-white hover:bg-white/[0.04]'
                                     }`}
                                 >
                                     <span
-                                        className={`flex items-center justify-center w-7 h-7 rounded-lg shrink-0 ${
+                                        className={`flex items-center justify-center shrink-0 transition-colors ${
+                                            isPeopleGroup ? 'w-10 h-10 rounded-xl' : 'w-7 h-7 rounded-lg'
+                                        } ${
                                             activeInGroup
-                                                ? 'bg-indigo-500/30 text-indigo-200'
-                                                : 'bg-white/5 text-white/45'
+                                                ? isPeopleGroup
+                                                    ? 'bg-gradient-to-br from-cyan-400 to-blue-500 text-white shadow-lg shadow-cyan-950/30'
+                                                    : 'bg-indigo-500/30 text-indigo-200'
+                                                : isPeopleGroup
+                                                    ? 'bg-white/[0.08] text-cyan-100/80 ring-1 ring-white/10'
+                                                    : 'bg-white/5 text-white/45'
                                         }`}
                                     >
                                         {group.groupIcon}
                                     </span>
                                     <span className="flex-1 min-w-0">
-                                        <span className="block text-xs font-bold tracking-wide truncate">
+                                        <span className={`block font-bold tracking-wide truncate ${isPeopleGroup ? 'text-[13px]' : 'text-xs'}`}>
                                             {group.label}
                                         </span>
+                                        {isPeopleGroup && <span className="mt-0.5 block text-[10px] font-medium text-white/45">Students, staff & curriculum</span>}
                                     </span>
+                                    {isPeopleGroup && <span className="rounded-full border border-white/10 bg-white/[0.06] px-2 py-1 text-[10px] font-semibold tabular-nums text-cyan-100/75">{group.items.length}</span>}
                                     <ChevronDown
-                                        className={`w-4 h-4 shrink-0 text-white/35 transition-transform ${
+                                        className={`w-4 h-4 shrink-0 transition-transform ${isPeopleGroup ? 'text-cyan-100/50' : 'text-white/35'} ${
                                             isOpen ? 'rotate-0' : '-rotate-90'
                                         }`}
                                     />
                                 </button>
                                 {isOpen && (
-                                    <div id={`nav-group-${group.id}`} className="ml-5 mt-0.5 space-y-0.5 border-l border-white/10 pl-2 pb-1">
-                                        {group.items.map((item) => {
+                                    <div id={`nav-group-${group.id}`} className={isPeopleGroup ? 'mx-2 mb-2 rounded-xl bg-slate-950/15 p-2' : 'ml-5 mt-0.5 space-y-0.5 border-l border-white/10 pl-2 pb-1'}>
+                                        {group.items.map((item, index) => {
                                             const active = isItemActive(pathname, item.href);
                                             return (
-                                                <Link
-                                                    key={item.href}
-                                                    href={item.href}
-                                                    className={`relative flex items-center gap-2.5 px-2.5 py-2 rounded-lg transition-all duration-150 group text-[13px] ${
-                                                        active
-                                                            ? 'bg-indigo-500/90 text-white font-semibold shadow-sm shadow-indigo-950/30 before:absolute before:-left-[11px] before:h-5 before:w-0.5 before:rounded-full before:bg-indigo-400'
-                                                            : 'text-white/65 hover:text-white hover:bg-white/[0.07]'
-                                                    }`}
-                                                >
-                                                    <span
-                                                        className={`${
+                                                <div key={item.href}>
+                                                    {isPeopleGroup && (index === 0 || group.items[index - 1].category !== item.category) && (
+                                                        <p className={`px-2 pb-1 text-[9px] font-bold uppercase tracking-[0.16em] text-white/35 ${index === 0 ? '' : 'pt-2'}`}>
+                                                            {item.category}
+                                                        </p>
+                                                    )}
+                                                    <Link
+                                                        href={item.href}
+                                                        className={`relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 transition-all duration-150 group text-[12px] ${
                                                             active
-                                                                ? 'text-white'
-                                                                : 'text-white/40 group-hover:text-white/75'
-                                                        } transition-colors`}
+                                                                ? isPeopleGroup
+                                                                    ? 'bg-cyan-400/15 text-white font-semibold ring-1 ring-cyan-200/20 shadow-sm shadow-blue-950/20'
+                                                                    : 'bg-cyan-600 text-white font-semibold shadow-sm shadow-blue-950/30 before:absolute before:-left-[11px] before:h-5 before:w-0.5 before:rounded-full before:bg-cyan-300'
+                                                                : 'text-white/65 hover:text-white hover:bg-white/[0.07]'
+                                                        }`}
                                                     >
-                                                        {item.icon}
-                                                    </span>
-                                                    <span className="truncate">{item.name}</span>
-                                                </Link>
+                                                        <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors ${active ? 'bg-cyan-300/15 text-cyan-100' : 'bg-white/[0.045] text-white/45 group-hover:bg-white/10 group-hover:text-white/80'}`}>
+                                                            {item.icon}
+                                                        </span>
+                                                        <span className="min-w-0 flex-1 truncate">{item.name}</span>
+                                                        {active && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-cyan-300 shadow-[0_0_8px_rgba(103,232,249,0.9)]" />}
+                                                    </Link>
+                                                </div>
                                             );
                                         })}
                                     </div>
@@ -774,7 +806,7 @@ export default function DashboardLayout({
 
                 <div className="p-3 border-t border-white/10 bg-black/10">
                     <div className="flex items-center gap-2 rounded-xl px-2 py-2 mb-1">
-                        <div className="w-8 h-8 rounded-full bg-indigo-500/30 border border-indigo-400/30 flex items-center justify-center text-indigo-200 font-semibold text-sm shrink-0">
+                        <div className="w-8 h-8 rounded-full bg-cyan-500/20 border border-cyan-300/30 flex items-center justify-center text-cyan-100 font-semibold text-sm shrink-0">
                             {user.firstName?.charAt(0) || user.email?.charAt(0)?.toUpperCase() || 'U'}
                         </div>
                         <div className="overflow-hidden flex-1">
@@ -819,9 +851,11 @@ export default function DashboardLayout({
                         >
                             <Menu className="w-5 h-5" />
                         </button>
-                        <h1 className="text-base font-bold text-slate-800 dark:text-white">
-                            {getPageTitle()}
-                        </h1>
+                        <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-sm">
+                            <Link href={roleHome(user?.role || '')} className="hidden text-slate-500 hover:text-[#1e3a8a] dark:text-slate-400 dark:hover:text-cyan-300 sm:inline">Home</Link>
+                            <span aria-hidden="true" className="hidden text-slate-300 dark:text-slate-600 sm:inline">/</span>
+                            <h1 className="font-bold text-slate-800 dark:text-white">{getPageTitle()}</h1>
+                        </nav>
                     </div>
 
                     <div className="relative hidden flex-1 max-w-sm sm:block">
@@ -884,10 +918,24 @@ export default function DashboardLayout({
                         <AccessibilityControls />
                         <LanguageToggle />
                         <ThemeToggle />
+                        {user && (
+                            <div className="relative">
+                                <button type="button" aria-haspopup="menu" aria-expanded={isProfileMenuOpen} onClick={() => setIsProfileMenuOpen((open) => !open)} className="flex h-9 items-center gap-2 rounded-xl border border-slate-200 px-2 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">
+                                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#1e3a8a] text-[11px] font-bold text-white">{user.firstName?.charAt(0) || 'U'}</span>
+                                    <span className="hidden max-w-24 truncate text-xs font-semibold text-slate-700 dark:text-slate-200 md:inline">{user.firstName}</span>
+                                    <ChevronDown className="h-3 w-3 text-slate-400" />
+                                </button>
+                                {isProfileMenuOpen && <div role="menu" className="absolute right-0 top-full z-50 mt-2 w-48 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                                    <Link role="menuitem" href="/dashboard/profile" onClick={() => setIsProfileMenuOpen(false)} className="block rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800">My profile</Link>
+                                    {['school-admin', 'super-admin', 'receptionist'].includes(user.role) && <Link role="menuitem" href="/dashboard/settings" onClick={() => setIsProfileMenuOpen(false)} className="block rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800">Settings</Link>}
+                                    <button role="menuitem" onClick={handleLogout} className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40">Sign out</button>
+                                </div>}
+                            </div>
+                        )}
                     </div>
                 </header>
 
-                <div id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6">
+                <div id="main-content" tabIndex={-1} className="dashboard-shell flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6">
                     {tenant?.subscriptionAccess?.showWarning && accessMode !== 'suspended' && (
                         <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
                             <strong>Digniin lacag-bixin:</strong> Adeegga school-ka wuxuu dhacayaa {tenant.subscriptionValid ? new Date(tenant.subscriptionValid).toLocaleDateString() : 'dhowaan'}.

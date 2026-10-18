@@ -1,4 +1,5 @@
 const prisma = require('../config/prismaClient');
+const { getParentTeacherIds } = require('../utils/parentScope');
 const { getIO } = require('../config/socket');
 const { logAction } = require('../utils/logger');
 
@@ -6,8 +7,13 @@ const isAdmin = role => ['school-admin', 'super-admin'].includes(role);
 const publicUser = { id: true, firstName: true, lastName: true, role: true, avatarUrl: true };
 
 const requireConversationAccess = async (id, user) => {
+    const parentTeacherIds = user.role === 'parent' ? await getParentTeacherIds(user.id, user.tenantId) : null;
     const conversation = await prisma.chatConversation.findFirst({
-        where: { id, tenantId: user.tenantId, ...(isAdmin(user.role) ? {} : { participants: { some: { userId: user.id } } }) }
+        where: {
+            id, tenantId: user.tenantId,
+            ...(isAdmin(user.role) ? {} : { participants: { some: { userId: user.id } } }),
+            ...(parentTeacherIds ? { AND: [{ participants: { some: { userId: { in: parentTeacherIds } } } }] } : {})
+        }
     });
     if (!conversation) { const error = new Error('Conversation not found or access denied'); error.statusCode = 404; throw error; }
     return conversation;
@@ -20,9 +26,15 @@ exports.getContacts = async (req, res) => {
         const q = String(req.query.q || '').trim();
         const role = req.user.role;
         const allowedRoles = role === 'parent' ? ['teacher'] : role === 'teacher' ? ['parent', 'teacher'] : ['parent', 'teacher', 'student'];
+        let allowedTeacherIds;
+        if (role === 'parent') {
+            allowedTeacherIds = await getParentTeacherIds(req.user.id, req.user.tenantId);
+            if (!allowedTeacherIds.length) return res.json({ success: true, data: [] });
+        }
         const contacts = await prisma.user.findMany({
             where: {
-                tenantId: req.user.tenantId, status: 'active', role: { in: allowedRoles }, id: { not: req.user.id },
+                tenantId: req.user.tenantId, status: 'active', role: { in: allowedRoles },
+                id: allowedTeacherIds ? { in: allowedTeacherIds } : { not: req.user.id },
                 ...(q ? { OR: [{ firstName: { contains: q, mode: 'insensitive' } }, { lastName: { contains: q, mode: 'insensitive' } }] } : {})
             }, select: publicUser, take: 50, orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }]
         });
@@ -41,6 +53,10 @@ exports.createConversation = async (req, res) => {
             if (ids.length !== 2) return res.status(400).json({ message: 'Private chat requires exactly two participants' });
             const other = await prisma.user.findFirst({ where: { id: ids.find(id => id !== req.user.id), tenantId: req.user.tenantId }, select: { role: true } });
             if (!other) return res.status(404).json({ message: 'Contact not found' });
+            if (req.user.role === 'parent') {
+                const allowedTeacherIds = await getParentTeacherIds(req.user.id, req.user.tenantId);
+                if (!allowedTeacherIds.includes(ids.find(id => id !== req.user.id))) return res.status(403).json({ message: 'You can only contact teachers assigned to your linked children.' });
+            }
             if (!isAdmin(req.user.role) && req.user.role !== 'receptionist' && ![['parent', 'teacher'], ['teacher', 'parent'], ['teacher', 'teacher']].some(pair => pair[0] === req.user.role && pair[1] === other.role)) return res.status(403).json({ message: 'This private chat is not allowed' });
             const existing = await prisma.chatConversation.findFirst({
                 where: { tenantId: req.user.tenantId, type: 'private', AND: ids.map(userId => ({ participants: { some: { userId } } })) },
@@ -68,7 +84,7 @@ exports.createConversation = async (req, res) => {
 
 exports.getConversations = async (req, res) => {
     try {
-        const conversations = await prisma.chatConversation.findMany({
+        let conversations = await prisma.chatConversation.findMany({
             where: { tenantId: req.user.tenantId, archived: false, ...(isAdmin(req.user.role) && req.query.moderation === 'true' ? {} : { participants: { some: { userId: req.user.id } } }) },
             include: {
                 participants: { include: { user: { select: publicUser } } },
@@ -76,6 +92,10 @@ exports.getConversations = async (req, res) => {
                 _count: { select: { messages: true } }
             }, orderBy: { updatedAt: 'desc' }
         });
+        if (req.user.role === 'parent') {
+            const teacherIds = await getParentTeacherIds(req.user.id, req.user.tenantId);
+            conversations = conversations.filter(conversation => conversation.participants.some(participant => teacherIds.includes(participant.userId)));
+        }
         res.json({ success: true, data: conversations });
     } catch (error) { sendError(res, error); }
 };

@@ -13,17 +13,9 @@ import { Card, CardHeader } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { PageLoader } from '@/components/ui/Spinner';
 import { useLanguage } from '@/contexts/LanguageContext';
-
-function Sparkline({ color, up }: { color: string; up?: boolean }) {
-    const points = up
-        ? "0,28 8,22 16,25 24,18 32,20 40,12 48,15 56,8 64,10 72,4"
-        : "0,4 8,10 16,8 24,15 32,12 40,18 48,15 56,20 64,18 72,24";
-    return (
-        <svg viewBox="0 0 72 32" className="w-full h-8" preserveAspectRatio="none">
-            <polyline points={points} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-    );
-}
+import ParentDashboard from './ParentDashboard';
+import TeacherDashboard from './TeacherDashboard';
+import SchoolAdminDashboard from './SchoolAdminDashboard';
 
 export default function DashboardPage() {
     const router = useRouter();
@@ -33,10 +25,10 @@ export default function DashboardPage() {
     const [exams, setExams] = useState<any[]>([]);
     const [marks, setMarks] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [analyticsFailed, setAnalyticsFailed] = useState(false);
     const [stats, setStats] = useState({
         totalStudents: 0, totalStaff: 0,
-        monthlyRevenue: 0, attendanceRate: '0%',
-        newStudents: 0, newStaff: 0, revenueChange: 0, attChange: 0,
+        feesCollected: 0, attendanceRate: '0%',
     });
 
     useEffect(() => {
@@ -64,12 +56,10 @@ export default function DashboardPage() {
                         setStats({
                             totalStudents: d.counts?.students || 0,
                             totalStaff: d.counts?.teachers || 0,
-                            monthlyRevenue: d.finance?.collected || 0,
+                            feesCollected: d.finance?.collected || 0,
                             attendanceRate: `${d.attendance?.rate || 0}%`,
-                            newStudents: 5, newStaff: 2,
-                            revenueChange: 12, attChange: 1,
                         });
-                    }
+                    } else setAnalyticsFailed(true);
                     setExams(examsRes.data.data || []);
                     setMarks(marksRes.data.data || []);
                 }
@@ -110,10 +100,10 @@ export default function DashboardPage() {
     const isTeacher = user?.role === 'teacher';
 
     const statCards = [
-        { label: 'Total Students', value: stats.totalStudents, change: `+${stats.newStudents}%`, up: true, icon: <Users className="w-5 h-5" />, color: '#818cf8', bg: 'bg-indigo-500/15 text-indigo-500' },
-        { label: 'Monthly Revenue', value: `$${stats.monthlyRevenue.toLocaleString()}`, change: `+${stats.revenueChange}%`, up: true, icon: <DollarSign className="w-5 h-5" />, color: '#34d399', bg: 'bg-emerald-500/15 text-emerald-500' },
-        { label: 'Total Staff', value: stats.totalStaff, change: `+${stats.newStaff}`, up: true, icon: <GraduationCap className="w-5 h-5" />, color: '#a78bfa', bg: 'bg-violet-500/15 text-violet-500' },
-        { label: 'Avg Attendance', value: stats.attendanceRate, change: `+${stats.attChange}%`, up: true, icon: <CalendarCheck className="w-5 h-5" />, color: '#f472b6', bg: 'bg-pink-500/15 text-pink-500' },
+        { label: 'Total Students', value: adminData ? stats.totalStudents : '—', icon: <Users className="w-5 h-5" />, bg: 'bg-blue-500/15 text-[#1e3a8a] dark:text-cyan-300' },
+        { label: 'Fees Collected', value: adminData ? `$${stats.feesCollected.toLocaleString()}` : '—', icon: <DollarSign className="w-5 h-5" />, bg: 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300' },
+        { label: 'Total Staff', value: adminData ? stats.totalStaff : '—', icon: <GraduationCap className="w-5 h-5" />, bg: 'bg-violet-500/15 text-violet-600' },
+        { label: 'Avg Attendance', value: adminData ? stats.attendanceRate : '—', icon: <CalendarCheck className="w-5 h-5" />, bg: 'bg-pink-500/15 text-pink-600' },
     ];
 
     const quickActions = [
@@ -123,41 +113,18 @@ export default function DashboardPage() {
         { label: 'Generate Report', href: '/dashboard/reports', className: 'bg-rose-600 hover:bg-rose-500 border-rose-500 text-white' },
     ];
 
-    const teacherLinks = [
-        { label: 'Attendance', href: '/dashboard/attendance', icon: <CalendarCheck className="w-5 h-5" />, color: 'text-emerald-500 bg-emerald-50 dark:bg-emerald-900/30' },
-        { label: 'Assignments', href: '/dashboard/assignments', icon: <BookOpen className="w-5 h-5" />, color: 'text-indigo-500 bg-indigo-50 dark:bg-indigo-900/30' },
-        { label: 'Exams', href: '/dashboard/exams', icon: <BarChart3 className="w-5 h-5" />, color: 'text-violet-500 bg-violet-50 dark:bg-violet-900/30' },
-        { label: 'Students', href: '/dashboard/students', icon: <Users className="w-5 h-5" />, color: 'text-blue-500 bg-blue-50 dark:bg-blue-900/30' },
-        { label: 'Timetable', href: '/dashboard/timetable', icon: <CalendarDays className="w-5 h-5" />, color: 'text-amber-500 bg-amber-50 dark:bg-amber-900/30' },
-        { label: 'Materials', href: '/dashboard/materials', icon: <BookOpen className="w-5 h-5" />, color: 'text-rose-500 bg-rose-50 dark:bg-rose-900/30' },
-    ];
-
     if (loading) return <PageLoader label={t('Loading dashboard…')} />;
 
     if (isTeacher) {
-        return (
-            <div className="max-w-6xl mx-auto space-y-6">
-                <div className="rounded-3xl bg-[#405bb2] p-6 text-white shadow-lg shadow-indigo-900/10 sm:p-8">
-                    <p className="text-sm text-indigo-100">{t('Faculty Portal')}</p>
-                    <h1 className="mt-1 text-3xl font-bold tracking-tight">{t('Welcome back')}, {user?.firstName}</h1>
-                    <p className="text-sm text-indigo-100 mt-2">
-                        Manage your classes, lessons, attendance and assessments.
-                    </p>
-                </div>
-                <div><h2 className="text-lg font-bold text-slate-900 dark:text-white">Teaching Services</h2><p className="text-sm text-slate-500">Quick access to your daily work.</p></div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                    {teacherLinks.map((s) => (
-                        <Link key={s.href} href={s.href}
-                            className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900 flex flex-col items-center gap-3 hover:border-indigo-300 dark:hover:border-indigo-500/40 transition group">
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${s.color} group-hover:scale-105 transition-transform`}>
-                                {s.icon}
-                            </div>
-                            <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">{t(s.label)}</span>
-                        </Link>
-                    ))}
-                </div>
-            </div>
-        );
+        return <TeacherDashboard firstName={user?.firstName} />;
+    }
+
+    if (user?.role === 'parent') {
+        return <ParentDashboard firstName={user.firstName} />;
+    }
+
+    if (user?.role === 'school-admin') {
+        return <SchoolAdminDashboard firstName={user.firstName} data={adminData} events={upcomingEvents} analyticsFailed={analyticsFailed} />;
     }
 
     return (
@@ -175,6 +142,8 @@ export default function DashboardPage() {
                 </div>
             </div>
 
+            {isAdmin && analyticsFailed && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200"><p>School analytics are temporarily unavailable. Other dashboard sections remain available.</p><button onClick={() => window.location.reload()} className="font-semibold underline">Reload</button></div>}
+
             {isAdmin && (
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                     {statCards.map((s, i) => (
@@ -183,16 +152,10 @@ export default function DashboardPage() {
                                 <div className={`w-9 h-9 rounded-xl ${s.bg} flex items-center justify-center`}>
                                     {s.icon}
                                 </div>
-                                <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-1.5 py-0.5 rounded-full">
-                                    {s.change}
-                                </span>
                             </div>
                             <div>
                                 <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">{t(s.label)}</p>
                                 <p className="text-2xl font-bold text-slate-800 dark:text-white tracking-tight">{s.value}</p>
-                            </div>
-                            <div className="mt-1 opacity-60">
-                                <Sparkline color={s.color} up={s.up} />
                             </div>
                         </Card>
                     ))}
@@ -224,7 +187,6 @@ export default function DashboardPage() {
                                 <tr className="text-xs font-semibold text-slate-400 uppercase tracking-wide border-b border-slate-100 dark:border-slate-700">
                                     <th className="pb-2 text-left">{t('Subject')}</th>
                                     <th className="pb-2 text-left">{t('Average Score')}</th>
-                                    <th className="pb-2 text-left">{t('Trend')}</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
@@ -232,9 +194,6 @@ export default function DashboardPage() {
                                     <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors">
                                         <td className="py-2.5 font-medium text-slate-700 dark:text-slate-200">{r.name}</td>
                                         <td className="py-2.5 text-slate-600 dark:text-slate-300">{r.avg}%</td>
-                                        <td className="py-2.5">
-                                            <span className="text-emerald-500 font-bold text-base leading-none">+</span>
-                                        </td>
                                     </tr>
                                 ))}
                             </tbody>

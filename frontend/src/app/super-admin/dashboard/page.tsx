@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import api from '../../utils/api';
 import Link from 'next/link';
 import {
-    TrendingUp, Plus, School, Activity,
+    Plus, School, Activity,
     Users, CreditCard, ChevronRight
 } from 'lucide-react';
 
@@ -46,7 +46,7 @@ export default function SuperAdminDashboard() {
                 </div>
                 <Link
                     href="/super-admin/tenants/add"
-                    className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-semibold text-sm transition shadow-lg shadow-indigo-500/20"
+                    className="flex items-center gap-2 px-5 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-[#0b1730] rounded-xl font-semibold text-sm transition shadow-lg shadow-cyan-500/10"
                 >
                     <Plus className="w-4 h-4" /> Add New School
                 </Link>
@@ -55,46 +55,36 @@ export default function SuperAdminDashboard() {
             {/* Stats Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {/* Total Schools */}
-                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-900/60 to-blue-800/40 border border-blue-700/30 p-5">
+                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#1e3a8a] to-[#1e40af] border border-blue-400/20 p-5">
                     <div className="flex items-start justify-between">
                         <div>
                             <p className="text-blue-300/80 text-xs font-medium uppercase tracking-wider">Total Schools</p>
                             <p className="text-3xl font-black text-white mt-1">{loading ? '—' : stats.tenants}</p>
                         </div>
-                        <span className="flex items-center gap-0.5 text-xs font-semibold text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-full border border-emerald-400/20">
-                            <TrendingUp className="w-3 h-3" /> +5%
-                        </span>
                     </div>
                     <School className="absolute bottom-3 right-3 w-8 h-8 text-blue-500/20" />
                 </div>
 
                 {/* Active Schools */}
-                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-900/60 to-emerald-800/40 border border-emerald-700/30 p-5">
+                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-cyan-950 to-cyan-900 border border-cyan-500/20 p-5">
                     <div className="flex items-start justify-between">
                         <div>
-                            <p className="text-emerald-300/80 text-xs font-medium uppercase tracking-wider">Active Schools</p>
+                            <p className="text-cyan-200/80 text-xs font-medium uppercase tracking-wider">Active Schools</p>
                             <p className="text-3xl font-black text-white mt-1">{loading ? '—' : stats.active}</p>
                         </div>
-                        <span className="flex items-center gap-0.5 text-xs font-semibold text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-full border border-emerald-400/20">
-                            <TrendingUp className="w-3 h-3" /> +10%
-                        </span>
                     </div>
                     <Activity className="absolute bottom-3 right-3 w-8 h-8 text-emerald-500/20" />
                 </div>
 
-                {/* System Status */}
-                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800/80 to-slate-800/50 border border-slate-700/40 p-5">
+                {/* Schools needing attention */}
+                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800/90 to-slate-800/60 border border-slate-700/60 p-5">
                     <div className="flex items-start justify-between">
                         <div>
-                            <p className="text-slate-400 text-xs font-medium uppercase tracking-wider">System Status</p>
-                            <p className="text-2xl font-black text-white mt-1">Operational</p>
-                        </div>
-                        <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-full border border-emerald-400/20">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                            Live
+                            <p className="text-slate-400 text-xs font-medium uppercase tracking-wider">Suspended Schools</p>
+                            <p className="text-3xl font-black text-white mt-1">{loading ? '—' : stats.suspended}</p>
                         </div>
                     </div>
-                    <Users className="absolute bottom-3 right-3 w-8 h-8 text-slate-500/20" />
+                    <Users className="absolute bottom-3 right-3 w-8 h-8 text-cyan-400/20" />
                 </div>
             </div>
 

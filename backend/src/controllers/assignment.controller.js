@@ -1,4 +1,5 @@
 const prisma = require('../config/prismaClient');
+const { getParentScope } = require('../utils/parentScope');
 const { logAction } = require('../utils/logger');
 const { emitToTenant } = require('../config/socket');
 const { canTeacherAccessClassSubject } = require('../utils/teacherScope');
@@ -70,19 +71,33 @@ exports.getAssignments = async (req, res) => {
         const tenantId = req.user.tenantId;
         const role = req.user.role;
         let where = { tenantId };
+        let scopedClassIds = null;
 
         if (role === 'teacher') {
             where.teacherId = req.user.id;
         } else if (role === 'student') {
             if (req.user.profile?.class) {
-                const cls = await prisma.class.findFirst({ where: { name: req.user.profile.class, tenantId } });
-                if (cls) where.classId = cls.id;
+                const cls = await prisma.class.findFirst({ where: { OR: [{ id: req.user.profile.class }, { name: req.user.profile.class }], tenantId, ...(req.user.profile.section ? { section: req.user.profile.section } : {}) } });
+                scopedClassIds = cls ? [cls.id] : [];
+                where.classId = cls?.id || '__none__';
+            } else {
+                scopedClassIds = [];
+                where.classId = '__none__';
             }
+            where.status = 'published';
+        } else if (role === 'parent') {
+            const scope = await getParentScope(req.user.id, tenantId);
+            if (!scope.classIds.length) return res.status(200).json({ success: true, count: 0, data: [] });
+            scopedClassIds = scope.classIds;
+            where.classId = { in: scope.classIds };
             where.status = 'published';
         }
 
         const { classId, subjectId } = req.query;
-        if (classId) where.classId = classId;
+        if (classId) {
+            if (scopedClassIds && !scopedClassIds.includes(classId)) return res.status(403).json({ success: false, message: 'Access denied. Class is not linked to your records.' });
+            where.classId = classId;
+        }
         if (subjectId) where.subjectId = subjectId;
 
         const assignments = await prisma.assignment.findMany({

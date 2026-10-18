@@ -1,4 +1,5 @@
 const prisma = require('../config/prismaClient');
+const { getParentScope } = require('../utils/parentScope');
 
 // @desc    Create timetable slot
 exports.createTimetable = async (req, res) => {
@@ -49,18 +50,27 @@ exports.getTimetable = async (req, res) => {
         const classId = req.params.classId || req.query.classId;
 
         let where = { tenantId };
-        if (classId) where.classId = classId;
-        else if (req.user.role === 'student' && req.user.profile?.class) {
-            const cls = await prisma.class.findFirst({
+        if (req.user.role === 'student') {
+            const studentClass = req.user.profile?.class && await prisma.class.findFirst({
                 where: {
-                    name: req.user.profile.class,
+                    OR: [{ id: req.user.profile.class }, { name: req.user.profile.class }],
                     tenantId,
                     ...(req.user.profile.section && { section: req.user.profile.section })
-                }
+                },
+                select: { id: true }
             });
-            if (cls) where.classId = cls.id;
+            const classIds = studentClass ? [studentClass.id] : [];
+            if (classId && !classIds.includes(classId)) return res.status(403).json({ success: false, message: 'Access denied. Class is not linked to your student record.' });
+            where.classId = { in: classIds.length ? classIds : ['__none__'] };
+        } else if (req.user.role === 'parent') {
+            const scope = await getParentScope(req.user.id, tenantId);
+            if (classId && !scope.classIds.includes(classId)) return res.status(403).json({ success: false, message: 'Access denied. Class is not linked to your children.' });
+            where.classId = classId || { in: scope.classIds.length ? scope.classIds : ['__none__'] };
         } else if (req.user.role === 'teacher') {
             where.teachers = { some: { teacherId: req.user.id } };
+            if (classId) where.classId = classId;
+        } else if (classId) {
+            where.classId = classId;
         }
 
         const slots = await prisma.timetable.findMany({

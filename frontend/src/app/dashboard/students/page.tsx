@@ -8,19 +8,15 @@ import {
     ChevronLeft, ChevronRight, Users
 } from 'lucide-react';
 import { useAutosave } from '@/hooks/useAutosave';
+import * as XLSX from 'xlsx';
 
 /* ─── Types ─────────────────────────────────────────────────────────────── */
 interface SchoolClass { _id: string; name: string; section?: string }
 interface Student {
     _id: string; firstName: string; lastName: string; email: string;
     username?: string;
-    status?: string; password_plain?: string; createdAt?: string;
-    profile?: {
-        admissionNo?: string; studentId?: string; rollNo?: string;
-        class?: string; section?: string; parentName?: string;
-        parentPhone?: string; parentEmail?: string; phone?: string;
-        dateOfBirth?: string; gender?: string; bloodGroup?: string; address?: string;
-    };
+    status?: string; phone?: string; password_plain?: string; createdAt?: string; updatedAt?: string;
+    profile?: Record<string, any>;
 }
 
 const PAGE_SIZE = 10;
@@ -160,6 +156,9 @@ export default function StudentsListPage() {
     const [selected, setSelected]   = useState<string[]>([]);
     const [quickView, setQuickView] = useState<Student | null>(null);
     const [user, setUser]           = useState<any>(null);
+    const [exportMenuOpen, setExportMenuOpen] = useState(false);
+    const [exportClass, setExportClass] = useState('');
+    const [exportingStudent, setExportingStudent] = useState<string | null>(null);
 
     // Modals
     const [isPromoteOpen,   setIsPromoteOpen]   = useState(false);
@@ -229,12 +228,107 @@ export default function StudentsListPage() {
     /* ── Helpers ────────────────────────────────────────────────────────── */
     const sectionsForClass = (name: string) => classes.filter(c => c.name === name);
 
+    const studentExportRow = (student: Student) => {
+        const profile = student.profile || {};
+        const parentNames = Array.isArray(profile.parentIds)
+            ? profile.parentIds.map((parent: any) => [parent.firstName, parent.lastName].filter(Boolean).join(' ')).filter(Boolean).join('; ')
+            : '';
+        const parentContacts = Array.isArray(profile.parentIds)
+            ? profile.parentIds.map((parent: any) => [parent.email, parent.phone].filter(Boolean).join(' / ')).filter(Boolean).join('; ')
+            : '';
+        return {
+            'Student ID': student._id,
+            'First Name': student.firstName || '',
+            'Last Name': student.lastName || '',
+            'Email': student.email || '',
+            'Username': student.username || '',
+            'Status': student.status || '',
+            'Admission Number': profile.admissionNo || '',
+            'Student Number': profile.studentId || '',
+            'Roll Number': profile.rollNo || '',
+            'Class': profile.class || '',
+            'Section': profile.section || '',
+            'Phone': profile.phone || student.phone || '',
+            'Address': profile.address || '',
+            'Avatar URL': profile.avatarUrl || '',
+            'Designation': profile.designation || '',
+            'Gender': profile.gender || '',
+            'Date of Birth': profile.dob || profile.dateOfBirth || '',
+            'Mother Name': profile.motherName || '',
+            'Birth Place': profile.birthPlace || '',
+            'Nationality': profile.nationality || '',
+            'State': profile.state || '',
+            'Region': profile.region || '',
+            'District': profile.district || '',
+            'Village': profile.village || '',
+            'Guardian Name': profile.guardianName || '',
+            'Guardian Telephone': profile.guardianTelephone || '',
+            'Emergency Contact': profile.emergencyContactNo || '',
+            'Parent Relationship': profile.parentRelationship || '',
+            'Linked Parent(s)': parentNames,
+            'Linked Parent Contact(s)': parentContacts,
+            'Disability Status': profile.disabilityStatus || '',
+            'Orphan Status': profile.orphanStatus || '',
+            'Refugee Status': profile.refugeeStatus || '',
+            'Absenteeism Status': profile.absenteeismStatus || '',
+            'Previous School': profile.previousSchool || '',
+            'Transfer School': profile.transferSchool || '',
+            'Transfer Date': profile.transferDate || '',
+            'Registration Date': profile.regDate || '',
+            'Last Edited Date': profile.editDate || '',
+            'School Comments': profile.schoolComments || '',
+            'Created At': student.createdAt || '',
+            'Updated At': student.updatedAt || '',
+        };
+    };
+
+    const downloadStudents = (records: Student[], filename: string, sheetName = 'Students') => {
+        if (!records.length) { alert('No students to export.'); return; }
+        const worksheet = XLSX.utils.json_to_sheet(records.map(studentExportRow));
+        worksheet['!cols'] = Object.keys(studentExportRow(records[0])).map(key => ({ wch: Math.min(Math.max(key.length + 3, 16), 30) }));
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, sheetName.slice(0, 31));
+        XLSX.writeFile(workbook, `${filename}.xlsx`);
+        setExportMenuOpen(false);
+    };
+
     const handleExport = () => {
-        const rows = (selected.length ? students.filter(s => selected.includes(s._id)) : students)
-            .map(s => `"${s.firstName} ${s.lastName}","${s.email}","${s.profile?.admissionNo || ''}","${s.profile?.class || ''}","${s.profile?.section || ''}"`);
-        const a = document.createElement('a');
-        a.href = encodeURI('data:text/csv;charset=utf-8,Name,Email,Admission No,Class,Section\n' + rows.join('\n'));
-        a.download = `students_${Date.now()}.csv`; a.click();
+        const records = selected.length ? students.filter(s => selected.includes(s._id)) : students;
+        downloadStudents(records, selected.length ? 'selected_students' : 'all_students');
+    };
+
+    const handleExportClass = async () => {
+        if (!exportClass) { alert('Select a class to export.'); return; }
+        try {
+            const { data } = await api.get('/students', { params: { includeInactive: true } });
+            const allStudents: Student[] = data.data || [];
+            const records = allStudents.filter(student => `${student.profile?.class || ''}${student.profile?.section ? ` ${student.profile.section}` : ''}`.trim() === exportClass);
+            const safeName = exportClass.replace(/[^a-z0-9_-]+/gi, '_');
+            downloadStudents(records, `students_${safeName}`, exportClass);
+        } catch (err: any) {
+            alert(err.response?.data?.message || 'Failed to export class');
+        }
+    };
+
+    const handleExportAll = async () => {
+        try {
+            const { data } = await api.get('/students', { params: { includeInactive: true } });
+            downloadStudents(data.data || [], 'all_students');
+        } catch (err: any) {
+            alert(err.response?.data?.message || 'Failed to export students');
+        }
+    };
+
+    const handleExportStudent = async (student: Student) => {
+        setExportingStudent(student._id);
+        try {
+            const { data } = await api.get(`/students/${student._id}`);
+            downloadStudents([data.data || student], `student_${student.profile?.admissionNo || student._id}`);
+        } catch (err: any) {
+            alert(err.response?.data?.message || 'Failed to export student');
+        } finally {
+            setExportingStudent(null);
+        }
     };
 
     const handleDelete = async (id: string) => {
@@ -359,8 +453,9 @@ export default function StudentsListPage() {
             {/* ── Header ──────────────────────────────────────────────────── */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Students Directory</h1>
-                    <p className="text-sm text-slate-500 mt-0.5">Manage enrollments, profiles, and academic records.</p>
+                    <span className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-cyan-800 dark:border-cyan-400/20 dark:bg-cyan-400/10 dark:text-cyan-200"><Users className="h-3 w-3" /> People directory</span>
+                    <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">Students</h1>
+                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Manage enrollment, student profiles, and class records in one place.</p>
                 </div>
                 <div className="flex gap-2 flex-wrap">
                     {isAdmin && (
@@ -369,13 +464,37 @@ export default function StudentsListPage() {
                             <UserPlus className="w-4 h-4" /> Bulk Import
                         </button>
                     )}
-                    <button onClick={handleExport}
-                        className="flex items-center gap-1.5 px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-sm font-semibold hover:border-slate-400 transition">
-                        <FileDown className="w-4 h-4" /> Export
-                    </button>
+                    <div className="relative">
+                        <button type="button" onClick={() => setExportMenuOpen(open => !open)} aria-expanded={exportMenuOpen}
+                            className="flex items-center gap-1.5 px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-sm font-semibold hover:border-slate-400 transition">
+                            <FileDown className="w-4 h-4" /> Export <ChevronDown className="w-4 h-4" />
+                        </button>
+                        {exportMenuOpen && (
+                            <div className="absolute right-0 top-full mt-2 z-40 w-72 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 shadow-xl space-y-2">
+                                <button type="button" onClick={handleExportAll}
+                                    className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700">
+                                    Download all students ({students.length})
+                                </button>
+                                <div className="flex gap-2">
+                                    <select value={exportClass} onChange={e => setExportClass(e.target.value)} aria-label="Select class to export"
+                                        className="min-w-0 flex-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 px-2 py-2 text-xs text-slate-700 dark:text-slate-200">
+                                        <option value="">Choose a class</option>
+                                        {Array.from(new Set(classes.map(c => `${c.name}${c.section ? ` ${c.section}` : ''}`))).sort().map(name => (
+                                            <option key={name} value={name}>{name}</option>
+                                        ))}
+                                    </select>
+                                    <button type="button" onClick={handleExportClass} disabled={!exportClass}
+                                        className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-40">
+                                        Download class
+                                    </button>
+                                </div>
+                                <p className="px-1 text-[11px] text-slate-400">Excel file includes the student profile and available registration details.</p>
+                            </div>
+                        )}
+                    </div>
                     {isAdmin && (
                         <Link href="/dashboard/students/add"
-                            className="flex items-center gap-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-semibold transition shadow-sm">
+                            className="flex items-center gap-1.5 px-4 py-2.5 bg-[#1e3a8a] hover:bg-cyan-700 text-white rounded-xl text-sm font-semibold transition shadow-md shadow-blue-950/10">
                             <Plus className="w-4 h-4" /> Add Student
                         </Link>
                     )}
@@ -383,14 +502,14 @@ export default function StudentsListPage() {
             </div>
 
             {/* ── Stats Row ───────────────────────────────────────────────── */}
-            <div className="flex flex-wrap items-center gap-6 px-5 py-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-sm">
+            <div className="flex flex-wrap items-center gap-3 p-3 bg-white dark:bg-slate-900/70 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm text-sm">
                 <span className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
-                    <Users className="w-4 h-4 text-indigo-500" />
-                    Total Students: <strong className="text-slate-800 dark:text-white ml-1">{students.length}</strong>
+                    <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-cyan-50 text-cyan-700 dark:bg-cyan-400/10 dark:text-cyan-200"><Users className="w-4 h-4" /></span>
+                    <span>Total students <strong className="ml-1 text-slate-900 dark:text-white">{students.length}</strong></span>
                 </span>
                 {Object.entries(classCounts).slice(0, 5).map(([cls, cnt]) => (
                     <button key={cls} onClick={() => setFilterClass(filterClass === cls ? '' : cls)}
-                        className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition ${filterClass === cls ? 'bg-indigo-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'}`}>
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition ${filterClass === cls ? 'bg-[#1e3a8a] text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-cyan-50 hover:text-cyan-800 dark:hover:bg-cyan-400/10 dark:hover:text-cyan-200'}`}>
                         {cls} <span className="opacity-75">({cnt})</span>
                     </button>
                 ))}
@@ -411,7 +530,7 @@ export default function StudentsListPage() {
             </div>
 
             {/* ── Main content: table + quick-view ────────────────────────── */}
-            <div className="flex gap-4 items-start">
+            <div className="flex flex-col lg:flex-row gap-4 items-start">
                 {/* Table */}
                 <div className="flex-1 min-w-0 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
                     <div className="overflow-x-auto">
@@ -491,6 +610,11 @@ export default function StudentsListPage() {
                                                     <button onClick={() => setQuickView(isViewed ? null : s)}
                                                         className={`w-7 h-7 flex items-center justify-center rounded-lg transition ${isViewed ? 'bg-indigo-600 text-white' : 'border border-slate-200 dark:border-slate-600 text-slate-400 hover:text-indigo-500 hover:border-indigo-400'}`}>
                                                         <Eye className="w-3.5 h-3.5" />
+                                                    </button>
+                                                    <button type="button" onClick={() => handleExportStudent(s)} disabled={exportingStudent === s._id}
+                                                        title="Download full student data" aria-label={`Download ${s.firstName} ${s.lastName} data`}
+                                                        className="w-7 h-7 flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-600 text-slate-400 hover:text-emerald-500 hover:border-emerald-400 disabled:opacity-50 transition">
+                                                        <FileDown className="w-3.5 h-3.5" />
                                                     </button>
                                                     {isAdmin && (
                                                         <button onClick={() => openEdit(s)}

@@ -7,9 +7,9 @@
   --foreground-rgb: 15, 23, 42;
   --background-start-rgb: 248, 250, 252;
   --background-end-rgb: 241, 245, 249;
-  --color-primary: #6366f1;
-  --color-primary-hover: #4f46e5;
-  --color-primary-soft: #818cf8;
+  --color-primary: #1e3a8a;
+  --color-primary-hover: #1e40af;
+  --color-primary-soft: #06b6d4;
   --color-success: #10b981;
   --color-warning: #f59e0b;
   --color-danger: #ef4444;
@@ -19,7 +19,9 @@
   --radius-lg: 1rem;
   --radius-xl: 1.25rem;
   --radius-2xl: 1.5rem;
-  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 8px 24px rgb(99 102 241 / 0.06);
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 8px 24px rgb(30 58 138 / 0.06);
+  --brand-navy: #1e3a8a;
+  --brand-cyan: #06b6d4;
   color-scheme: light;
 }
 
@@ -29,6 +31,18 @@
   --background-end-rgb: 2, 6, 23;
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.2), 0 8px 24px rgb(0 0 0 / 0.25);
   color-scheme: dark;
+}
+
+/* Shared school SaaS surfaces and keyboard focus use the same navy/cyan palette. */
+:where(a, button, input, select, textarea):focus-visible {
+  outline-color: var(--brand-cyan);
+}
+
+.dashboard-shell {
+  background: #f4f7fb;
+}
+.dark .dashboard-shell {
+  background: #0b1220;
 }
 
 body {

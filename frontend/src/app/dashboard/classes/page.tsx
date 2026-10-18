@@ -169,30 +169,44 @@ export default function ClassesPage() {
     const groupKeys = Object.keys(grouped).sort();
 
     return (
-        <div className="p-4 sm:p-6 max-w-7xl mx-auto">
+        <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
             {/* Header */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Academic Classes Overview</h1>
-                    <p className="text-sm text-slate-500 mt-0.5">Manage grade levels, sections, and class teachers.</p>
+                    <span className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-cyan-800 dark:border-cyan-400/20 dark:bg-cyan-400/10 dark:text-cyan-200"><Building2 className="h-3 w-3" /> Academic setup</span>
+                    <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">Classes</h1>
+                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Organize sections, assign class teachers, and keep each class connected to its students.</p>
                 </div>
                 {canManage && (
                     <button
                         onClick={() => { setIsModalOpen(true); setEditId(null); resetForm(); }}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-semibold text-sm transition shadow-sm"
+                        className="flex items-center gap-2 px-5 py-2.5 bg-[#1e3a8a] hover:bg-cyan-700 text-white rounded-xl font-semibold text-sm transition shadow-md shadow-blue-950/10"
                     >
                         <Plus className="w-4 h-4" /> Add Class
                     </button>
                 )}
             </div>
 
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                {[
+                    { label: 'Class sections', value: classes.length, icon: <Building2 className="h-4 w-4" />, tone: 'bg-cyan-50 text-cyan-700 dark:bg-cyan-400/10 dark:text-cyan-200' },
+                    { label: 'Enrolled students', value: classes.reduce((sum: number, item: any) => sum + (Number(item.studentCount) || 0), 0), icon: <Users className="h-4 w-4" />, tone: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-400/10 dark:text-indigo-200' },
+                    { label: 'Class teachers assigned', value: classes.filter((item: any) => item.classTeacher).length, icon: <User className="h-4 w-4" />, tone: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200' },
+                ].map(metric => (
+                    <div key={metric.label} className="flex items-center gap-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
+                        <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${metric.tone}`}>{metric.icon}</span>
+                        <span><span className="block text-xs font-medium text-slate-500 dark:text-slate-400">{metric.label}</span><strong className="mt-0.5 block text-xl font-black text-slate-900 dark:text-white">{metric.value}</strong></span>
+                    </div>
+                ))}
+            </div>
+
             {/* Grade Tabs */}
-            <div className="flex flex-wrap gap-1 mb-6 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-1 overflow-x-auto">
+            <div className="flex flex-wrap gap-1 bg-white dark:bg-slate-900/70 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-1.5 shadow-sm overflow-x-auto">
                 <button
                     onClick={() => setActiveGrade('all')}
                     className={`px-4 py-2 rounded-lg text-sm font-semibold transition whitespace-nowrap ${
                         activeGrade === 'all'
-                            ? 'bg-blue-600 text-white shadow-sm'
+                            ? 'bg-[#1e3a8a] text-white shadow-sm'
                             : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
                     }`}
                 >
@@ -204,7 +218,7 @@ export default function ClassesPage() {
                         onClick={() => setActiveGrade(g)}
                         className={`px-4 py-2 rounded-lg text-sm font-semibold transition whitespace-nowrap ${
                             activeGrade === g
-                                ? 'bg-blue-600 text-white shadow-sm'
+                                ? 'bg-[#1e3a8a] text-white shadow-sm'
                                 : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
                         }`}
                     >
@@ -221,10 +235,10 @@ export default function ClassesPage() {
             {/* Grouped Classes — 3-column grid */}
             {!loading && groupKeys.map(grade => (
                 <div key={grade} className="mb-6">
-                    <h2 className="text-base font-bold text-slate-800 dark:text-white mb-3">{grade}</h2>
+                            <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-slate-800 dark:text-white"><span className="h-5 w-1 rounded-full bg-cyan-500" />{grade}<span className="text-xs font-medium text-slate-400">{grouped[grade].length} sections</span></h2>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                         {grouped[grade].map((c: any) => (
-                            <div key={c._id} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 flex flex-col gap-3">
+                            <div key={c._id} className="bg-white dark:bg-slate-900/70 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 flex flex-col gap-3 shadow-sm transition hover:-translate-y-0.5 hover:border-cyan-200 hover:shadow-lg dark:hover:border-cyan-500/30">
                                 {/* Title row */}
                                 <div className="flex items-start justify-between">
                                     <h3 className="text-sm font-bold text-slate-800 dark:text-white leading-tight">
@@ -264,13 +278,13 @@ export default function ClassesPage() {
                                 <div className="flex gap-2 mt-1">
                                     <button
                                         onClick={() => router.push(`/dashboard/timetable?class=${c._id}`)}
-                                        className="flex-1 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold transition text-center"
+                                        className="flex-1 py-2.5 bg-[#1e3a8a] hover:bg-cyan-700 text-white rounded-xl text-xs font-semibold transition text-center"
                                     >
                                         View Timetable
                                     </button>
                                     <button
                                         onClick={() => handleViewStudents(c)}
-                                        className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold transition text-center"
+                                        className="flex-1 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-xs font-semibold transition text-center"
                                     >
                                         Manage Students
                                     </button>
