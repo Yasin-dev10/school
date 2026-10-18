@@ -265,6 +265,8 @@ export default function StudentsListPage() {
             'Guardian Telephone': profile.guardianTelephone || '',
             'Emergency Contact': profile.emergencyContactNo || '',
             'Parent Relationship': profile.parentRelationship || '',
+            'Pays Tuition': profile.paysTuition === true ? 'Yes' : profile.paysTuition === false ? 'No' : '',
+            'Guardian Email': Array.isArray(profile.parentIds) ? profile.parentIds.map((parent: any) => parent.email).filter(Boolean).join('; ') : '',
             'Linked Parent(s)': parentNames,
             'Linked Parent Contact(s)': parentContacts,
             'Disability Status': profile.disabilityStatus || '',

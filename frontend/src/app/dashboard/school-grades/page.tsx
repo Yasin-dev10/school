@@ -126,7 +126,6 @@ export default function SchoolGradesPage() {
                         {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</> : 'Save grade levels'}
                     </button>
                 </div>
-            </div>
             </section>
         </div>
     );

@@ -127,7 +127,8 @@ export default function AddStudentPage() {
                     emergencyContactNo: formData.emergencyContactNo,
                     schoolComments: formData.schoolComments,
                     absenteeismStatus: formData.absenteeismStatus,
-                    previousSchool: formData.previousSchool
+                    previousSchool: formData.previousSchool,
+                    paysTuition: formData.paysTuition
                 },
                 parentDetails: formData.parentEmail ? {
                     firstName: formData.parentFirstName,

@@ -652,6 +652,7 @@ model User {
   regDate            DateTime?
   editDate           DateTime?
   parentRelationship ParentRelationship?
+  paysTuition        Boolean?
   qualification      String?
   salary             String?
   stripeCustomerId   String?

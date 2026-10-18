@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import api from '../../utils/api';
 import { GRADE_LEVELS, getGradesForLevel } from '../../utils/gradeLevels';
 import {
-    Plus, Pencil, Trash2, User, DoorOpen, BookOpen,
+    Plus, Pencil, Trash2, User, DoorOpen, BookOpen, Building2,
     X, GraduationCap, Users, CalendarDays
 } from 'lucide-react';
 

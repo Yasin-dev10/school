@@ -26,6 +26,7 @@ const userSelect = {
     emergencyContactNo: true, schoolComments: true, absenteeismStatus: true,
     previousSchool: true, transferSchool: true, transferDate: true,
     regDate: true, editDate: true,
+    paysTuition: true,
     qualification: true, salary: true, stripeCustomerId: true,
     createdAt: true, updatedAt: true
 };
@@ -64,6 +65,7 @@ const formatUser = (u, { includeCredentials = false } = {}) => {
             regDate: u.regDate, editDate: u.editDate,
             parentRelationship: u.parentRelationship,
             qualification: u.qualification, salary: u.salary,
+            paysTuition: u.paysTuition,
             stripeCustomerId: u.stripeCustomerId
         }
     };
@@ -214,7 +216,8 @@ exports.createStudent = async (req, res) => {
                 previousSchool: profile?.previousSchool || null,
                 regDate: optionalDate(profile?.regDate),
                 editDate: optionalDate(profile?.editDate),
-                parentRelationship: parentRelationship || parentDetails?.relationship || 'Guardian'
+                parentRelationship: parentRelationship || parentDetails?.relationship || 'Guardian',
+                paysTuition: profile?.paysTuition === undefined ? null : profile.paysTuition === true || profile.paysTuition === 'yes'
             }
         });
 
@@ -277,8 +280,23 @@ exports.getStudents = async (req, res) => {
         if (sortBy === 'name') orderBy = [{ firstName: order }, { lastName: order }];
         else if (sortBy === 'class') orderBy = [{ profileClass: order }, { profileSection: order }];
 
-        const students = await prisma.user.findMany({ where, select: userSelect, orderBy });
-        res.status(200).json({ success: true, count: students.length, data: students.map(student => formatUser(student)) });
+        const students = await prisma.user.findMany({
+            where,
+            select: {
+                ...userSelect,
+                parentLinks: { include: { parent: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } } } }
+            },
+            orderBy
+        });
+        res.status(200).json({
+            success: true,
+            count: students.length,
+            data: students.map(student => {
+                const formatted = formatUser(student);
+                formatted.profile.parentIds = student.parentLinks?.map(link => formatUser(link.parent)) || [];
+                return formatted;
+            })
+        });
     } catch (error) {
         sendError(res, error);
     }
