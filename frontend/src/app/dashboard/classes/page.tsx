@@ -1,11 +1,12 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '../../utils/api';
 import { GRADE_LEVELS, getGradesForLevel } from '../../utils/gradeLevels';
 import {
-    Plus, Pencil, Trash2, User, DoorOpen, BookOpen, Building2,
-    X, GraduationCap, Users, CalendarDays
+    Plus, Pencil, Trash2, User, BookOpen, Building2,
+    X, Users, Search, ChevronLeft,
+    ChevronRight, BookOpenCheck, ArrowUpRight, SlidersHorizontal
 } from 'lucide-react';
 
 export default function ClassesPage() {
@@ -15,8 +16,12 @@ export default function ClassesPage() {
     const [subjects, setSubjects] = useState([]);
     const [tenantSettings, setTenantSettings] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [activeGrade, setActiveGrade] = useState<string>('all');
+    const [search, setSearch] = useState('');
+    const [page, setPage] = useState(1);
+    const pageSize = 10;
 
     const [selectedClassForStudents, setSelectedClassForStudents] = useState<any>(null);
     const [classStudents, setClassStudents] = useState<any[]>([]);
@@ -37,6 +42,8 @@ export default function ClassesPage() {
     const [tempTeacherId, setTempTeacherId] = useState('');
 
     const fetchData = async () => {
+        setLoading(true);
+        setLoadError('');
         try {
             const userStr = localStorage.getItem('user');
             if (userStr) setUserRole(JSON.parse(userStr).role);
@@ -48,7 +55,7 @@ export default function ClassesPage() {
             setTeachers(teacherRes.data.data);
             setSubjects(subjectRes.data.data);
             setTenantSettings(tenantRes.data.data);
-        } catch (e) { console.error(e); }
+        } catch (e) { console.error(e); setLoadError('Could not load classes. Check your connection and try again.'); }
         finally { setLoading(false); }
     };
 
@@ -67,7 +74,7 @@ export default function ClassesPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        let finalSubjects = [...formData.subjects];
+        const finalSubjects = [...formData.subjects];
         if (currentSubjectIds.length > 0 && currentSubjectTeachers.length > 0) {
             currentSubjectIds.forEach(subId => {
                 const i = finalSubjects.findIndex(s => s.subject === subId);
@@ -155,32 +162,33 @@ export default function ClassesPage() {
         classes.map((c: any) => c.grade || c.name).filter(Boolean)
     )).sort();
 
-    const filteredClasses = activeGrade === 'all'
-        ? classes
-        : classes.filter((c: any) => (c.grade || c.name) === activeGrade);
-
-    // Group by grade
-    const grouped: Record<string, any[]> = {};
-    filteredClasses.forEach((c: any) => {
-        const key = c.grade || c.name || 'Other';
-        if (!grouped[key]) grouped[key] = [];
-        grouped[key].push(c);
-    });
-    const groupKeys = Object.keys(grouped).sort();
+    const filteredClasses = useMemo(() => {
+        const query = search.trim().toLowerCase();
+        return classes.filter((c: any) => {
+            const matchesGrade = activeGrade === 'all' || (c.grade || c.name) === activeGrade;
+            const teacherName = c.classTeacher ? `${c.classTeacher.firstName || ''} ${c.classTeacher.lastName || ''}` : '';
+            const matchesSearch = !query || [c.name, c.grade, c.section, c.room, teacherName]
+                .some((value) => String(value || '').toLowerCase().includes(query));
+            return matchesGrade && matchesSearch;
+        }).sort((a: any, b: any) => `${a.grade || a.name} ${a.section || ''}`.localeCompare(`${b.grade || b.name} ${b.section || ''}`));
+    }, [classes, activeGrade, search]);
+    const totalPages = Math.max(1, Math.ceil(filteredClasses.length / pageSize));
+    const pagedClasses = filteredClasses.slice((page - 1) * pageSize, page * pageSize);
+    useEffect(() => { setPage(1); }, [activeGrade, search]);
 
     return (
-        <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
+        <div className="mx-auto max-w-7xl space-y-5 pb-8">
             {/* Header */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                     <span className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-cyan-800 dark:border-cyan-400/20 dark:bg-cyan-400/10 dark:text-cyan-200"><Building2 className="h-3 w-3" /> Academic setup</span>
-                    <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">Classes</h1>
-                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Organize sections, assign class teachers, and keep each class connected to its students.</p>
+                    <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-3xl">Classes</h1>
+                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Manage class sections, teachers, subjects, and enrolled students.</p>
                 </div>
                 {canManage && (
                     <button
                         onClick={() => { setIsModalOpen(true); setEditId(null); resetForm(); }}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-[#1e3a8a] hover:bg-cyan-700 text-white rounded-xl font-semibold text-sm transition shadow-md shadow-blue-950/10"
+                        className="inline-flex items-center gap-2 rounded-xl bg-[#1e3a8a] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-900"
                     >
                         <Plus className="w-4 h-4" /> Add Class
                     </button>
@@ -189,9 +197,9 @@ export default function ClassesPage() {
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 {[
-                    { label: 'Class sections', value: classes.length, icon: <Building2 className="h-4 w-4" />, tone: 'bg-cyan-50 text-cyan-700 dark:bg-cyan-400/10 dark:text-cyan-200' },
-                    { label: 'Enrolled students', value: classes.reduce((sum: number, item: any) => sum + (Number(item.studentCount) || 0), 0), icon: <Users className="h-4 w-4" />, tone: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-400/10 dark:text-indigo-200' },
-                    { label: 'Class teachers assigned', value: classes.filter((item: any) => item.classTeacher).length, icon: <User className="h-4 w-4" />, tone: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200' },
+                    { label: 'Class sections', value: classes.length, icon: <Building2 className="h-4 w-4" />, tone: 'bg-cyan-50 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-200' },
+                    { label: 'Enrolled students', value: classes.reduce((sum: number, item: any) => sum + (Number(item.studentCount) || 0), 0), icon: <Users className="h-4 w-4" />, tone: 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-200' },
+                    { label: 'Class teachers assigned', value: classes.filter((item: any) => item.classTeacher).length, icon: <User className="h-4 w-4" />, tone: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200' },
                 ].map(metric => (
                     <div key={metric.label} className="flex items-center gap-3 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
                         <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${metric.tone}`}>{metric.icon}</span>
@@ -200,116 +208,64 @@ export default function ClassesPage() {
                 ))}
             </div>
 
-            {/* Grade Tabs */}
-            <div className="flex flex-wrap gap-1 bg-white dark:bg-slate-900/70 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-1.5 shadow-sm overflow-x-auto">
-                <button
-                    onClick={() => setActiveGrade('all')}
-                    className={`px-4 py-2 rounded-lg text-sm font-semibold transition whitespace-nowrap ${
-                        activeGrade === 'all'
-                            ? 'bg-[#1e3a8a] text-white shadow-sm'
-                            : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
-                    }`}
-                >
-                    All Grades
-                </button>
-                {gradeNames.map(g => (
-                    <button
-                        key={g}
-                        onClick={() => setActiveGrade(g)}
-                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition whitespace-nowrap ${
-                            activeGrade === g
-                                ? 'bg-[#1e3a8a] text-white shadow-sm'
-                                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700'
-                        }`}
-                    >
-                        {g}
-                    </button>
-                ))}
-            </div>
+            {loadError && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-200"><span>{loadError}</span><button onClick={() => void fetchData()} className="font-semibold underline">Try again</button></div>}
 
-            {/* Loading */}
-            {loading && (
-                <div className="py-20 text-center text-slate-400 animate-pulse">Loading classes...</div>
-            )}
-
-            {/* Grouped Classes — 3-column grid */}
-            {!loading && groupKeys.map(grade => (
-                <div key={grade} className="mb-6">
-                            <h2 className="mb-3 flex items-center gap-2 text-base font-bold text-slate-800 dark:text-white"><span className="h-5 w-1 rounded-full bg-cyan-500" />{grade}<span className="text-xs font-medium text-slate-400">{grouped[grade].length} sections</span></h2>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                        {grouped[grade].map((c: any) => (
-                            <div key={c._id} className="bg-white dark:bg-slate-900/70 rounded-2xl border border-slate-200/80 dark:border-slate-800 p-4 flex flex-col gap-3 shadow-sm transition hover:-translate-y-0.5 hover:border-cyan-200 hover:shadow-lg dark:hover:border-cyan-500/30">
-                                {/* Title row */}
-                                <div className="flex items-start justify-between">
-                                    <h3 className="text-sm font-bold text-slate-800 dark:text-white leading-tight">
-                                        {c.name}{c.section ? ` - Class ${c.section}` : ''}
-                                    </h3>
-                                    {canManage && (
-                                        <div className="flex gap-1 shrink-0 ml-2">
-                                            <button onClick={() => handleEdit(c)} className="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-blue-500 hover:bg-slate-100 dark:hover:bg-slate-700 transition">
-                                                <Pencil className="w-3 h-3" />
-                                            </button>
-                                            <button onClick={() => handleDelete(c._id)} className="w-6 h-6 rounded flex items-center justify-center text-slate-400 hover:text-red-400 hover:bg-red-50 dark:hover:bg-slate-700 transition">
-                                                <Trash2 className="w-3 h-3" />
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Stats */}
-                                <div className="space-y-1.5 text-sm flex-1">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-slate-500 dark:text-slate-400">Class Teacher:</span>
-                                        <span className="text-slate-800 dark:text-white font-semibold text-right truncate max-w-[55%]">
-                                            {c.classTeacher ? `${c.classTeacher.firstName} ${c.classTeacher.lastName}` : '—'}
-                                        </span>
-                                    </div>
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-slate-500 dark:text-slate-400">Students:</span>
-                                        <span className="text-slate-800 dark:text-white font-semibold">{c.studentCount ?? 0}</span>
-                                    </div>
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-slate-500 dark:text-slate-400">Room Number:</span>
-                                        <span className="text-slate-800 dark:text-white font-semibold">{c.room || '—'}</span>
-                                    </div>
-                                </div>
-
-                                {/* Buttons */}
-                                <div className="flex gap-2 mt-1">
-                                    <button
-                                        onClick={() => router.push(`/dashboard/timetable?class=${c._id}`)}
-                                        className="flex-1 py-2.5 bg-[#1e3a8a] hover:bg-cyan-700 text-white rounded-xl text-xs font-semibold transition text-center"
-                                    >
-                                        View Timetable
-                                    </button>
-                                    <button
-                                        onClick={() => handleViewStudents(c)}
-                                        className="flex-1 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-xs font-semibold transition text-center"
-                                    >
-                                        Manage Students
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
+            <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900/70">
+                <div className="flex flex-col gap-3 border-b border-slate-200 p-4 dark:border-slate-800 md:flex-row md:items-center md:justify-between">
+                    <div><h2 className="text-base font-bold text-slate-900 dark:text-white">Class sections</h2><p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Search, filter, and manage your school classes.</p></div>
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                        <label className="relative min-w-0 sm:min-w-64"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search class, teacher, room..." aria-label="Search classes" className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:focus:ring-cyan-900/40" /></label>
+                        <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 dark:border-slate-700 dark:bg-slate-800"><SlidersHorizontal className="h-4 w-4 text-slate-400" /><span className="sr-only">Filter by grade</span><select value={activeGrade} onChange={(e) => setActiveGrade(e.target.value)} className="min-w-32 bg-transparent py-2.5 text-sm font-medium text-slate-700 outline-none dark:text-slate-200"><option value="all">All grades</option>{gradeNames.map((grade) => <option key={grade} value={grade}>{grade}</option>)}</select></label>
                     </div>
                 </div>
-            ))}
 
-            {!loading && classes.length === 0 && (
-                <div className="py-20 text-center text-slate-400">No classes found. Add your first class.</div>
-            )}
+                {loading ? <div className="space-y-3 p-4" aria-label="Loading classes">{[1, 2, 3, 4].map((row) => <div key={row} className="h-16 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />)}</div> : filteredClasses.length === 0 ? <div className="px-5 py-16 text-center"><div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-blue-50 text-[#1E3A8A] dark:bg-blue-950/40 dark:text-cyan-300"><Building2 className="h-6 w-6" /></div><h3 className="mt-4 font-bold text-slate-900 dark:text-white">{classes.length ? 'No matching classes' : 'No classes yet'}</h3><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{classes.length ? 'Try changing your search or grade filter.' : 'Create your first class to start organizing students and lessons.'}</p>{canManage && classes.length === 0 && <button onClick={() => { setIsModalOpen(true); setEditId(null); resetForm(); }} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-[#1E3A8A] px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-900"><Plus className="h-4 w-4" />Add class</button>}</div> : <>
+                    <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                        {pagedClasses.map((c: any) => (
+                            <article key={c._id} className="flex min-h-60 flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-cyan-300 hover:shadow-md dark:border-slate-700 dark:bg-slate-900/50 dark:hover:border-cyan-700">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="flex min-w-0 items-center gap-3">
+                                        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-blue-50 text-[#1E3A8A] dark:bg-blue-950/50 dark:text-cyan-300"><Building2 className="h-5 w-5" /></span>
+                                        <div className="min-w-0">
+                                            <h3 className="truncate font-bold text-slate-900 dark:text-white">{c.name}{c.section ? ' · ' + c.section : ''}</h3>
+                                            <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">{c.grade || c.gradeLevel || 'Class'}{c.room ? ' · Room ' + c.room : ''}</p>
+                                        </div>
+                                    </div>
+                                    {canManage && <div className="flex shrink-0 gap-1">
+                                        <button aria-label={'Edit ' + c.name} onClick={() => handleEdit(c)} className="rounded-lg p-2 text-slate-400 transition hover:bg-blue-50 hover:text-[#1E3A8A] dark:hover:bg-slate-800"><Pencil className="h-4 w-4" /></button>
+                                        <button aria-label={'Delete ' + c.name} onClick={() => handleDelete(c._id)} className="rounded-lg p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-slate-800"><Trash2 className="h-4 w-4" /></button>
+                                    </div>}
+                                </div>
+                                <div className="mt-5 grid grid-cols-3 gap-2 rounded-xl bg-slate-50 p-3 dark:bg-slate-800/70">
+                                    <div><p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Students</p><p className="mt-1 flex items-center gap-1.5 text-sm font-bold text-slate-800 dark:text-white"><Users className="h-3.5 w-3.5 text-slate-400" />{c.studentCount ?? 0}</p></div>
+                                    <div><p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Subjects</p><p className="mt-1 flex items-center gap-1.5 text-sm font-bold text-slate-800 dark:text-white"><BookOpenCheck className="h-3.5 w-3.5 text-slate-400" />{c.subjects?.length || 0}</p></div>
+                                    <div className="min-w-0"><p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">Room</p><p className="mt-1 truncate text-sm font-bold text-slate-800 dark:text-white">{c.room || '—'}</p></div>
+                                </div>
+                                <div className="mt-4 min-w-0">
+                                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Class teacher</p>
+                                    <p className="mt-1 flex items-center gap-2 truncate text-sm font-medium text-slate-700 dark:text-slate-200"><User className="h-4 w-4 shrink-0 text-slate-400" />{c.classTeacher ? c.classTeacher.firstName + ' ' + c.classTeacher.lastName : 'Not assigned'}</p>
+                                </div>
+                                <div className="mt-auto grid grid-cols-2 gap-2 pt-5">
+                                    <button onClick={() => router.push('/dashboard/timetable?class=' + encodeURIComponent(c._id))} className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#1E3A8A] px-3 py-2.5 text-xs font-semibold text-white transition hover:bg-blue-900">Timetable<ArrowUpRight className="h-3.5 w-3.5" /></button>
+                                    <button onClick={() => handleViewStudents(c)} className="rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Manage students</button>
+                                </div>
+                            </article>
+                        ))}
+                    </div>                    <footer className="flex flex-col gap-3 border-t border-slate-200 px-4 py-3 text-xs text-slate-500 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between"><span>Showing {Math.min((page - 1) * pageSize + 1, filteredClasses.length)}–{Math.min(page * pageSize, filteredClasses.length)} of {filteredClasses.length} classes</span><div className="flex items-center gap-2"><button disabled={page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-2 font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-200"><ChevronLeft className="h-4 w-4" />Previous</button><span className="min-w-16 text-center">Page {page} of {totalPages}</span><button disabled={page >= totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-2 font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-200">Next<ChevronRight className="h-4 w-4" /></button></div></footer>
+                </>}
+            </section>
 
             {/* Add/Edit Class Modal */}
             {isModalOpen && canManage && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm overflow-y-auto">
-                    <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 my-8">
+                <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/50 p-3 backdrop-blur-sm sm:p-5" onMouseDown={(event) => { if (event.target === event.currentTarget) setIsModalOpen(false); }}>
+                    <div role="dialog" aria-modal="true" aria-labelledby="class-form-title" className="my-auto flex max-h-[92vh] w-full max-w-2xl flex-col rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
                         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-700">
-                            <h2 className="text-lg font-bold text-slate-800 dark:text-white">{editId ? 'Edit Class' : 'Add New Class'}</h2>
-                            <button onClick={() => setIsModalOpen(false)} className="w-8 h-8 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-slate-400 hover:text-slate-700 transition">
+                            <h2 id="class-form-title" className="text-lg font-bold text-slate-800 dark:text-white">{editId ? 'Edit Class' : 'Add New Class'}</h2>
+                            <button aria-label="Close class form" onClick={() => setIsModalOpen(false)} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800">
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
-                        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+                        <form onSubmit={handleSubmit} className="space-y-5 overflow-y-auto p-4 sm:p-6">
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Class Name</label>
@@ -446,17 +402,17 @@ export default function ClassesPage() {
 
             {/* Students Modal */}
             {isStudentsModalOpen && selectedClassForStudents && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm overflow-y-auto">
-                    <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 my-8">
+                <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/50 p-3 backdrop-blur-sm sm:p-5" onMouseDown={(event) => { if (event.target === event.currentTarget) setIsStudentsModalOpen(false); }}>
+                    <div role="dialog" aria-modal="true" aria-labelledby="class-students-title" className="my-auto flex max-h-[90vh] w-full max-w-2xl flex-col rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
                         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-700">
-                            <h2 className="text-lg font-bold text-slate-800 dark:text-white">
+                            <h2 id="class-students-title" className="text-lg font-bold text-slate-800 dark:text-white">
                                 {selectedClassForStudents.name}{selectedClassForStudents.section ? ` — Section ${selectedClassForStudents.section}` : ''}
                             </h2>
-                            <button onClick={() => setIsStudentsModalOpen(false)} className="w-8 h-8 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-slate-400 hover:text-slate-700 transition">
+                            <button aria-label="Close student list" onClick={() => setIsStudentsModalOpen(false)} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800">
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
-                        <div className="p-6 max-h-[500px] overflow-y-auto">
+                        <div className="max-h-[65vh] overflow-y-auto p-4 sm:p-6">
                             {loadingStudents ? (
                                 <div className="py-16 text-center text-slate-400 animate-pulse">Loading students...</div>
                             ) : classStudents.length === 0 ? (
