@@ -28,6 +28,23 @@ exports.getFeeTypes = async (req, res) => {
     }
 };
 
+exports.deleteFeeType = async (req, res) => {
+    try {
+        const feeType = await prisma.feeType.findFirst({
+            where: { id: req.params.id, tenantId: req.user.tenantId },
+            include: { invoiceItems: { select: { id: true }, take: 1 } }
+        });
+        if (!feeType) return res.status(404).json({ success: false, message: 'Fee type not found' });
+        if (feeType.invoiceItems.length) {
+            return res.status(409).json({ success: false, message: 'This fee type is already used on an invoice and cannot be deleted.' });
+        }
+        await prisma.feeType.delete({ where: { id: feeType.id } });
+        res.status(200).json({ success: true, message: 'Fee type deleted' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 // @desc    Update fee type
 exports.updateFeeType = async (req, res) => {
     try {
@@ -128,6 +145,23 @@ exports.getInvoices = async (req, res) => {
         }));
 
         res.status(200).json({ success: true, count: formatted.length, data: formatted });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.deleteInvoice = async (req, res) => {
+    try {
+        const invoice = await prisma.invoice.findFirst({
+            where: { id: req.params.id, tenantId: req.user.tenantId },
+            include: { payments: { select: { id: true }, take: 1 } }
+        });
+        if (!invoice) return res.status(404).json({ success: false, message: 'Invoice not found' });
+        if (invoice.payments.length || invoice.paidAmount > 0) {
+            return res.status(409).json({ success: false, message: 'Invoices with recorded payments cannot be deleted.' });
+        }
+        await prisma.invoice.delete({ where: { id: invoice.id } });
+        res.status(200).json({ success: true, message: 'Invoice deleted' });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -475,6 +509,49 @@ exports.getExpenses = async (req, res) => {
             orderBy: { date: 'desc' }
         });
         res.status(200).json({ success: true, count: expenses.length, data: expenses });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.deleteExpense = async (req, res) => {
+    try {
+        const expense = await prisma.expense.findFirst({ where: { id: req.params.id, tenantId: req.user.tenantId } });
+        if (!expense) return res.status(404).json({ success: false, message: 'Expense not found' });
+        await prisma.expense.delete({ where: { id: expense.id } });
+        res.status(200).json({ success: true, message: 'Expense deleted' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+exports.bulkDeleteFinanceRecords = async (req, res) => {
+    try {
+        const { kind, ids } = req.body;
+        const tenantId = req.user.tenantId;
+        if (!['expense', 'feeType', 'invoice'].includes(kind) || !Array.isArray(ids) || !ids.length || ids.some(id => typeof id !== 'string')) {
+            return res.status(400).json({ success: false, message: 'Choose one or more valid finance records.' });
+        }
+        if (kind === 'feeType' && req.user.role !== 'school-admin') {
+            return res.status(403).json({ success: false, message: 'Only a school admin can delete fee types.' });
+        }
+        const uniqueIds = [...new Set(ids)];
+        if (kind === 'expense') {
+            const result = await prisma.expense.deleteMany({ where: { id: { in: uniqueIds }, tenantId } });
+            return res.status(200).json({ success: true, deletedCount: result.count });
+        }
+        if (kind === 'feeType') {
+            const feeTypes = await prisma.feeType.findMany({ where: { id: { in: uniqueIds }, tenantId }, include: { invoiceItems: { select: { id: true }, take: 1 } } });
+            if (feeTypes.length !== uniqueIds.length) return res.status(404).json({ success: false, message: 'One or more fee types were not found.' });
+            if (feeTypes.some(item => item.invoiceItems.length)) return res.status(409).json({ success: false, message: 'Selection contains a fee type already used on an invoice. No records were deleted.' });
+            const result = await prisma.feeType.deleteMany({ where: { id: { in: uniqueIds }, tenantId } });
+            return res.status(200).json({ success: true, deletedCount: result.count });
+        }
+        const invoices = await prisma.invoice.findMany({ where: { id: { in: uniqueIds }, tenantId }, include: { payments: { select: { id: true }, take: 1 } } });
+        if (invoices.length !== uniqueIds.length) return res.status(404).json({ success: false, message: 'One or more invoices were not found.' });
+        if (invoices.some(invoice => invoice.payments.length || invoice.paidAmount > 0)) return res.status(409).json({ success: false, message: 'Selection contains an invoice with a payment. No records were deleted.' });
+        const result = await prisma.invoice.deleteMany({ where: { id: { in: uniqueIds }, tenantId } });
+        res.status(200).json({ success: true, deletedCount: result.count });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }

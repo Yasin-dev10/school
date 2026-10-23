@@ -233,11 +233,37 @@ exports.bulkUpdateClassTimetable = async (req, res) => {
             return res.status(400).json({ success: false, message: 'classId and slots array are required' });
         }
 
+        // The timetable UI may send either teacher IDs or populated teacher
+        // objects. Prisma relation filters and createMany require IDs only.
+        const normalizedSlots = slots.map(slot => ({
+            ...slot,
+            subjectId: typeof slot.subjectId === 'string'
+                ? slot.subjectId
+                : slot.subjectId?.id || slot.subjectId?._id,
+            teachers: [...new Set((Array.isArray(slot.teachers) ? slot.teachers : []).map(teacher =>
+                typeof teacher === 'string' ? teacher : teacher?.id || teacher?._id || teacher?.teacherId
+            ).filter(teacherId => typeof teacherId === 'string' && teacherId.length > 0))]
+        }));
+        if (normalizedSlots.some(slot => typeof slot.subjectId !== 'string' || !slot.subjectId)) {
+            return res.status(400).json({ success: false, message: 'Each timetable slot must have a valid subject ID' });
+        }
+        const hasInvalidTeacher = slots.some((slot, index) =>
+            (Array.isArray(slot.teachers) ? slot.teachers : []).length !== normalizedSlots[index].teachers.length &&
+            (Array.isArray(slot.teachers) ? slot.teachers : []).some(teacher =>
+                !(typeof teacher === 'string' && teacher.length > 0) &&
+                !(typeof (teacher?.id || teacher?._id || teacher?.teacherId) === 'string' &&
+                    (teacher.id || teacher._id || teacher.teacherId).length > 0)
+            )
+        );
+        if (hasInvalidTeacher) {
+            return res.status(400).json({ success: false, message: 'Each selected teacher must have a valid ID' });
+        }
+
         const schoolClass = await prisma.class.findFirst({ where: { id: classId, tenantId } });
         if (!schoolClass) return res.status(404).json({ success: false, message: 'Class not found' });
 
-        for (let index = 0; index < slots.length; index += 1) {
-            const slot = slots[index];
+        for (let index = 0; index < normalizedSlots.length; index += 1) {
+            const slot = normalizedSlots[index];
             if (!slot.subjectId || !slot.day || !slot.startTime || !slot.endTime || slot.startTime >= slot.endTime) {
                 return res.status(400).json({ success: false, message: `Invalid timetable slot at index ${index}` });
             }
@@ -251,8 +277,27 @@ exports.bulkUpdateClassTimetable = async (req, res) => {
             }
         }
 
-        const teacherIds = [...new Set(slots.flatMap(slot => slot.teachers || []))];
-        const rooms = [...new Set(slots.map(slot => slot.room?.trim()).filter(Boolean))];
+        const existingSlots = await prisma.timetable.findMany({
+            where: { classId, tenantId },
+            include: { teachers: true }
+        });
+        const slotKey = slot => `${slot.day}:${slot.startTime}`;
+        const existingByKey = new Map(existingSlots.map(slot => [slotKey(slot), slot]));
+        const incomingByKey = new Map(normalizedSlots.map(slot => [slotKey(slot), slot]));
+        const hasChanged = (existing, slot) => {
+            const oldTeacherIds = existing.teachers.map(link => link.teacherId).sort();
+            const newTeacherIds = [...slot.teachers].sort();
+            const teachersChanged = oldTeacherIds.length !== newTeacherIds.length ||
+                oldTeacherIds.some((teacherId, index) => teacherId !== newTeacherIds[index]);
+            return existing.subjectId !== slot.subjectId || existing.endTime !== slot.endTime ||
+                (existing.room || null) !== (slot.room || null) || teachersChanged;
+        };
+        const changedSlots = normalizedSlots.filter(slot => {
+            const existing = existingByKey.get(slotKey(slot));
+            return !existing || hasChanged(existing, slot);
+        });
+        const teacherIds = [...new Set(normalizedSlots.flatMap(slot => slot.teachers))];
+        const rooms = [...new Set(normalizedSlots.map(slot => slot.room?.trim()).filter(Boolean))];
         const externalSlots = teacherIds.length || rooms.length ? await prisma.timetable.findMany({
             where: {
                 tenantId,
@@ -265,11 +310,11 @@ exports.bulkUpdateClassTimetable = async (req, res) => {
             include: { teachers: true }
         }) : [];
 
-        for (const slot of slots) {
+        for (const slot of changedSlots) {
             const conflict = externalSlots.find(existing =>
                 existing.day === slot.day &&
                 overlaps(slot.startTime, slot.endTime, existing.startTime, existing.endTime) &&
-                (existing.teachers.some(link => (slot.teachers || []).includes(link.teacherId)) ||
+                (existing.teachers.some(link => slot.teachers.includes(link.teacherId)) ||
                     (!!slot.room?.trim() && existing.room?.trim().toLowerCase() === slot.room.trim().toLowerCase()))
             );
             if (conflict) {
@@ -278,34 +323,61 @@ exports.bulkUpdateClassTimetable = async (req, res) => {
         }
 
         await prisma.$transaction(async tx => {
-            await tx.timetable.deleteMany({ where: { classId, tenantId } });
+            const removedIds = existingSlots
+                .filter(existing => !incomingByKey.has(slotKey(existing)))
+                .map(existing => existing.id);
+            if (removedIds.length) {
+                await tx.timetable.deleteMany({ where: { id: { in: removedIds }, tenantId } });
+            }
 
-            if (!slots.length) return;
+            for (const slot of normalizedSlots) {
+                const existing = existingByKey.get(slotKey(slot));
+                const room = slot.room || null;
+                if (!existing) {
+                    const created = await tx.timetable.create({
+                        data: {
+                            classId,
+                            subjectId: slot.subjectId,
+                            day: slot.day,
+                            startTime: slot.startTime,
+                            endTime: slot.endTime,
+                            room,
+                            tenantId
+                        },
+                        select: { id: true }
+                    });
+                    if (slot.teachers.length) {
+                        await tx.timetableTeacher.createMany({
+                            data: slot.teachers.map(teacherId => ({ timetableId: created.id, teacherId })),
+                            skipDuplicates: true
+                        });
+                    }
+                    continue;
+                }
 
-            await tx.timetable.createMany({
-                data: slots.map(slot => ({
-                    classId,
-                    subjectId: slot.subjectId,
-                    day: slot.day,
-                    startTime: slot.startTime,
-                    endTime: slot.endTime,
-                    room: slot.room || null,
-                    tenantId
-                }))
-            });
+                const newTeacherIds = [...slot.teachers].sort();
+                if (!hasChanged(existing, slot)) continue;
+                const teachersChanged = existing.teachers.length !== newTeacherIds.length ||
+                    existing.teachers.map(link => link.teacherId).sort()
+                        .some((teacherId, index) => teacherId !== newTeacherIds[index]);
 
-            const createdSlots = await tx.timetable.findMany({
-                where: { classId, tenantId },
-                select: { id: true, day: true, startTime: true }
-            });
-            const slotIds = new Map(createdSlots.map(slot => [`${slot.day}:${slot.startTime}`, slot.id]));
-            const teacherLinks = slots.flatMap(slot => {
-                const timetableId = slotIds.get(`${slot.day}:${slot.startTime}`);
-                return (slot.teachers || []).map(teacherId => ({ timetableId, teacherId }));
-            }).filter(link => link.timetableId);
-
-            if (teacherLinks.length) {
-                await tx.timetableTeacher.createMany({ data: teacherLinks, skipDuplicates: true });
+                await tx.timetable.update({
+                    where: { id: existing.id },
+                    data: {
+                        subjectId: slot.subjectId,
+                        endTime: slot.endTime,
+                        room
+                    }
+                });
+                if (teachersChanged) {
+                    await tx.timetableTeacher.deleteMany({ where: { timetableId: existing.id } });
+                    if (newTeacherIds.length) {
+                        await tx.timetableTeacher.createMany({
+                            data: newTeacherIds.map(teacherId => ({ timetableId: existing.id, teacherId })),
+                            skipDuplicates: true
+                        });
+                    }
+                }
             }
         }, { timeout: 20000 });
 

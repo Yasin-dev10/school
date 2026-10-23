@@ -92,7 +92,7 @@ const ROLE_ROUTES: Record<string, string[]> = {
         '/dashboard/combined-results', '/dashboard/top-students', '/dashboard/grades',
         '/dashboard/communication', '/dashboard/payslips', '/dashboard/certificates',
         '/dashboard/reports', '/dashboard/notifications', '/dashboard/about',
-        '/dashboard/help', '/dashboard/profile',
+        '/dashboard/help', '/dashboard/profile', '/dashboard/teacher-performance',
     ],
     parent: [
         '/dashboard', '/dashboard/parent', '/dashboard/profile', '/dashboard/grades',
@@ -132,6 +132,7 @@ const MODULE_ROUTE_PREFIXES: Array<[string, string]> = [
     ['/dashboard/payslips', 'payroll'], ['/dashboard/inventory', 'inventory'],
     ['/dashboard/certificates', 'certificates'], ['/dashboard/reports', 'reports'],
     ['/dashboard/analytics', 'reports'], ['/dashboard/communication', 'communication'],
+    ['/dashboard/teacher-performance', 'reports'],
     ['/dashboard/notifications', 'communication'], ['/dashboard/alumni', 'alumni'],
     ['/dashboard/customization', 'customization'], ['/dashboard/logs', 'settings'],
     ['/dashboard/settings', 'settings'], ['/dashboard/help', 'support'],
@@ -411,6 +412,7 @@ export default function DashboardLayout({
                 items: [
                     { name: 'Reports', href: '/dashboard/reports', icon: icon(<BarChart3 className="w-4 h-4" />) },
                     { name: 'Advanced Analytics', href: '/dashboard/analytics', icon: icon(<TrendingUp className="w-4 h-4" />) },
+                    { name: 'Teacher Performance', href: '/dashboard/teacher-performance', icon: icon(<GraduationCap className="w-4 h-4" />) },
                 ],
             });
             push({
@@ -502,7 +504,10 @@ export default function DashboardLayout({
                 id: 'reports',
                 label: 'Reports & Results',
                 groupIcon: <BarChart3 className="w-3.5 h-3.5" />,
-                items: [{ name: 'Reports', href: '/dashboard/reports', icon: icon(<BarChart3 className="w-4 h-4" />) }],
+                items: [
+                    { name: 'Reports', href: '/dashboard/reports', icon: icon(<BarChart3 className="w-4 h-4" />) },
+                    { name: 'My Performance', href: '/dashboard/teacher-performance', icon: icon(<TrendingUp className="w-4 h-4" />) },
+                ],
             });
         }
 

@@ -686,6 +686,8 @@ model User {
 
   examComplaintsStudent  ExamComplaint[] @relation("ComplaintStudent")
   examComplaintsResolver ExamComplaint[] @relation("ComplaintResolver")
+  performanceEvaluations TeacherPerformanceEvaluation[] @relation("PerformanceEvaluationTeacher")
+  performanceReviews     TeacherPerformanceEvaluation[] @relation("PerformanceEvaluationReviewer")
 
   salaries           Salary[]
   tasks              Task[]
@@ -1054,6 +1056,27 @@ model Mark {
   @@unique([studentId, examId, subjectId, tenantId])
   @@index([tenantId])
   @@map("marks")
+}
+
+model TeacherPerformanceEvaluation {
+  id          String   @id @default(cuid())
+  tenantId    String
+  teacherId   String
+  reviewerId  String
+  periodType  String
+  periodStart DateTime
+  periodEnd   DateTime
+  rating      Int
+  notes       String?
+  improvements String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  teacher  User @relation("PerformanceEvaluationTeacher", fields: [teacherId], references: [id], onDelete: Cascade)
+  reviewer User @relation("PerformanceEvaluationReviewer", fields: [reviewerId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, teacherId, periodStart])
+  @@map("teacher_performance_evaluations")
 }
 
 model CombinedResult {

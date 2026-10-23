@@ -6,6 +6,7 @@ import Link from 'next/link';
 import html2canvas from 'html2canvas-pro';
 import jsPDF from 'jspdf';
 import api from '../../../utils/api';
+import SchoolPrintHeader from '@/components/SchoolPrintHeader';
 
 type View = 'profile' | 'attendance' | 'exams' | 'finance' | 'documents' | 'idcard';
 type DateInput = string | number | Date | null | undefined;
@@ -574,8 +575,9 @@ export default function StudentDetailPage() {
         : 'No class assigned';
 
     return (
-        <div className="p-8 max-w-6xl mx-auto space-y-8">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+        <div className="print-area p-8 max-w-6xl mx-auto space-y-8">
+            <SchoolPrintHeader name={tenant?.name} logoUrl={tenantLogoUrl} subtitle={`Student record · ${studentName} · ${student.profile?.admissionNo || 'N/A'}`} />
+            <div className="no-print flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                 <div className="flex items-center gap-6">
                     <Link href="/dashboard/students" className="w-10 h-10 rounded-full bg-slate-900 border border-white/5 flex items-center justify-center text-slate-400 hover:text-white transition">
                         Back
@@ -595,6 +597,7 @@ export default function StudentDetailPage() {
                     </div>
                 </div>
                 <div className="flex gap-3 w-full md:w-auto">
+                    <button onClick={() => window.print()} className="flex-1 md:flex-none px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-all">Print</button>
                     <button onClick={() => setView('idcard')} className="flex-1 md:flex-none px-6 py-3 bg-white/5 border border-white/10 text-slate-300 rounded-xl font-bold hover:bg-white/10 transition-all">
                         View ID Card
                     </button>

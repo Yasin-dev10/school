@@ -215,3 +215,43 @@ html[data-high-contrast="true"] body { filter: contrast(1.12); }
     @apply mt-1 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-white;
   }
 }
+
+@media print {
+  body:has(.print-area) * {
+    visibility: hidden !important;
+  }
+
+  body:has(.print-area) .print-area,
+  body:has(.print-area) .print-area * {
+    visibility: visible !important;
+  }
+
+  .print-area {
+    position: absolute !important;
+    inset: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    color: #111827 !important;
+    background: #ffffff !important;
+  }
+
+  .print-area .overflow-x-auto {
+    overflow: visible !important;
+  }
+
+  .print-only {
+    display: flex !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  img {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

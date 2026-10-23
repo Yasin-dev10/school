@@ -14,6 +14,9 @@ export default function FinancePage() {
     const [loading, setLoading] = useState(true);
     const [invoiceClassFilter, setInvoiceClassFilter] = useState('');
     const [invoiceSearch, setInvoiceSearch] = useState('');
+    const [selectedFinanceIds, setSelectedFinanceIds] = useState<string[]>([]);
+    const [deleteConfirmation, setDeleteConfirmation] = useState<{ kind: 'expense' | 'fee type' | 'invoice' | 'feeType'; ids: string[] } | null>(null);
+    const [deleteBusy, setDeleteBusy] = useState(false);
 
     // Modal States
     const [isFeeModalOpen, setIsFeeModalOpen] = useState(false);
@@ -174,6 +177,38 @@ export default function FinancePage() {
         }
     };
 
+    const handleDeleteFinanceRecord = (kind: 'expense' | 'fee type' | 'invoice', id: string) => setDeleteConfirmation({ kind, ids: [id] });
+
+    const toggleFinanceSelection = (id: string) => setSelectedFinanceIds(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
+    const selectFinanceRecords = (ids: string[]) => setSelectedFinanceIds(current => ids.every(id => current.includes(id)) ? current.filter(id => !ids.includes(id)) : [...new Set([...current, ...ids])]);
+    const handleBulkDeleteFinanceRecords = (kind: 'expense' | 'feeType' | 'invoice') => {
+        if (!selectedFinanceIds.length) return;
+        setDeleteConfirmation({ kind, ids: selectedFinanceIds });
+    };
+
+    const confirmFinanceDelete = async () => {
+        if (!deleteConfirmation || deleteBusy) return;
+        setDeleteBusy(true);
+        try {
+            if (deleteConfirmation.kind === 'fee type' || deleteConfirmation.ids.length > 1) {
+                const kind = deleteConfirmation.kind === 'fee type' ? 'feeType' : deleteConfirmation.kind;
+                const { data } = await api.delete('/fees/bulk', { data: { kind, ids: deleteConfirmation.ids } });
+                alert(`${data.deletedCount} record(s) deleted.`);
+            } else {
+                const kind = deleteConfirmation.kind;
+                const endpoint = kind === 'expense' ? `/fees/expenses/${deleteConfirmation.ids[0]}` : `/fees/invoices/${deleteConfirmation.ids[0]}`;
+                await api.delete(endpoint);
+            }
+            setSelectedFinanceIds(current => current.filter(id => !deleteConfirmation.ids.includes(id)));
+            setDeleteConfirmation(null);
+            await fetchData();
+        } catch (err: any) {
+            alert(err.response?.data?.message || 'Failed to delete selected records');
+        } finally {
+            setDeleteBusy(false);
+        }
+    };
+
     const fetchReceipt = async (id: string) => {
         try {
             setLoading(true);
@@ -199,21 +234,21 @@ export default function FinancePage() {
     });
 
     return (
-        <div className="p-4 sm:p-8 max-w-7xl mx-auto space-y-6 sm:space-y-8">
+        <div className="mx-auto max-w-[1368px] space-y-7 px-4 py-6 sm:space-y-8 sm:px-8 sm:py-10">
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
                 <div>
-                    <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+                    <h1 className="text-2xl font-black tracking-tight text-white sm:text-[34px] sm:leading-tight">
                         {isAdmin ? 'Institutional Finance' : user?.role === 'parent' ? 'Family Billing' : 'My Financial Ledger'}
                     </h1>
-                    <p className="text-sm text-slate-500 mt-1">
+                    <p className="mt-2 text-sm text-slate-400">
                         {isAdmin ? 'Manage revenue, tuition fees, and student billing cycles.' : 'Review outstanding balances and transaction history.'}
                     </p>
                 </div>
                 {isAdmin && (
-                    <div className="flex bg-slate-900/50 p-1 rounded-2xl border border-white/5 shadow-inner w-full lg:w-auto overflow-x-auto">
-                        <button onClick={() => setView('invoices')} className={`flex-1 lg:flex-none px-4 sm:px-6 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all ${view === 'invoices' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Invoices</button>
-                        <button onClick={() => setView('structure')} className={`flex-1 lg:flex-none px-4 sm:px-6 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all ${view === 'structure' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Structure</button>
-                        <button onClick={() => setView('expenses')} className={`flex-1 lg:flex-none px-4 sm:px-6 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all ${view === 'expenses' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>Expenses</button>
+                    <div className="flex w-full overflow-x-auto rounded-full border border-white/[0.07] bg-slate-900/50 p-1 shadow-inner lg:w-auto">
+                        <button onClick={() => { setSelectedFinanceIds([]); setView('invoices'); }} className={`flex-1 whitespace-nowrap rounded-full px-5 py-3 text-xs font-bold transition-all sm:px-7 sm:text-sm ${view === 'invoices' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-950/40' : 'text-slate-400 hover:text-white'}`}>Invoices</button>
+                        <button onClick={() => { setSelectedFinanceIds([]); setView('structure'); }} className={`flex-1 whitespace-nowrap rounded-full px-5 py-3 text-xs font-bold transition-all sm:px-7 sm:text-sm ${view === 'structure' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-950/40' : 'text-slate-400 hover:text-white'}`}>Structure</button>
+                        <button onClick={() => { setSelectedFinanceIds([]); setView('expenses'); }} className={`flex-1 whitespace-nowrap rounded-full px-5 py-3 text-xs font-bold transition-all sm:px-7 sm:text-sm ${view === 'expenses' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-950/40' : 'text-slate-400 hover:text-white'}`}>Expenses</button>
                     </div>
                 )}
             </div>
@@ -290,10 +325,13 @@ export default function FinancePage() {
                         </div>
                     )}
 
+                    {isAdmin && selectedFinanceIds.length > 0 && <div className="flex items-center justify-between rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3"><span className="text-sm font-semibold text-red-200">{selectedFinanceIds.length} selected</span><button onClick={() => handleBulkDeleteFinanceRecords('invoice')} className="rounded-lg bg-red-600 px-4 py-2 text-xs font-bold text-white hover:bg-red-500">Delete selected</button></div>}
+
                     <div className="glass-dark rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl overflow-x-auto custom-scrollbar">
                         <table className="w-full text-left min-w-[900px]">
                             <thead className="text-[10px] uppercase bg-slate-950/50 text-slate-500 font-black tracking-widest border-b border-white/5">
                                 <tr>
+                                    <th className="px-4 py-5"><input type="checkbox" aria-label="Select all invoices" checked={filteredInvoices.filter((inv: any) => !(inv.payments?.length) && Number(inv.paidAmount || 0) === 0).length > 0 && filteredInvoices.filter((inv: any) => !(inv.payments?.length) && Number(inv.paidAmount || 0) === 0).every((inv: any) => selectedFinanceIds.includes(inv._id))} onChange={() => selectFinanceRecords(filteredInvoices.filter((inv: any) => !(inv.payments?.length) && Number(inv.paidAmount || 0) === 0).map((inv: any) => inv._id))} /></th>
                                     <th className="px-8 py-5">Invoice #</th>
                                     <th className="px-8 py-5">Student</th>
                                     <th className="px-8 py-5">Amount</th>
@@ -307,6 +345,7 @@ export default function FinancePage() {
                                     <tr><td colSpan={6} className="py-20 text-center text-slate-600 animate-pulse italic">Loading ledgers...</td></tr>
                                 ) : filteredInvoices.length > 0 ? filteredInvoices.map((inv: any) => (
                                     <tr key={inv._id} className="hover:bg-white/5 transition-colors group">
+                                        <td className="px-4 py-4"><input type="checkbox" aria-label={`Select invoice ${inv.invoiceNumber}`} disabled={!!inv.payments?.length || Number(inv.paidAmount || 0) > 0} checked={selectedFinanceIds.includes(inv._id)} onChange={() => toggleFinanceSelection(inv._id)} /></td>
                                         <td className="px-8 py-4 font-mono text-indigo-400 text-xs font-bold">{inv.invoiceNumber}</td>
                                         <td className="px-8 py-4">
                                             <div className="flex flex-col">
@@ -352,11 +391,14 @@ export default function FinancePage() {
                                                         </button>
                                                     </>
                                                 )}
+                                                {isAdmin && !(inv.payments?.length) && Number(inv.paidAmount || 0) === 0 && (
+                                                    <button onClick={() => handleDeleteFinanceRecord('invoice', inv._id)} className="px-4 py-1.5 bg-red-500/10 hover:bg-red-600 text-red-300 hover:text-white border border-red-500/20 rounded-lg text-[10px] font-bold transition-all">Delete</button>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>
                                 )) : (
-                                    <tr><td colSpan={6} className="py-20 text-center text-slate-500">{invoiceSearch || invoiceClassFilter ? 'No invoices match your filters.' : 'No invoices found.'}</td></tr>
+                                    <tr><td colSpan={7} className="py-20 text-center text-slate-500">{invoiceSearch || invoiceClassFilter ? 'No invoices match your filters.' : 'No invoices found.'}</td></tr>
                                 )}
                             </tbody>
                         </table>
@@ -373,27 +415,28 @@ export default function FinancePage() {
                                 <p className="text-red-400 font-black text-lg sm:text-xl">${expenses.reduce((s, e: any) => s + e.amount, 0).toLocaleString()}</p>
                             </div>
                         </div>
-                        <button onClick={() => setIsExpenseModalOpen(true)} className="px-6 py-3.5 bg-red-600 hover:bg-red-500 text-white rounded-2xl font-bold transition shadow-lg shadow-red-500/20">
-                            + Record Expense
-                        </button>
+                        <div className="flex flex-col sm:flex-row gap-3"><button onClick={() => setIsExpenseModalOpen(true)} className="px-6 py-3.5 bg-red-600 hover:bg-red-500 text-white rounded-2xl font-bold transition shadow-lg shadow-red-500/20">+ Record Expense</button>{selectedFinanceIds.length > 0 && <button onClick={() => handleBulkDeleteFinanceRecords('expense')} className="px-6 py-3.5 bg-slate-800 hover:bg-red-600 text-red-200 hover:text-white rounded-2xl font-bold transition">Delete selected ({selectedFinanceIds.length})</button>}</div>
                     </div>
 
                     <div className="glass-dark rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl overflow-x-auto custom-scrollbar">
                         <table className="w-full text-left min-w-[800px]">
                             <thead className="text-[10px] uppercase bg-slate-950/50 text-slate-500 font-black tracking-widest border-b border-white/5">
                                 <tr>
+                                    <th className="px-4 py-5"><input type="checkbox" aria-label="Select all expenses" checked={expenses.length > 0 && expenses.every((exp: any) => selectedFinanceIds.includes(exp._id))} onChange={() => selectFinanceRecords(expenses.map((exp: any) => exp._id))} /></th>
                                     <th className="px-8 py-5">Date</th>
                                     <th className="px-8 py-5">Title</th>
                                     <th className="px-8 py-5">Category</th>
                                     <th className="px-8 py-5">Amount</th>
                                     <th className="px-8 py-5">Recorded By</th>
+                                    <th className="px-8 py-5 text-right">Action</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-white/5">
                                 {loading ? (
-                                    <tr><td colSpan={5} className="py-20 text-center text-slate-600 animate-pulse italic">Scanning ledger...</td></tr>
+                                    <tr><td colSpan={6} className="py-20 text-center text-slate-600 animate-pulse italic">Scanning ledger...</td></tr>
                                 ) : expenses.length > 0 ? expenses.map((exp: any) => (
                                     <tr key={exp._id} className="hover:bg-white/5 transition-colors group">
+                                        <td className="px-4 py-4"><input type="checkbox" aria-label={`Select expense ${exp.title}`} checked={selectedFinanceIds.includes(exp._id)} onChange={() => toggleFinanceSelection(exp._id)} /></td>
                                         <td className="px-8 py-4 text-slate-500 text-xs">{new Date(exp.date).toLocaleDateString()}</td>
                                         <td className="px-8 py-4">
                                             <p className="text-white font-bold">{exp.title}</p>
@@ -408,9 +451,10 @@ export default function FinancePage() {
                                         <td className="px-8 py-4 text-xs text-slate-500">
                                             {exp.recordedBy?.firstName} {exp.recordedBy?.lastName}
                                         </td>
+                                        <td className="px-8 py-4 text-right"><button onClick={() => handleDeleteFinanceRecord('expense', exp._id)} className="px-4 py-1.5 bg-red-500/10 hover:bg-red-600 text-red-300 hover:text-white border border-red-500/20 rounded-lg text-[10px] font-bold transition-all">Delete</button></td>
                                     </tr>
                                 )) : (
-                                    <tr><td colSpan={5} className="py-20 text-center text-slate-500">No expenses recorded yet.</td></tr>
+                                    <tr><td colSpan={7} className="py-20 text-center text-slate-500">No expenses recorded yet.</td></tr>
                                 )}
                             </tbody>
                         </table>
@@ -420,23 +464,43 @@ export default function FinancePage() {
 
             {view === 'structure' && isAdmin && (
                 <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-                    <div className="flex justify-start sm:justify-end">
-                        <button onClick={() => setIsFeeModalOpen(true)} className="w-full sm:w-auto px-6 py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-bold transition shadow-lg shadow-indigo-500/20">
-                            + Define New Fee
-                        </button>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                        <button onClick={() => setIsFeeModalOpen(true)} className="w-full rounded-full bg-indigo-600 px-7 py-4 text-sm font-extrabold text-white shadow-lg shadow-indigo-950/40 transition hover:-translate-y-0.5 hover:bg-indigo-500 sm:w-auto">＋ Define New Fee</button>
+                        {user?.role === 'school-admin' && selectedFinanceIds.length > 0 && <button onClick={() => handleBulkDeleteFinanceRecords('feeType')} className="w-full rounded-full border border-red-500/20 bg-red-500/10 px-6 py-4 text-sm font-bold text-red-200 transition hover:bg-red-600 sm:w-auto">Delete selected ({selectedFinanceIds.length})</button>}
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3 xl:gap-6">
                         {feeTypes.map((ft: any) => (
-                            <div key={ft._id} className="glass-dark p-6 rounded-[2rem] border border-white/5 relative overflow-hidden group hover:border-indigo-500/30 transition-all">
-                                <div className="absolute top-0 right-0 p-6 text-5xl opacity-5 group-hover:opacity-10 transition-opacity">🧾</div>
-                                <h3 className="text-xl font-bold text-white mb-1">{ft.name}</h3>
-                                <p className="text-slate-500 text-xs mb-4 line-clamp-2">{ft.description || 'No description provided.'}</p>
-                                <div className="flex justify-between items-end mt-6">
-                                    <span className="text-2xl font-black text-indigo-400">${ft.amount}</span>
-                                    <span className="text-[10px] text-slate-600 font-bold uppercase tracking-widest">Fixed Fee</span>
+                            <div key={ft._id} className="group relative min-h-[174px] overflow-hidden rounded-[28px] border border-white/[0.07] bg-slate-900/65 p-6 shadow-[0_18px_45px_-32px_rgba(0,0,0,0.85)] transition duration-200 hover:-translate-y-1 hover:border-indigo-400/30 hover:bg-slate-900 sm:p-7">
+                                <div aria-hidden="true" className="pointer-events-none absolute -right-3 -top-5 text-[88px] leading-none opacity-[0.035] transition group-hover:opacity-[0.07]">▤</div>
+                                {user?.role === 'school-admin' && <input type="checkbox" aria-label={`Select fee type ${ft.name}`} checked={selectedFinanceIds.includes(ft._id)} onChange={() => toggleFinanceSelection(ft._id)} className="absolute left-5 top-5 z-10 h-4 w-4 accent-indigo-500 sm:left-6 sm:top-6" />}
+                                {user?.role === 'school-admin' && <button onClick={() => handleDeleteFinanceRecord('fee type', ft._id)} className="absolute right-5 top-5 z-10 rounded-full border border-rose-400/20 bg-rose-500/[0.08] px-3.5 py-2 text-[11px] font-bold text-rose-300 transition hover:border-rose-400/40 hover:bg-rose-500 hover:text-white sm:right-6 sm:top-5">Delete</button>}
+                                <div className="relative pr-16 sm:pl-0">
+                                    <h3 className={`text-lg font-extrabold tracking-tight text-white sm:text-xl ${user?.role === 'school-admin' ? 'pl-7' : ''}`}>{ft.name}</h3>
+                                    <p className="mt-2 line-clamp-2 min-h-8 text-xs leading-5 text-slate-400/75">{ft.description || 'No description provided.'}</p>
+                                </div>
+                                <div className="relative mt-5 flex items-end justify-between border-t border-white/[0.06] pt-4">
+                                    <span className="text-2xl font-black tracking-tight text-indigo-400 sm:text-[27px]">${Number(ft.amount).toLocaleString()}</span>
+                                    <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500">Fixed fee</span>
                                 </div>
                             </div>
                         ))}
+                    </div>
+                    {!loading && feeTypes.length === 0 && <div className="rounded-[28px] border border-dashed border-white/10 bg-slate-900/25 px-6 py-14 text-center"><p className="text-base font-bold text-slate-200">No fee types yet</p><p className="mt-2 text-sm text-slate-500">Add a fee structure to start creating student invoices.</p></div>}
+                </div>
+            )}
+
+            {deleteConfirmation && (
+                <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="finance-delete-title">
+                    <div className="w-full max-w-md rounded-3xl border border-red-500/30 bg-slate-900 p-6 shadow-2xl sm:p-8">
+                        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-red-500/15 text-2xl text-red-300">!</div>
+                        <h2 id="finance-delete-title" className="text-xl font-black text-white">Confirm deletion</h2>
+                        <p className="mt-3 text-sm leading-6 text-slate-300">
+                            You are about to delete <strong className="text-white">{deleteConfirmation.ids.length} {deleteConfirmation.kind === 'feeType' ? 'fee type' : deleteConfirmation.kind}{deleteConfirmation.ids.length === 1 ? '' : ' records'}</strong>. This action cannot be undone.
+                        </p>
+                        <div className="mt-6 flex gap-3">
+                            <button type="button" disabled={deleteBusy} onClick={() => setDeleteConfirmation(null)} className="flex-1 rounded-xl bg-slate-800 px-4 py-3 text-sm font-bold text-slate-200 hover:bg-slate-700 disabled:opacity-50">Cancel</button>
+                            <button type="button" disabled={deleteBusy} onClick={confirmFinanceDelete} className="flex-1 rounded-xl bg-red-600 px-4 py-3 text-sm font-bold text-white hover:bg-red-500 disabled:opacity-50">{deleteBusy ? 'Deleting…' : 'Delete'}</button>
+                        </div>
                     </div>
                 </div>
             )}

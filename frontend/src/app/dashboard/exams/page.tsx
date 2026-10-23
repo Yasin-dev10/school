@@ -12,6 +12,7 @@ import {
 } from 'chart.js';
 import { Bar, Pie } from 'react-chartjs-2';
 import api from '../../utils/api';
+import SchoolPrintHeader from '@/components/SchoolPrintHeader';
 import { validateMarkEntry } from '../../../utils/validation';
 
 ChartJS.register(
@@ -710,7 +711,7 @@ export default function ExamsPage() {
                         {combinedScheduleRows.length > 0 && <section className="min-w-[850px] bg-gradient-to-b from-sky-200 via-sky-400 to-blue-700 px-14 py-10 text-white print:min-w-0 print:rounded-none print:p-10">
                             <div className="mx-auto max-w-[820px] rounded-[2.5rem] bg-gradient-to-b from-blue-600/95 via-sky-500/90 to-sky-200/90 px-8 py-10 sm:px-12 sm:py-12 shadow-2xl">
                                 <div className="text-center">
-                                    {tenant?.logoUrl ? <img src={tenant.logoUrl} alt="Astaanta dugsiga" className="mx-auto mb-6 h-28 w-28 rounded-lg bg-white object-contain p-2 shadow-xl" /> : <div className="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-full border-4 border-white/80 bg-white/20 text-4xl font-black">{(tenant?.schoolName || tenant?.name || 'S').charAt(0)}</div>}
+                                    {tenant?.config?.logoUrl || tenant?.logoUrl ? <img src={tenant?.config?.logoUrl || tenant?.logoUrl} alt="Astaanta dugsiga" className="mx-auto mb-6 h-28 w-28 rounded-lg bg-white object-contain p-2 shadow-xl" /> : <div className="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-full border-4 border-white/80 bg-white/20 text-4xl font-black">{(tenant?.schoolName || tenant?.name || 'S').charAt(0)}</div>}
                                     <h2 className="text-3xl sm:text-4xl font-black uppercase leading-tight tracking-tight">Jadwalka<br />{displayedExam?.name || 'Imtixaannada'}</h2>
                                     <p className="mt-3 text-lg font-bold uppercase text-white/90">
                                         {displayedExam?.startDate ? `${new Date(displayedExam.startDate).getFullYear()}-${new Date(displayedExam.endDate).getFullYear()}` : 'Sannad Dugsiyeedka'}
@@ -1402,12 +1403,13 @@ export default function ExamsPage() {
 
             {isReportOpen && reportData && (
                 <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-xl overflow-y-auto">
-                    <div className="bg-white text-slate-900 w-full max-w-4xl p-6 sm:p-12 rounded-3xl relative my-8 shadow-2xl">
-                        <div className="flex flex-col sm:row sm:absolute top-8 right-8 gap-4 mb-8 sm:mb-0">
+                    <div className="print-area bg-white text-slate-900 w-full max-w-4xl p-6 sm:p-12 rounded-3xl relative my-8 shadow-2xl">
+                        <div className="no-print flex flex-col sm:row sm:absolute top-8 right-8 gap-4 mb-8 sm:mb-0">
                             <button onClick={() => window.print()} className="px-6 py-3 bg-indigo-600 text-white rounded-full font-bold">Print</button>
                             <button onClick={() => setIsReportOpen(false)} className="px-6 py-3 bg-slate-800 text-white rounded-full font-bold">Close</button>
                         </div>
-                        <div className="text-center border-b pb-8 mb-8"><h1 className="text-3xl font-black uppercase text-slate-900">{tenant?.schoolName}</h1><p className="text-slate-500 font-bold uppercase tracking-widest text-xs mt-1">Official Academic Registry</p></div>
+                        <SchoolPrintHeader name={tenant?.schoolName || tenant?.name} logoUrl={tenant?.config?.logoUrl || tenant?.logoUrl} subtitle="Official Academic Registry" />
+                        <div className="text-center border-b pb-8 mb-8 print:hidden"><h1 className="text-3xl font-black uppercase text-slate-900">{tenant?.schoolName || tenant?.name}</h1><p className="text-slate-500 font-bold uppercase tracking-widest text-xs mt-1">Official Academic Registry</p></div>
                         <div className="grid grid-cols-2 gap-12 mb-10">
                             <div><p className="text-[10px] font-black uppercase text-slate-400">Student</p><p className="text-xl font-black">{reportData.student?.firstName} {reportData.student?.lastName}</p></div>
                             <div className="text-right"><p className="text-[10px] font-black uppercase text-slate-400">Exam</p><p className="text-xl font-black">{reportData.exam?.name}</p></div>

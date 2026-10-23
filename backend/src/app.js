@@ -38,6 +38,7 @@ const supportRoutes = require('./routes/support.routes');
 const aiAssistantRoutes = require('./routes/aiAssistant.routes');
 const alumniRoutes = require('./routes/alumni.routes');
 const customizationRoutes = require('./routes/customization.routes');
+const teacherPerformanceRoutes = require('./routes/teacherPerformance.routes');
 const path = require('path');
 const { handleValidationError } = require('./middlewares/validation.middleware');
 const { parseAllowedOrigins, isAllowedLocalhostOrigin, redactSensitive } = require('./utils/security');
@@ -134,6 +135,7 @@ app.use('/api/support', supportRoutes);
 app.use('/api/ai-assistant', aiAssistantRoutes);
 app.use('/api/alumni', alumniRoutes);
 app.use('/api/customization', customizationRoutes);
+app.use('/api/teacher-performance', teacherPerformanceRoutes);
 
 app.get('/', (req, res) => {
     res.json({ message: 'School Management System API is running' });

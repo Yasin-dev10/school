@@ -17,6 +17,7 @@ import {
     X
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import SchoolPrintHeader from '@/components/SchoolPrintHeader';
 
 export default function StudentFinancePage() {
     const [user, setUser] = useState<any>(null);
@@ -368,12 +369,13 @@ export default function StudentFinancePage() {
             {/* Receipt Modal */}
             {isReceiptOpen && receiptData && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-0 sm:p-4 bg-slate-950/95 backdrop-blur-xl animate-in fade-in overflow-y-auto">
-                    <div className="bg-white text-slate-900 w-full max-w-3xl p-6 sm:p-12 rounded-none shadow-2xl relative my-0 sm:my-8 print:p-0 print:shadow-none print:my-0">
+                    <div className="print-area bg-white text-slate-900 w-full max-w-3xl p-6 sm:p-12 rounded-none shadow-2xl relative my-0 sm:my-8 print:p-0 print:shadow-none print:my-0">
+                        <SchoolPrintHeader name={tenant?.schoolName || tenant?.name} logoUrl={tenant?.config?.logoUrl || tenant?.logoUrl} subtitle="Fee receipt" />
                         <div className="flex justify-between items-start border-b-2 border-slate-200 pb-8 mb-8">
                             <div className="flex items-center gap-4">
-                                <div className="w-16 h-16 bg-slate-900 flex items-center justify-center text-white text-2xl font-serif italic">S</div>
+                                {tenant?.config?.logoUrl || tenant?.logoUrl ? <img src={tenant?.config?.logoUrl || tenant?.logoUrl} alt="School Logo" className="print:hidden w-16 h-16 object-contain" /> : <div className="print:hidden w-16 h-16 bg-slate-900 flex items-center justify-center text-white text-2xl font-serif italic">{(tenant?.name || 'S').charAt(0)}</div>}
                                 <div>
-                                    <h1 className="text-2xl font-black uppercase tracking-tight text-slate-900">{tenant?.name}</h1>
+                                    <h1 className="print:hidden text-2xl font-black uppercase tracking-tight text-slate-900">{tenant?.name}</h1>
                                     <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest leading-tight">{tenant?.config?.address}</p>
                                 </div>
                             </div>
@@ -429,7 +431,7 @@ export default function StudentFinancePage() {
                             </div>
                         </div>
 
-                        <div className="flex flex-col sm:flex-row sm:absolute -top-16 right-0 gap-4 print:hidden mb-8 sm:mb-0 px-6 sm:px-0">
+                        <div className="no-print flex flex-col sm:flex-row sm:absolute -top-16 right-0 gap-4 print:hidden mb-8 sm:mb-0 px-6 sm:px-0">
                             <button onClick={() => window.print()} className="w-full sm:w-auto px-8 py-3 bg-indigo-600 text-white rounded-full font-black shadow-xl uppercase tracking-widest text-xs transition-all hover:bg-indigo-500">Print Receipt</button>
                             <button onClick={() => setIsReceiptOpen(false)} className="w-full sm:w-auto px-8 py-3 bg-slate-800 text-white rounded-full font-black shadow-xl uppercase tracking-widest text-xs transition-all hover:bg-slate-700">Close</button>
                         </div>

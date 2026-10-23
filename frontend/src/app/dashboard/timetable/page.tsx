@@ -6,6 +6,7 @@ import {
     BookOpen, Clock, AlertCircle, LayoutGrid, Settings2, ShieldCheck
 } from 'lucide-react';
 import { PermissionGuard } from '@/components/PermissionGuard';
+import SchoolPrintHeader from '@/components/SchoolPrintHeader';
 import { usePermission, RESOURCES, ACTIONS, ROLES } from '@/hooks/usePermission';
 
 const DAYS = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday'];
@@ -58,6 +59,7 @@ export default function TimetablePage() {
 
     const [schedule, setSchedule] = useState<any>({});
     const [currentUser, setCurrentUser] = useState<any>(null);
+    const [tenant, setTenant] = useState<any>(null);
 
     const { hasPermission } = usePermission();
     const canEdit = hasPermission(RESOURCES.SCHEDULES, ACTIONS.UPDATE);
@@ -77,22 +79,25 @@ export default function TimetablePage() {
 
                 if (userObj?.role === ROLES.STUDENT) {
                     setLoading(true);
-                    const { data } = await api.get('/timetable/student/me');
-                    setPersonalSlots(data.data || []);
+                    const [scheduleRes, tenantRes] = await Promise.all([api.get('/timetable/student/me'), api.get('/tenants/me')]);
+                    setPersonalSlots(scheduleRes.data.data || []);
+                    setTenant(tenantRes.data.data);
                     setViewMode('personal');
                     setLoading(false);
                     return;
                 }
 
-                const [clsRes, subRes, tchRes] = await Promise.all([
+                const [clsRes, subRes, tchRes, tenantRes] = await Promise.all([
                     api.get('/classes?limit=100'),
                     api.get('/subjects?limit=100'),
-                    api.get('/teachers?limit=100')
+                    api.get('/teachers?limit=100'),
+                    api.get('/tenants/me')
                 ]);
 
                 setClasses(clsRes.data.data);
                 setSubjects(subRes.data.data);
                 setTeachers(tchRes.data.data);
+                setTenant(tenantRes.data.data);
 
                 if (userObj?.role === ROLES.TEACHER) {
                     setViewMode('personal');
@@ -137,8 +142,8 @@ export default function TimetablePage() {
                         const slotIndex = TIME_SLOTS.findIndex(ts => ts.start === slot.startTime);
                         if (slotIndex !== -1) {
                             newSchedule[slot.day][slotIndex] = {
-                                subject: slot.subject?._id || slot.subject,
-                                teachers: slot.teachers ? slot.teachers.map((t: any) => t._id || t) : [],
+                                subject: slot.subject?.id || slot.subject?._id || slot.subject,
+                                teachers: slot.teachers ? slot.teachers.map((t: any) => t.id || t._id || t) : [],
                                 subjectName: slot.subject?.name,
                                 teacherNames: slot.teachers ? slot.teachers.map((t: any) => `${t.firstName} ${t.lastName}`).join(', ') : '',
                                 className: slot.class?.name ? `${slot.class.name}-${slot.class.section}` : '',
@@ -349,7 +354,9 @@ export default function TimetablePage() {
         const today = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date());
         const todaysSlots = personalSlots.filter((slot: any) => slot.day === today);
         return (
-            <div className="mx-auto max-w-5xl space-y-5 pb-8">
+            <div className="print-area mx-auto max-w-5xl space-y-5 pb-8">
+                <SchoolPrintHeader name={tenant?.schoolName || tenant?.name} logoUrl={tenant?.config?.logoUrl || tenant?.logoUrl} subtitle="Student timetable" />
+                <button onClick={() => window.print()} className="no-print rounded-xl bg-[#1E3A8A] px-4 py-2 text-sm font-semibold text-white">Print timetable</button>
                 <header><div className="mb-2 flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400"><span>Academics</span><span>/</span><span className="text-slate-700 dark:text-slate-200">Timetable</span></div><h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-3xl">My timetable</h1><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Your class schedule for the school week.</p></header>
                 <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-[#1E3A8A] p-5 text-white"><div><p className="text-sm text-blue-100">Today · {new Date().toLocaleDateString()}</p><h2 className="mt-1 text-xl font-bold">{today}</h2></div><div className="rounded-xl bg-white/10 px-4 py-2 text-center"><strong className="block text-xl">{todaysSlots.length}</strong><span className="text-xs text-blue-100">lessons today</span></div></section>
                 {loading ? <section aria-label="Loading timetable" className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-800"><div className="h-7 w-48 animate-pulse rounded bg-slate-100 dark:bg-slate-700" /><div className="h-56 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-700" /></section> : personalSlots.length === 0 ? <section className="rounded-2xl border border-dashed border-slate-300 bg-white px-5 py-16 text-center dark:border-slate-700 dark:bg-slate-800"><div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-blue-50 text-[#1E3A8A] dark:bg-blue-950/50 dark:text-cyan-300"><Calendar className="h-7 w-7" /></div><h2 className="mt-4 text-lg font-bold text-slate-900 dark:text-white">No timetable available</h2><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Your class schedule will appear here when it is published.</p></section> : <>
@@ -366,6 +373,8 @@ export default function TimetablePage() {
 
     return (
         <div className="mx-auto min-h-full max-w-[1600px] space-y-5 pb-8">
+            <div className="print-area mx-auto min-h-full max-w-[1600px] space-y-5 pb-8">
+            <SchoolPrintHeader name={tenant?.schoolName || tenant?.name} logoUrl={tenant?.config?.logoUrl || tenant?.logoUrl} subtitle="School timetable" />
             <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between print:hidden">
                 <div>
                     <div className="mb-2 flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400"><span>Academics</span><span>/</span><span className="text-slate-700 dark:text-slate-200">Timetable</span></div>
@@ -415,6 +424,7 @@ export default function TimetablePage() {
                 </div>
                 <p className="border-t border-slate-100 px-4 py-2 text-[11px] text-slate-400 dark:border-slate-700">On smaller screens, swipe horizontally to see each period.</p>
             </section>}
+            </div>
         </div>
     );
 }
